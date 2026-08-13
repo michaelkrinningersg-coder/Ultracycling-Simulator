@@ -45,6 +45,7 @@
     <div id="chart-speed" class="chart"></div>
     <div id="chart-power" class="chart"></div>
     <div id="chart-form" class="chart"></div>
+    <div id="chart-energy" class="chart"></div>
   </div>
 
   <div class="panel">
@@ -93,7 +94,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="dim">Keine Ereignisse – Pannen, Schlaf und Verpflegung kommen mit M5/M6.</p>
+    <p class="dim">Keine Ereignisse – Pannen und Schlaf kommen mit M5/M6.</p>
     {% endif %}
   </div>
 </div>
@@ -123,6 +124,9 @@
              { label: 'Form', stroke: '#4ade80', width: 1.4 },
              { label: 'W′', stroke: '#f8717a', width: 1 }] },
     [x, d.form_pct, d.wprime_pct], document.getElementById('chart-form'));
+  new uPlot({ ...common, title: 'Glykogen (%) — unter 15 % beginnt der Hungerast',
+    series: [{ label: 'km' }, { label: 'Glykogen', stroke: '#ffc247', width: 1.4, fill: 'rgba(255,194,71,.12)' }] },
+    [x, d.glyco_pct], document.getElementById('chart-energy'));
 })();
 </script>
 {% endblock %}

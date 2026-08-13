@@ -34,7 +34,7 @@ from ..core.conditions import ConditionRecord
 from ..core.engine import RaceConfig, RaceEntry, RaceResult, Telemetry
 from ..core.events import RaceEvent
 from ..core.rider import Rider, Team
-from ..core.strategy import Misjudgement, RacePlan, SectionPlan
+from ..core.strategy import Misjudgement, RacePlan, SectionPlan, StopPlan
 from ..geo.route import Route
 
 DEFAULT_ROOT = Path("data")
@@ -151,6 +151,7 @@ class Store:
             power_w=result.telemetry.power_w,
             form_pct=result.telemetry.form_pct,
             wprime_pct=result.telemetry.wprime_pct,
+            glyco_pct=result.telemetry.glyco_pct,
             bike=result.telemetry.bike,
             state=result.telemetry.state,
             split_times_s=result.split_times_s.astype(np.float32),
@@ -173,6 +174,7 @@ class Store:
                 power_w=data["power_w"],
                 form_pct=data["form_pct"],
                 wprime_pct=data["wprime_pct"],
+                glyco_pct=data["glyco_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )
@@ -254,6 +256,9 @@ def _plan_to_dict(plan: RacePlan) -> dict[str, Any]:
         "sections": [asdict(s) for s in plan.sections],
         "notes": [[round(d, 1), note] for d, note in plan.notes],
         "misjudgement": asdict(plan.misjudgement) if plan.misjudgement else None,
+        "intake_g_h": round(plan.intake_g_h, 2),
+        "stops": [asdict(s) for s in plan.stops],
+        "est_ride_time_s": round(plan.est_ride_time_s, 1),
     }
 
 
@@ -267,4 +272,7 @@ def _plan_from_dict(data: dict[str, Any]) -> RacePlan:
         misjudgement=(
             Misjudgement(**data["misjudgement"]) if data.get("misjudgement") else None
         ),
+        intake_g_h=data.get("intake_g_h", 0.0),
+        stops=[StopPlan(**s) for s in data.get("stops", [])],
+        est_ride_time_s=data.get("est_ride_time_s", 0.0),
     )

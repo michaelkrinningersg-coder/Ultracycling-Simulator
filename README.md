@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M4, dazu M5 Schritt 1
+## Stand: Meilensteine M1–M4, dazu M5 Schritte 1–2
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -28,11 +28,18 @@ hier umgesetzt.
 | Rennen (M3) | Vektorisiert über das ganze Feld, Einzelstart, Splitzeiten mit Sub-Tick-Interpolation, Ereignis-Strom, quantisierte Telemetrie |
 | Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit Zeitraffer 1×–1000×, Ergebnisliste, Fahrerdetail mit Verlaufskurven |
 | Zustände (M5.1) | Zustandssystem aus Abschnitt 6.5: multiplikative Modifikatoren auf FTP, Abfahrtstempo, Rollwiderstand und Energieaufnahme, verankert wahlweise in Zeit oder Distanz, mit linearem oder hartem Abklingen. Erster Erzeuger ist die Fehlplanung — der zu ambitionierte Plan schlägt spät zurück. Sichtbar als Balken über dem Profil, Chip in der Board-Zeile und Eintrag im Ticker |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch, 147 Tests inklusive Golden-Master |
+| Energie (M5.2) | Glykogenspeicher, Substratverteilung nach Intensität, Zufuhr gedeckelt durch KH-Verbrennung *und* Magenverträglichkeit, Hungerast unter 15 % Füllstand. Der Rennplan rechnet vorab aus, welche Intensität die Zufuhr über die Distanz trägt, und nimmt das Minimum aus Distanz- und Energiegrenze |
+| Servicestopps (M5.2) | Halt an jedem Servicepunkt, Kurz- oder Vollservice je nach Zeit seit dem letzten großen Halt, Dauer × Servicedisziplin des Teams. Radwechsel läuft parallel statt zusätzlich |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch, 170 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten** (Meilensteine M5–M8): Verpflegung und Glykogen,
-Hydration, Schlaf und Schlafdruck, Wetter, Wind und Tag-Nacht-Zyklus,
-Pannen und Zwischenfälle, Saison und Kalender, Editoren im Spiel.
+**Noch nicht enthalten** (M5 Schritte 3–4, M6–M8): Schlaf und
+Schlafdruck, Hydration, Wetter, Wind und Tag-Nacht-Zyklus, Pannen und
+Zwischenfälle, Saison und Kalender, Editoren im Spiel.
+
+Hydration fehlt bewusst noch: Ihre Eingangsgrößen sind Temperatur und
+Luftfeuchte, und die entstehen erst mit dem Wettermodell. Ohne sie wäre
+die Schweißrate eine Konstante und damit nichts als ein linearer
+Zeitabzug für alle.
 
 Für all das steht der Katalog in `ultrasim/core/conditions.py` schon
 bereit: Magenprobleme, Hitzeeinbruch, Schlafdefizit, Sturzfolgen und
@@ -156,14 +163,14 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 
 ```
 ultrasim/
-  core/     physics · rider · form · fatigue · conditions · strategy · events · engine
+  core/     physics · rider · form · fatigue · nutrition · conditions · strategy · events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
   web/      main · playback · routers/ · templates/ · static/
   cli/      simulate · balance
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
-tests/      geo · core · engine · conditions · playback · golden_master
+tests/      geo · core · engine · conditions · nutrition · playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
@@ -197,13 +204,30 @@ Browser.
 
 ## Kalibrierung und Balancing
 
-Die Zielwerte aus Abschnitt 7.1 (200 km ≈ 78–85 % FTP, 2500 km ≈
-55–62 %) sind unverändert übernommen. Sie machen das Feld schnell: Der
-Sieger fährt die 300-km-Runde mit 3100 Höhenmetern in gut 8:20 h
-(≈ 36 km/h). Das ist am oberen Rand des Realistischen und der wichtigste
-Stellhebel, falls das Feld zu schnell wirkt — `IF_A`/`IF_B` in
-`ultrasim/core/strategy.py`. Die Kalibrierung an realen Ultra-Ergebnissen
-ist im Dokument ausdrücklich Meilenstein M8.
+Seit M5.2 setzt nicht mehr allein die Distanzformel aus Abschnitt 7.1
+das Tempo, sondern der Energiehaushalt: Der Rennplan nimmt das Minimum
+aus gewünschter und energetisch tragbarer Intensität. Das verschiebt die
+Zeiten dorthin, wo sie physiologisch hingehören, statt an einer Formel zu
+drehen.
+
+Der Effekt fällt anders aus, als man zunächst vermutet — er ist auf
+**mittleren** Distanzen am größten:
+
+| Strecke | vor M5.2 | nach M5.2 | Ziel-IF | warum |
+|---|---|---|---|---|
+| 300 km | 8:17 h (36,2 km/h) | 8:48 h (34,1 km/h) | 78 % → **70 %** | hohe Intensität, aber lang genug, um den Speicher zu leeren |
+| 1230 km | 33:52 h (36,3 km/h) | 35:55 h (34,2 km/h) | 65 % → 64 % | Deckel bindet kaum, die 32 min Standzeit machen den Unterschied |
+
+Auf 300 km fällt der Glykogenspeicher des Siegers auf 17 % — knapp am
+Hungerast vorbei, genau die Dramaturgie, die Abschnitt 6.1 beschreibt.
+Auf 1230 km bleiben 60 % übrig: Über 34 Stunden ist die geplante
+Speicherentnahme so dünn verteilt, dass praktisch die Zufuhr allein zählt.
+
+Die interessante Eigenschaft des Modells: Die Zufuhr hat eine **absolute**
+Obergrenze, der Verbrauch skaliert mit der Leistung. Ein starker Fahrer
+kann nicht proportional mehr essen und wird relativ zu seiner FTP härter
+gebremst als ein schwacher. Fettverbrennung und Magenverträglichkeit sind
+damit keine Zierattribute mehr.
 
 ```bash
 python -m ultrasim.cli.balance --route hochgebirgs-marathon --runs 20
@@ -241,7 +265,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 147 Tests, rund 16 s
+pytest -q          # 170 Tests, rund 36 s
 ruff check ultrasim tools tests
 ```
 

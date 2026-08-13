@@ -43,6 +43,7 @@ h3 { font-size: .9rem; color: var(--fg-dim); text-transform: uppercase; letter-s
 .dim { color: var(--fg-dim); }
 .faint { color: var(--fg-faint); }
 .good { color: var(--good); }
+.warn { color: var(--accent); }
 .bad { color: var(--bad); }
 .right { text-align: right; }
 .nowrap { white-space: nowrap; }

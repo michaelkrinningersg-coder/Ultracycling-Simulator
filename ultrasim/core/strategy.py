@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from ..geo.route import Route
+from . import nutrition as nut
 from . import physics as ph
 from .rider import Rider
 
@@ -69,6 +70,12 @@ class RacePlan:
     notes: list[tuple[float, str]] = field(default_factory=list)  # (dist_m, Begründung)
     #: Wo der zu ambitionierte Plan zurückschlägt (None = geht auf).
     misjudgement: Misjudgement | None = None
+    #: Zielwert der Zufuhr in Gramm Kohlenhydrate je Stunde.
+    intake_g_h: float = 0.0
+    #: Geplante Halte am Servicepunkt.
+    stops: list[StopPlan] = field(default_factory=list)
+    #: Geschätzte Fahrzeit ohne Stopps, in Sekunden.
+    est_ride_time_s: float = 0.0
 
 
 def base_target_if(distance_km: float) -> float:
@@ -309,6 +316,7 @@ def build_plan(
     route: Route,
     rng: np.random.Generator,
     rng_misjudge: np.random.Generator | None = None,
+    rng_stops: np.random.Generator | None = None,
     service_factor: float = 1.0,
     allow_tt: bool = True,
 ) -> RacePlan:
@@ -318,11 +326,49 @@ def build_plan(
     seinen Planungsfehler ausbaden muss, darf nicht davon abhängen, wie
     viele Zufallszahlen die Radwahl vorher verbraucht hat.
     """
-    target_if, overreach, note = target_intensity(rider, route.distance_km, rng)
+    wish_if, overreach, note = target_intensity(rider, route.distance_km, rng)
     boost = climb_boost(rider)
     change_cost = BIKE_CHANGE_BASE_S * service_factor
-    sections, notes = build_bike_plan(rider, route, target_if, boost, change_cost, allow_tt)
+    sections, notes = build_bike_plan(rider, route, wish_if, boost, change_cost, allow_tt)
+
+    # --- Energiedeckel (Abschnitt 6.1) -------------------------------
+    # Zwei Durchgänge: Die tragbare Intensität hängt an der Dauer, die
+    # Dauer an der Intensität. Ein einziger Nachschlag reicht, weil der
+    # Zusammenhang flach ist – die dritte Runde ändert nichts mehr.
+    intake = float(
+        nut.intake_ceiling_g_h(
+            rider.attr("kohlenhydratverbrennung"), rider.attr("magenvertraeglichkeit")
+        )
+    )
+    glycogen = float(nut.glycogen_capacity_kcal(rider.weight_kg, rider.attr("ausdauer")))
+    fat_norm = rider.attr_norm("fettverbrennung")
+
+    target_if = wish_if
+    ride_time = _estimate_ride_time(sections, wish_if, wish_if)
+    energy_if = wish_if
+    for _ in range(2):
+        energy_if = nut.sustainable_intensity(
+            rider.ftp_w, intake, glycogen, ride_time / 3600.0, fat_norm
+        )
+        target_if = float(np.clip(min(wish_if, energy_if), *IF_CLIP))
+        ride_time = _estimate_ride_time(sections, target_if, wish_if)
+
+    if target_if < wish_if - 1e-6:
+        limit_note = (
+            f"Energiedeckel bindet: {intake:.0f} g KH/h tragen nur "
+            f"{target_if * 100:.0f} % FTP statt der gewünschten {wish_if * 100:.0f} % "
+            f"(Speicher {glycogen:.0f} kcal über {ride_time / 3600.0:.1f} h)"
+        )
+    else:
+        limit_note = (
+            f"Energiedeckel greift nicht: {intake:.0f} g KH/h reichen für "
+            f"{energy_if * 100:.0f} % FTP, geplant sind {wish_if * 100:.0f} %"
+        )
+
     misjudgement = plan_misjudgement(route, overreach, rng_misjudge or rng)
+    stops = plan_service_stops(
+        route, _section_times(sections, target_if, wish_if), rng_stops or rng
+    )
 
     plan = RacePlan(
         rider_id=rider.id,
@@ -330,10 +376,131 @@ def build_plan(
         climb_boost=boost,
         sections=sections,
         misjudgement=misjudgement,
+        intake_g_h=intake,
+        stops=stops,
+        est_ride_time_s=ride_time,
     )
     plan.notes.append((0.0, note))
+    plan.notes.append((0.0, limit_note))
+    if stops:
+        full = sum(1 for s in stops if s.kind == "voll")
+        planned_total = sum(s.planned_s for s in stops) * service_factor
+        plan.notes.append(
+            (
+                0.0,
+                f"Stoppplan: {len(stops)} Halte ({full} Vollservice), "
+                f"zusammen rund {planned_total / 60.0:.0f} min geplante Standzeit",
+            )
+        )
     plan.notes.extend(notes)
     return plan
+
+
+#: Wie stark die Fahrzeit auf eine geänderte Leistung reagiert. Im
+#: Flachen dominiert der Luftwiderstand (t ~ P^(-1/3)), am Berg die
+#: Schwerkraft (t ~ P^(-1)); 0,5 liegt dazwischen und reicht für eine
+#: Planungsgröße allemal.
+TIME_POWER_EXPONENT = 0.5
+
+
+def _section_times(
+    sections: list[SectionPlan], target_if: float, ref_if: float
+) -> list[float]:
+    """Fahrzeit je Abschnitt, auf eine andere Intensität umgerechnet.
+
+    Die Schätzungen in ``SectionPlan`` entstanden bei der
+    Wunschintensität. Fällt die Zielintensität durch den Energiedeckel,
+    dauert alles länger – und zwar spürbar genug, dass man es beim
+    Stoppplan nicht ignorieren darf.
+    """
+    scale = (ref_if / target_if) ** TIME_POWER_EXPONENT if target_if > 0 else 1.0
+    out = []
+    for section in sections:
+        base = section.est_time_tt_s if section.bike == ph.BIKE_TT else section.est_time_road_s
+        if base <= 0:
+            base = section.est_time_road_s
+        out.append(base * scale)
+    return out
+
+
+def _estimate_ride_time(sections: list[SectionPlan], target_if: float, ref_if: float) -> float:
+    return float(sum(_section_times(sections, target_if, ref_if)))
+
+
+# ----------------------------------------------------------------------
+# Verpflegungs- und Stoppplan (Abschnitte 6.3 und 7.1)
+# ----------------------------------------------------------------------
+#: Basisdauer eines Kurzservice (Flaschen, Riegel) – oft rollend.
+SHORT_SERVICE_S = (40.0, 90.0)
+#: Vollservice: Essen, Kleidung, Wäsche.
+FULL_SERVICE_S = (300.0, 900.0)
+#: Nach so vielen Stunden ohne Vollservice wird der nächste Halt einer.
+FULL_SERVICE_INTERVAL_H = 8.0
+#: Streuung der tatsächlichen Stoppdauer um die geplante.
+SERVICE_JITTER = 0.18
+
+
+@dataclass
+class StopPlan:
+    """Ein geplanter Halt am Servicepunkt."""
+
+    service_idx: int
+    dist_m: float
+    kind: str  # "kurz" | "voll"
+    planned_s: float
+
+    @property
+    def label(self) -> str:
+        return "Vollservice" if self.kind == "voll" else "Kurzservice"
+
+
+def plan_service_stops(
+    route: Route, section_times_s: list[float], rng: np.random.Generator
+) -> list[StopPlan]:
+    """Legt fest, an welchem Servicepunkt wie lange gehalten wird.
+
+    Gehalten wird an jedem Servicepunkt – das Begleitfahrzeug ist ja da.
+    Der Unterschied liegt im Typ: normalerweise Kurzservice, aber wenn
+    seit dem letzten Vollservice genug Zeit vergangen ist, wird daraus
+    ein richtiger Halt mit Essen und Kleidungswechsel.
+
+    ``section_times_s`` sind die geschätzten Fahrzeiten der Abschnitte
+    zwischen den Servicepunkten; daraus ergibt sich, *wann* ein Fahrer
+    einen Punkt erreicht, ohne dass das Rennen dafür laufen müsste.
+    """
+    stops: list[StopPlan] = []
+    elapsed_h = 0.0
+    since_full_h = 0.0
+    for idx, sp in enumerate(route.service_points):
+        if idx < len(section_times_s):
+            elapsed_h += section_times_s[idx] / 3600.0
+            since_full_h += section_times_s[idx] / 3600.0
+        full = since_full_h >= FULL_SERVICE_INTERVAL_H
+        if full:
+            since_full_h = 0.0
+            planned = float(rng.uniform(*FULL_SERVICE_S))
+        else:
+            planned = float(rng.uniform(*SHORT_SERVICE_S))
+        stops.append(
+            StopPlan(
+                service_idx=idx,
+                dist_m=sp.dist_m,
+                kind="voll" if full else "kurz",
+                planned_s=planned,
+            )
+        )
+    return stops
+
+
+def stop_duration(planned_s: float, service_factor: float, rng: np.random.Generator) -> float:
+    """Tatsächliche Dauer = geplant · (1 + N(0, σ)) · f_servicedisziplin.
+
+    Ein starker Fahrer in einem schlampigen Team verliert hier Zeit, die
+    keine Beinarbeit zurückholt – das ist der ganze Zweck des
+    Team-Attributs.
+    """
+    value = planned_s * (1.0 + float(rng.normal(0.0, SERVICE_JITTER))) * service_factor
+    return max(15.0, value)
 
 
 def bike_change_duration(

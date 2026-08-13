@@ -33,10 +33,12 @@ from ..geo.route import Route
 from . import conditions as cond
 from . import fatigue as fat
 from . import form as fm
+from . import nutrition as nut
 from . import physics as ph
 from . import strategy as st
 from .events import (
     BIKE_CHANGE,
+    BONK,
     CONDITION_END,
     CONDITION_START,
     DNF,
@@ -139,6 +141,7 @@ class Telemetry:
     power_w: np.ndarray  # int16
     form_pct: np.ndarray  # uint8, FTP_eff / FTP_basis in Prozent
     wprime_pct: np.ndarray  # uint8
+    glyco_pct: np.ndarray  # uint8, Glykogenfüllstand in Prozent
     bike: np.ndarray  # uint8
     state: np.ndarray  # uint8
 
@@ -153,7 +156,16 @@ class Telemetry:
     def nbytes(self) -> int:
         return sum(
             getattr(self, name).nbytes
-            for name in ("dist_m", "v_cms", "power_w", "form_pct", "wprime_pct", "bike", "state")
+            for name in (
+                "dist_m",
+                "v_cms",
+                "power_w",
+                "form_pct",
+                "wprime_pct",
+                "glyco_pct",
+                "bike",
+                "state",
+            )
         )
 
     def save(self, path) -> None:
@@ -165,6 +177,7 @@ class Telemetry:
             power_w=self.power_w,
             form_pct=self.form_pct,
             wprime_pct=self.wprime_pct,
+            glyco_pct=self.glyco_pct,
             bike=self.bike,
             state=self.state,
         )
@@ -179,6 +192,7 @@ class Telemetry:
                 power_w=data["power_w"],
                 form_pct=data["form_pct"],
                 wprime_pct=data["wprime_pct"],
+                glyco_pct=data["glyco_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )
@@ -340,6 +354,7 @@ def simulate_race(
             route,
             streams[entry_id].get("plan"),
             streams[entry_id].get("misjudge"),
+            streams[entry_id].get("stops"),
             service_factor,
             config.allow_tt_bike,
         )
@@ -369,6 +384,12 @@ def simulate_race(
     section_track, section_grid = fm.build_section_form(
         n, route.distance_m, [s.get("section_form") for s in streams]
     )
+
+    fat_norm = np.array([r.attr_norm("fettverbrennung") for r in field_riders])
+    glyco_cap = nut.glycogen_capacity_kcal(
+        weight, np.array([r.attr("ausdauer") for r in field_riders])
+    )
+    intake_g_h = np.array([p.intake_g_h for p in plans])
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -411,6 +432,16 @@ def simulate_race(
             if section.idx < n_sections:
                 planned_bike[i, section.idx] = section.bike
 
+    # Geplante Haltedauer je Servicepunkt, je Fahrer.
+    n_sp = len(sp_dist)
+    stop_planned = np.zeros((n, max(n_sp, 1)))
+    stop_kind: list[list[str]] = [["kurz"] * max(n_sp, 1) for _ in range(n)]
+    for i, plan in enumerate(plans):
+        for stop in plan.stops:
+            if stop.service_idx < n_sp:
+                stop_planned[i, stop.service_idx] = stop.planned_s
+                stop_kind[i][stop.service_idx] = stop.kind
+
     # ---------------- Zustände (Abschnitt 6.5) -----------------------
     conditions = cond.ConditionStore(n)
     cond_mods = np.ones((n, len(cond.CHANNELS)))
@@ -423,6 +454,9 @@ def simulate_race(
     dist = np.zeros(n)
     v = np.full(n, 4.0)
     work_j = np.zeros(n)
+    work_j_last = np.zeros(n)
+    glyco_kcal = glyco_cap.copy()
+    bonked = np.zeros(n, dtype=bool)
     wprime = wprime_cap.copy()
     bike = planned_bike[:, 0].astype(np.int64)
     stop_left = np.zeros(n)
@@ -450,6 +484,7 @@ def simulate_race(
     buf_p = np.zeros((n, cap), dtype=np.int16)
     buf_form = np.zeros((n, cap), dtype=np.uint8)
     buf_wp = np.zeros((n, cap), dtype=np.uint8)
+    buf_gly = np.zeros((n, cap), dtype=np.uint8)
     buf_bike = np.zeros((n, cap), dtype=np.uint8)
     buf_state = np.zeros((n, cap), dtype=np.uint8)
     n_samples = 0
@@ -457,14 +492,14 @@ def simulate_race(
     def _grow() -> None:
         # Bewusst nicht np.resize: das tilt die Daten in flacher
         # Reihenfolge und würde die Zeilen gegeneinander verschieben.
-        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_bike, buf_state
+        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state
         new_cap = cap * 2
         grown = []
-        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_bike, buf_state):
+        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state):
             bigger = np.zeros((n, new_cap), dtype=buf.dtype)
             bigger[:, :cap] = buf
             grown.append(bigger)
-        buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_bike, buf_state = grown
+        buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state = grown
         cap = new_cap
 
     def _record() -> None:
@@ -476,6 +511,7 @@ def simulate_race(
         buf_p[:, n_samples] = np.clip(power_now, 0, 32000).astype(np.int16)
         buf_form[:, n_samples] = np.clip(form_now * 100.0, 0, 255).astype(np.uint8)
         buf_wp[:, n_samples] = np.clip(wprime / wprime_cap * 100.0, 0, 255).astype(np.uint8)
+        buf_gly[:, n_samples] = np.clip(glyco_kcal / glyco_cap * 100.0, 0, 255).astype(np.uint8)
         buf_bike[:, n_samples] = bike.astype(np.uint8)
         buf_state[:, n_samples] = state
         n_samples += 1
@@ -487,8 +523,10 @@ def simulate_race(
     ftp_eff_if = ftp * target_if
     descent_mod = np.ones(n)
     crr_mod = np.ones(n)
-    #: Takt der langsam veränderlichen Größen (Form, Ermüdung) in Ticks.
+    bonk = np.ones(n)
+    #: Takt der langsam veränderlichen Größen (Form, Ermüdung, Energie).
     slow_steps = max(1, int(round(10.0 / dt)))
+    slow_dt = slow_steps * dt
 
     t = 0.0
     for tick in range(max_ticks + 1):
@@ -542,12 +580,51 @@ def simulate_race(
                         )
                     )
                 cond_mods = conditions.update(t, dist)
+
+                # --- Energiehaushalt (Abschnitt 6.1) -----------------
+                # Der Verbrauch kommt aus dem Zuwachs der geleisteten
+                # Arbeit seit dem letzten langsamen Takt, nicht aus der
+                # Momentanleistung: So zählt eine Abfahrt ohne Tritt auch
+                # wirklich als Pause und nicht als Stichprobe.
+                d_work_kj = (work_j - work_j_last) / 1000.0
+                work_j_last = work_j.copy()
+                mean_power = d_work_kj * 1000.0 / max(slow_dt, 1e-9)
+                intensity = mean_power / np.maximum(ftp_eff, 1.0)
+                burned = nut.metabolic_kcal(d_work_kj) * nut.carb_fraction(intensity, fat_norm)
+                taken = (
+                    intake_g_h
+                    * cond.channel(cond_mods, "kcal_aufnahme")
+                    * (slow_dt / 3600.0)
+                    * nut.CARB_KCAL_PER_G
+                )
+                glyco_kcal = np.clip(glyco_kcal - burned + taken, 0.0, glyco_cap)
+
+                glyco_frac = glyco_kcal / glyco_cap
+                bonk = nut.bonk_factor(glyco_frac)
+                fresh_bonk = (glyco_frac < nut.BONK_THRESHOLD) & ~bonked & (state == STATE_RIDING)
+                if fresh_bonk.any():
+                    for i in np.flatnonzero(fresh_bonk):
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t,
+                                BONK,
+                                {
+                                    "dist_km": round(dist[i] / 1000.0, 2),
+                                    "glyco_pct": round(float(glyco_frac[i]) * 100.0, 1),
+                                },
+                            )
+                        )
+                    bonked |= fresh_bonk
+                # Wer sich wieder erholt, kann erneut einbrechen.
+                bonked &= glyco_frac < nut.BONK_THRESHOLD * 1.6
+
                 f_section = fm.section_form_at(section_track, dist, section_grid)
                 f_fat = fat.fatigue_factor(work_j / 1000.0, work_cap_kj)
                 # f_umwelt ist das Produkt aller aktiven Zustände
                 # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
                 f_umwelt = cond.channel(cond_mods, "ftp")
-                form_now = f_season * f_day * f_section * f_fat * f_umwelt
+                form_now = f_season * f_day * f_section * f_fat * f_umwelt * bonk
                 ftp_eff = ftp * form_now
                 ftp_eff_if = ftp_eff * target_if
                 descent_mod = cond.channel(cond_mods, "abfahrtstempo")
@@ -657,14 +734,30 @@ def simulate_race(
             at_sp = running & (dist >= sp_guard[next_sp])
             if at_sp.any():
                 for i in np.flatnonzero(at_sp):
-                    section = int(next_sp[i]) + 1
+                    sp_i = int(next_sp[i])
+                    section = sp_i + 1
+                    rng_stop = streams[i].get("stops")
+
+                    # Der geplante Halt am Servicepunkt …
+                    kind = stop_kind[i][sp_i] if sp_i < n_sp else "kurz"
+                    duration = st.stop_duration(
+                        float(stop_planned[i, sp_i]) if sp_i < n_sp else 0.0,
+                        float(service_factor[i]),
+                        rng_stop,
+                    )
+                    reason = "Vollservice" if kind == "voll" else "Kurzservice"
+
+                    # … und der Radwechsel, falls einer ansteht. Beides
+                    # passiert gleichzeitig, also zählt die längere Dauer,
+                    # nicht die Summe.
                     want = int(planned_bike[i, min(section, n_sections - 1)])
                     if want != int(bike[i]):
-                        duration = st.bike_change_duration(
-                            streams[i].get("stops"), float(service_factor[i])
-                        )
-                        stop_left[i] = duration
-                        state[i] = STATE_STOPPED
+                        change = st.bike_change_duration(rng_stop, float(service_factor[i]))
+                        if change > duration:
+                            duration = change
+                            reason = f"{reason} mit Radwechsel"
+                        else:
+                            reason = f"{reason} (Radwechsel läuft mit)"
                         bike[i] = want
                         events.append(
                             RaceEvent(
@@ -673,19 +766,27 @@ def simulate_race(
                                 BIKE_CHANGE,
                                 {
                                     "bike": ph.BIKE_NAMES[want],
-                                    "duration_s": round(duration, 1),
+                                    "duration_s": round(change, 1),
                                     "dist_km": round(dist[i] / 1000.0, 2),
                                 },
                             )
                         )
-                        events.append(
-                            RaceEvent(
-                                int(i),
-                                t_next,
-                                STOP_START,
-                                {"reason": "Radwechsel", "duration_s": round(duration, 1)},
-                            )
+
+                    stop_left[i] = duration
+                    state[i] = STATE_STOPPED
+                    events.append(
+                        RaceEvent(
+                            int(i),
+                            t_next,
+                            STOP_START,
+                            {
+                                "reason": reason,
+                                "kind": kind,
+                                "duration_s": round(duration, 1),
+                                "dist_km": round(dist[i] / 1000.0, 2),
+                            },
                         )
+                    )
                 next_sp[at_sp] += 1
 
             # --- Ziel ------------------------------------------------
@@ -738,6 +839,7 @@ def simulate_race(
         power_w=buf_p[:, :n_samples].copy(),
         form_pct=buf_form[:, :n_samples].copy(),
         wprime_pct=buf_wp[:, :n_samples].copy(),
+        glyco_pct=buf_gly[:, :n_samples].copy(),
         bike=buf_bike[:, :n_samples].copy(),
         state=buf_state[:, :n_samples].copy(),
     )

@@ -58,6 +58,9 @@
               <span class="v" x-text="focus.form_pct + ' %'"></span></div>
             <div class="item"><span class="k">W′</span>
               <span class="v" x-text="focus.wprime_pct + ' %'"></span></div>
+            <div class="item"><span class="k">Glykogen</span>
+              <span class="v" :class="focus.glyco_pct < 15 ? 'bad' : (focus.glyco_pct < 30 ? 'warn' : '')"
+                    x-text="focus.glyco_pct + ' %'"></span></div>
             <div class="item"><span class="k">Rad</span>
               <span class="v"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
                     x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>

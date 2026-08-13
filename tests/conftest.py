@@ -46,5 +46,29 @@ def report(demo_gpx):
 
 
 @pytest.fixture(scope="session")
+def medium_gpx(tmp_path_factory) -> Path:
+    """Rund 250 km – lang genug für Servicepunkte und Energiedeckel.
+
+    Die kurze Teststrecke hat weder das eine noch das andere: Bei 60 km
+    setzt der Importer keinen Servicepunkt, und der Glykogenspeicher
+    trägt die Distanz mühelos. Genau die Mechaniken, um die es ab M5
+    geht, blieben damit ungetestet.
+    """
+    path = tmp_path_factory.mktemp("gpx") / "medium.gpx"
+    _, profile, (lat, lon, ele) = PRESETS["voralpen"]
+    scaled = [(length * 0.83, grade) for length, grade in profile]
+    tracks = build_track(scaled, lat, lon, ele, 25.0, 1.2, 8123)
+    write_gpx(path, "Mittelstrecke", *tracks)
+    return path
+
+
+@pytest.fixture(scope="session")
+def route_medium(medium_gpx):
+    route, _ = import_gpx(medium_gpx, name="Mittelstrecke")
+    assert route.service_points, "Fixture soll gerade Servicepunkte haben"
+    return route
+
+
+@pytest.fixture(scope="session")
 def pool():
     return generate_pool(24, n_teams=4, seed=99)

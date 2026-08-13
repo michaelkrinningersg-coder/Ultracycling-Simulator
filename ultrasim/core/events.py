@@ -73,6 +73,16 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
         return f"{who}Aufgabe bei km {p.get('dist_km', 0):.0f} – {p.get('reason', '')}"
     if event.type == START:
         return f"{who}gestartet"
+    if event.type == STOP_START:
+        return (
+            f"{who}{p.get('reason', 'Stopp')} bei km {p.get('dist_km', 0):.0f} "
+            f"({p.get('duration_s', 0):.0f} s)"
+        )
+    if event.type == BONK:
+        return (
+            f"{who}Hungerast bei km {p.get('dist_km', 0):.0f} "
+            f"(Glykogen {p.get('glyco_pct', 0):.0f} %)"
+        )
     if event.type == CONDITION_START:
         return f"{who}{p.get('label', 'Zustand')} ab km {p.get('dist_km', 0):.0f}"
     if event.type == CONDITION_END:

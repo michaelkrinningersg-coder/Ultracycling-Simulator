@@ -29,10 +29,24 @@ MECHANICAL = "MECHANICAL"
 BONK = "BONK"
 CONDITION_START = "CONDITION_START"
 CONDITION_END = "CONDITION_END"
+#: Zwischenfall aus dem Katalog in Abschnitt 6.5. Bewusst *ein* Typ mit
+#: der Art im Payload statt acht Konstanten: Die UI behandelt sie alle
+#: gleich, und ein neuer Katalogeintrag soll keine Codeänderung sein.
+INCIDENT = "INCIDENT"
 
 #: Ereignisse, die auch bei starkem Zeitraffer noch gestreamt werden.
 MAJOR_EVENTS = frozenset(
-    {SPLIT_PASSED, FINISH, DNF, BIKE_CHANGE, MECHANICAL, BONK, SLEEP, CONDITION_START}
+    {
+        SPLIT_PASSED,
+        FINISH,
+        DNF,
+        BIKE_CHANGE,
+        MECHANICAL,
+        INCIDENT,
+        BONK,
+        SLEEP,
+        CONDITION_START,
+    }
 )
 
 
@@ -78,6 +92,8 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
             f"{who}{p.get('reason', 'Stopp')} bei km {p.get('dist_km', 0):.0f} "
             f"({p.get('duration_s', 0):.0f} s)"
         )
+    if event.type == STOP_END:
+        return f"{who}weiter bei km {p.get('dist_km', 0):.0f}"
     if event.type == SLEEP:
         return (
             f"{who}Schlafstopp bei km {p.get('dist_km', 0):.0f} – "
@@ -88,6 +104,10 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
             f"{who}Hungerast bei km {p.get('dist_km', 0):.0f} "
             f"(Glykogen {p.get('glyco_pct', 0):.0f} %)"
         )
+    if event.type == INCIDENT:
+        stop = p.get("stop_s", 0.0)
+        tail = f" – {stop / 60:.0f} min verloren" if stop >= 30 else ""
+        return f"{who}{p.get('reason', p.get('label', 'Zwischenfall'))} bei km {p.get('dist_km', 0):.0f}{tail}"
     if event.type == CONDITION_START:
         return f"{who}{p.get('label', 'Zustand')} ab km {p.get('dist_km', 0):.0f}"
     if event.type == CONDITION_END:

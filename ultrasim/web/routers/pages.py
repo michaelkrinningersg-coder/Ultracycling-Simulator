@@ -66,11 +66,16 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
                 "gap": None if best is None else entry.finish_time_s - best,
             }
         )
-    dnf = [
-        {"entry": e, "rider": view.riders[e.rider_id]}
-        for e in result.entries
-        if e.finish_time_s is None
-    ]
+    # Wer am weitesten kam, steht oben – so liest sich die Liste als
+    # Chronik des Abbröckelns statt als Startnummernfolge.
+    dnf = sorted(
+        (
+            {"entry": e, "rider": view.riders[e.rider_id]}
+            for e in result.entries
+            if e.finish_time_s is None
+        ),
+        key=lambda row: -(row["entry"].dnf_dist_m or 0.0),
+    )
     return _tpl(request).TemplateResponse(
         request,
         "results.html",

@@ -134,6 +134,14 @@ def _print_result(result, top: int) -> None:
         f"Sieger: {hms(best)} · Ø {(_distance_of(result) / 1000.0) / (best / 3600.0):.1f} km/h · "
         f"Feld {len(finished)} im Ziel, {len(otl)} außerhalb Zeitlimit, {len(dnf)} DNF"
     )
+    # Wer aufgegeben hat, gehört ins Protokoll – die Ausfälle sind der
+    # halbe Reiz eines Ultrarennens (Abschnitt 6.5).
+    for entry in sorted(dnf, key=lambda e: -(e.dnf_dist_m or 0.0)):
+        rider = riders[entry.rider_id]
+        print(
+            f"  DNF {entry.bib:>4}  {rider.name:26s} "
+            f"km {(entry.dnf_dist_m or 0.0) / 1000.0:>6.1f}  {entry.dnf_reason}"
+        )
 
 
 def _distance_of(result) -> float:

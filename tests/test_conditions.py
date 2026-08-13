@@ -145,14 +145,31 @@ def test_records_carry_both_axes():
     assert record.end_t_s == 9000.0  # aus der Zeitachse nachgetragen
 
 
-def test_close_all_completes_open_records():
+def test_close_all_cuts_records_off_at_the_end_of_the_race():
+    """Ein Zustand endet spätestens mit dem Rennen des Fahrers.
+
+    Sein geplantes Ende darf weit dahinter liegen – ein Magenproblem mit
+    vier Stunden Nachwirkung, das jemanden auf den letzten zwanzig
+    Kilometern erwischt, ist so ein Fall. Der Datensatz muss trotzdem im
+    Rennen enden, sonst zeigt jede Auswertung Zustände nach dem Ziel.
+    """
     store = _store()
     store.add(0, cond.CATALOG["magen"], t_s=100.0, dist_m=1000.0, duration=1e9)
     store.close_all(500.0, _dist(4, 2000.0))
     assert store.active_count == 0
     record = store.records[0]
-    assert record.end_t_s == pytest.approx(1e9 + 100.0)
+    assert record.end_t_s == pytest.approx(500.0)
     assert record.end_dist_m == pytest.approx(2000.0)
+
+
+def test_close_all_takes_a_finish_time_per_rider():
+    """Ein Zustand endet, wenn *dieser* Fahrer fertig ist."""
+    store = _store()
+    store.add(0, cond.CATALOG["magen"], t_s=0.0, dist_m=0.0, duration=1e9)
+    store.add(1, cond.CATALOG["magen"], t_s=0.0, dist_m=0.0, duration=1e9)
+    store.close_all(np.array([300.0, 900.0, 900.0, 900.0]), _dist(4, 2000.0))
+    assert store.records[0].end_t_s == pytest.approx(300.0)
+    assert store.records[1].end_t_s == pytest.approx(900.0)
 
 
 def test_store_scales_to_a_full_field():
@@ -252,7 +269,9 @@ def test_bad_pacers_collect_more_misjudgements():
 # ----------------------------------------------------------------------
 def test_race_produces_and_closes_conditions(route):
     teams, riders = generate_pool(30, n_teams=5, seed=4)
-    result = simulate_race(route, riders, teams, RaceConfig(seed=2024))
+    result = simulate_race(
+        route, riders, teams, RaceConfig(seed=2024, enable_incidents=False)
+    )
     assert result.conditions, "Bei 30 Fahrern sollte mindestens einer sich vertun"
     for record in result.conditions:
         assert record.typ == "fehlplanung"
@@ -264,7 +283,9 @@ def test_race_produces_and_closes_conditions(route):
 
 def test_condition_events_pair_up(route):
     teams, riders = generate_pool(30, n_teams=5, seed=4)
-    result = simulate_race(route, riders, teams, RaceConfig(seed=2024))
+    result = simulate_race(
+        route, riders, teams, RaceConfig(seed=2024, enable_incidents=False)
+    )
     starts = [e for e in result.events if e.type == CONDITION_START]
     assert len(starts) == len(result.conditions)
     for event in starts:
@@ -278,7 +299,9 @@ def test_condition_events_pair_up(route):
 def test_misjudgement_actually_costs_time(route):
     """Ohne messbare Wirkung wäre der ganze Aufwand Kosmetik."""
     teams, riders = generate_pool(40, n_teams=5, seed=4)
-    result = simulate_race(route, riders, teams, RaceConfig(seed=2024))
+    result = simulate_race(
+        route, riders, teams, RaceConfig(seed=2024, enable_incidents=False)
+    )
     affected = {c.entry_id for c in result.conditions}
     assert affected
 

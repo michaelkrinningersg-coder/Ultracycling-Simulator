@@ -339,8 +339,12 @@ def test_active_filter_only_returns_running_conditions(view, stored):
     mid = offset + 0.5 * (record.start_t_s + record.end_t_s)
     active = view.conditions_at(record.entry_id, mid, only_active=True)
     assert active and all(row["active"] for row in active)
+    # Nach seinem Ende ist *dieser* Zustand weg. Andere dürfen laufen –
+    # ein Fahrer kann seit M6.2 gleichzeitig mehrere haben.
     after = view.conditions_at(record.entry_id, offset + record.end_t_s + 60.0, only_active=True)
-    assert not after
+    assert not any(
+        row["typ"] == record.typ and row["start_t_s"] == record.start_t_s for row in after
+    )
 
 
 def test_board_rows_carry_condition_labels(client):

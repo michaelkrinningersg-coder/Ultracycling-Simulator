@@ -106,6 +106,13 @@ CATALOG: dict[str, ConditionSpec] = {
         anchor=ANCHOR_DIST,
         decay=DECAY_STEP,
     ),
+    "lichtausfall": ConditionSpec(
+        typ="lichtausfall",
+        label="Lichtausfall",
+        effects={"abfahrtstempo": 0.85},
+        anchor=ANCHOR_DIST,
+        decay=DECAY_STEP,
+    ),
     # --- physiologisch, in Zeit verankert ---------------------------
     "magen": ConditionSpec(
         typ="magen",
@@ -138,6 +145,13 @@ CATALOG: dict[str, ConditionSpec] = {
     "moral": ConditionSpec(
         typ="moral",
         label="Moraltief",
+        effects={"ftp": 0.98},
+        anchor=ANCHOR_TIME,
+        decay=DECAY_LINEAR,
+    ),
+    "verfahren": ConditionSpec(
+        typ="verfahren",
+        label="Verfahren",
         effects={"ftp": 0.98},
         anchor=ANCHOR_TIME,
         decay=DECAY_LINEAR,
@@ -352,14 +366,28 @@ class ConditionStore:
         self._compact(keep)
         return finished
 
-    def close_all(self, t_s: float, dist_m: np.ndarray) -> None:
-        """Am Rennende offene Zustände abschließen."""
+    def close_all(self, t_s: float | np.ndarray, dist_m: np.ndarray) -> None:
+        """Am Rennende offene Zustände abschließen.
+
+        ``t_s`` darf ein Array je Fahrer sein — und sollte es auch: Ein
+        Zustand endet, wenn *dieser* Fahrer fertig ist, nicht wenn der
+        letzte des Feldes ankommt. Sonst trüge ein Sieger seine
+        Magenprobleme in der Anzeige noch stundenlang mit sich herum.
+        """
+        ends = np.broadcast_to(np.asarray(t_s, dtype=np.float64), (self.n_riders,))
         for record_idx in self._index:
             record = self._records[record_idx]
-            if record.end_t_s is None:
-                record.end_t_s = t_s
-            if record.end_dist_m is None:
-                record.end_dist_m = float(dist_m[record.entry_id])
+            end = float(ends[record.entry_id])
+            # Nicht nur füllen, sondern auch kürzen: Ein Zustand, dessen
+            # geplantes Ende hinter der Zieldurchfahrt liegt, endet mit
+            # dem Rennen. Ein Datensatz, der behauptet, die Magenprobleme
+            # hätten noch anderthalb Stunden nach dem Ziel angehalten,
+            # zwingt jede Anzeige zu einer Notkorrektur.
+            record.end_t_s = end if record.end_t_s is None else min(record.end_t_s, end)
+            final_dist = float(dist_m[record.entry_id])
+            record.end_dist_m = (
+                final_dist if record.end_dist_m is None else min(record.end_dist_m, final_dist)
+            )
         self._compact(np.zeros(len(self._entry), dtype=bool))
 
     def _compact(self, keep: np.ndarray) -> None:

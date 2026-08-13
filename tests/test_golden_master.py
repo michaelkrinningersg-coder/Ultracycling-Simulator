@@ -43,6 +43,11 @@ GOLDEN_ROUTE = {
 #:   Wind kostet Zeit, weil man in den Gegenwindabschnitten länger
 #:   unterwegs ist als in den Rückenwindabschnitten – der Effekt hebt
 #:   sich über eine Runde eben *nicht* auf.
+#: * M6.2 – Zwischenfälle. Genau zwei der zwölf Fahrer trifft auf diesen
+#:   60 km etwas (Startnummer 7 und 1), die übrigen zehn Zeiten bleiben
+#:   auf die Hundertstelsekunde gleich. Dass nur die Betroffenen sich
+#:   bewegen, ist die eigentliche Aussage dieses Laufs: Der Ereignisstrom
+#:   ist von allen anderen Zufallsströmen getrennt.
 GOLDEN_RESULT = [
     (8, 6151.26),
     (12, 6206.73),
@@ -50,12 +55,12 @@ GOLDEN_RESULT = [
     (11, 6328.11),
     (5, 6429.78),
     (9, 6464.33),
-    (7, 6473.78),
     (10, 6502.05),
     (3, 6506.74),
     (2, 6586.24),
     (4, 6874.38),
-    (1, 7026.88),
+    (1, 7235.42),
+    (7, 7266.72),
 ]
 
 TOLERANCE_S = 0.5

@@ -24,7 +24,7 @@ from typing import Any
 
 import numpy as np
 
-from ..core.engine import RaceResult, Telemetry
+from ..core.engine import STATE_DNF, RaceResult, Telemetry
 from ..core.events import MAJOR_EVENTS, RaceEvent
 from ..geo.route import Route
 
@@ -185,6 +185,12 @@ class RaceView:
         """
         offset = self.offsets[entry_id]
         elapsed = t_wall - offset
+        # Wer im Ziel ist, hat keine laufenden Zustände mehr: Sonst trüge
+        # ein Fahrer seine Magenprobleme noch stundenlang als Chip durch
+        # die Ergebnisliste, obwohl er längst abgestiegen ist.
+        end = self.result.entries[entry_id].finish_time_s
+        if end is not None:
+            elapsed = min(elapsed, end)
         out: list[dict[str, Any]] = []
         for record in self._conditions.get(entry_id, ()):
             if record.start_t_s > elapsed:
@@ -210,6 +216,19 @@ class RaceView:
                     "reason": record.reason,
                 }
             )
+        return out
+
+    def condition_labels(self, entry_id: int, t_wall: float) -> list[str]:
+        """Chips für die Board-Zeile: aktive Zustände, ohne Dopplung.
+
+        Zwei überlappende Magenphasen sind im Modell zwei Zustände, in
+        der Zeile aber ein Zustand — dreimal "Magenprobleme" nebeneinander
+        sagt nicht mehr als einmal und sprengt die Spalte.
+        """
+        out: list[str] = []
+        for record in self.conditions_at(entry_id, t_wall, only_active=True):
+            if record["label"] not in out:
+                out.append(record["label"])
         return out
 
     def _dist_now(self, entry_id: int, elapsed: float) -> float:
@@ -368,12 +387,16 @@ class RaceView:
                 "bike": int(snap["bike"][i]),
                 "state": int(snap["state"][i]),
                 "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
-                "conditions": [
-                    c["label"] for c in self.conditions_at(i, t_wall, only_active=True)
-                ],
+                "conditions": self.condition_labels(i, t_wall),
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
                 rows.append({**base, "t_s": float(times[i]), "provisional": False})
+            elif snap["state"][i] == STATE_DNF:
+                # Ausgeschieden vor dem Split: keine Prognose. Ein
+                # stehender Fahrer hätte sonst eine Fantasiezeit aus der
+                # Mindestgeschwindigkeit bekommen und stünde als "kommt
+                # noch" im Board, obwohl er nie mehr kommt.
+                rows.append({**base, "t_s": None, "provisional": True})
             elif snap["started"][i]:
                 remaining = split.dist_m - float(snap["dist"][i])
                 speed = max(float(snap["v"][i]), 2.0)
@@ -436,13 +459,15 @@ class RaceView:
             rider = self.riders[entry.rider_id]
             team = self.teams.get(rider.team_id)
             actual = self.elapsed_at_distance(i, ref_m, t_wall)
-            if actual is None:
+            if actual is not None:
+                provisional = False
+            elif snap["state"][i] == STATE_DNF:
+                continue  # kommt an dieser Marke nicht mehr vorbei
+            else:
                 remaining = ref_m - float(snap["dist"][i])
                 speed = max(float(snap["v"][i]), 2.0)
                 actual = float(snap["elapsed"][i]) + remaining / speed
                 provisional = True
-            else:
-                provisional = False
             rows.append(
                 {
                     "entry_id": i,
@@ -454,9 +479,7 @@ class RaceView:
                     "bike": int(snap["bike"][i]),
                     "state": int(snap["state"][i]),
                     "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
-                    "conditions": [
-                        c["label"] for c in self.conditions_at(i, t_wall, only_active=True)
-                    ],
+                    "conditions": self.condition_labels(i, t_wall),
                     "t_s": actual,
                     "provisional": provisional,
                 }

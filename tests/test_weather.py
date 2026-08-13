@@ -236,7 +236,8 @@ def test_dehydration_deadband_and_slope():
 
 def test_hydration_display_maps_to_the_documented_range():
     assert nut.hydration_display_pct(np.array([0.0]))[0] == 100.0
-    assert nut.hydration_display_pct(np.array([4.0]))[0] == 0.0
+    assert nut.hydration_display_pct(np.array([3.0]))[0] == pytest.approx(50.0)
+    assert nut.hydration_display_pct(np.array([6.0]))[0] == 0.0
     assert nut.hydration_display_pct(np.array([9.0]))[0] == 0.0
 
 

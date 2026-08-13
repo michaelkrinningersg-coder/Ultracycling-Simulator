@@ -172,7 +172,7 @@ def bonk_factor(glycogen_fraction: np.ndarray) -> np.ndarray:
 SWEAT_BASE_L_H = 0.35
 SWEAT_PER_INTENSITY_L_H = 1.05
 #: Zuschlag je Grad über 20 °C …
-SWEAT_PER_C_WARM = 0.055
+SWEAT_PER_C_WARM = 0.040
 #: … und Abschlag je Grad darunter. Die Kurve ist bewusst unsymmetrisch:
 #: Kühle senkt den Flüssigkeitsverlust, aber nicht auf null – der Körper
 #: verliert auch bei 5 °C über Atmung und Grundumsatz Wasser.
@@ -186,14 +186,28 @@ SWEAT_HUMIDITY_GAIN = 0.30
 SWEAT_HUMIDITY_FROM_C = 20.0
 
 #: Was der Magen an Flüssigkeit durchlässt, aus Magenverträglichkeit.
-DRINK_CEILING_L_H = (0.70, 1.50)
+DRINK_CEILING_L_H = (0.85, 1.60)
+#: Über wie viele Stunden ein Fahrer einen Rückstand aufholen *will*.
+#:
+#: Ohne diesen Term trinkt niemand mehr als er schwitzt, und dann ist das
+#: Defizit eine Einbahnstraße: Jede heiße Stunde addiert sich, jede kühle
+#: Nacht ändert nichts, und nach einem Tag steht das ganze Feld am
+#: Anschlag. Real trinkt ein durstiger Fahrer über seinen Verbrauch
+#: hinaus, bis der Magen die Grenze setzt — die Nacht ist die Gelegenheit,
+#: den Rückstand des Nachmittags aufzuholen.
+DRINK_CATCH_UP_H = 2.0
+#: Was ein stehender Fahrer am Servicepunkt zusätzlich aufnimmt.
+DRINK_AT_STOP_L_H = 0.5
 
 #: Bis zu diesem Verlust in Prozent des Körpergewichts passiert nichts …
 DEHYDRATION_DEADBAND_PCT = 2.0
 #: … danach kostet jedes weitere Prozent so viel Leistung.
 DEHYDRATION_LOSS_PER_PCT = 0.02
-#: Anzeigebereich: 100 % = frisch, 0 % = 4 % Körpergewicht verloren.
-DEHYDRATION_DISPLAY_MAX_PCT = 4.0
+#: Anzeigebereich: 100 % = frisch, 0 % = 6 % Körpergewicht verloren.
+#: Bewusst weiter als die Leistungsschwelle: An einem 35-Grad-Tag liegt
+#: das halbe Feld über 4 %, und ein Balken, der dann bei allen auf null
+#: steht, sagt genau dort nichts mehr, wo er am meisten sagen sollte.
+DEHYDRATION_DISPLAY_MAX_PCT = 6.0
 
 
 def sweat_rate_l_h(

@@ -92,6 +92,10 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         "kaeltetoleranz",
         "naesseresistenz",
         "seitenwindfestigkeit",
+        # Zwischenfälle und Aufgabe (M6.2)
+        "materialpflege",
+        "navigationssicherheit",
+        "mentale_widerstandsfaehigkeit",
     }
 )
 

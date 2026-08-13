@@ -117,7 +117,7 @@ class WeatherProfile:
 
     # ------------------------------------------------------------------
     def temperature_at(self, own_hour: float) -> float:
-        """Tagesgang der Temperatur auf Meereshöhe."""
+        """Tagesgang der Temperatur auf der Bezugshöhe der Strecke."""
         phase = 2.0 * math.pi * (own_hour - TEMP_PEAK_HOUR) / 24.0
         return self.base_temp_c + self.temp_amplitude_c * math.cos(phase)
 
@@ -143,7 +143,7 @@ PRESETS: dict[str, dict[str, Any]] = {
     "mild": {"base_temp_c": 16.0, "temp_amplitude_c": 6.0, "wind_speed_ms": 2.5, "label": "mild"},
     "hitze": {
         "base_temp_c": 29.0,
-        "temp_amplitude_c": 8.0,
+        "temp_amplitude_c": 6.0,
         "wind_speed_ms": 2.0,
         "humidity": 0.45,
         "label": "Hitze",
@@ -182,12 +182,23 @@ def draw_profile(
     day_of_year: int = 172,
     duration_h: float = 12.0,
     preset: str | None = None,
+    ref_elevation_m: float = 0.0,
 ) -> WeatherProfile:
     """Wetter eines Rennens ziehen.
 
     Die Jahreszeit verschiebt das Temperaturniveau; alles andere ist
     Zufall aus dem Renn-Seed. ``preset`` überschreibt die Ziehung — dafür
     ist der Kalender-Editor später der richtige Ort.
+
+    **Preset und Ziehung meinen Verschiedenes.** Ein Preset beschreibt das
+    *Rennen*: "Hitze" heißt heiß auf dem Kurs, egal ob der auf Meereshöhe
+    oder auf 1800 m liegt — sonst wäre die Einstellung im Gebirge
+    wirkungslos. Die Ziehung dagegen beschreibt die *Gegend* auf
+    Meeresniveau und wird mit dem Standardgradienten auf die Bezugshöhe
+    der Strecke heruntergerechnet. Ohne diese Umrechnung bekäme eine
+    Alpenetappe auf 1874 m dieselben 22 °C wie eine Flachlandrunde, was
+    einem Hitzetag am Meer entspräche — und das Feld würde auf einer als
+    "mild" beschrifteten Strecke reihenweise dehydrieren.
     """
     if preset:
         if preset not in PRESETS:
@@ -196,9 +207,15 @@ def draw_profile(
     else:
         # Jahresgang: Maximum um den 200. Tag.
         season = math.cos(2.0 * math.pi * (day_of_year - 200) / 365.0)
+        sea_level = float(rng.normal(14.0 + 9.0 * season, 3.5))
         profile = WeatherProfile(
-            base_temp_c=float(rng.normal(14.0 + 9.0 * season, 3.5)),
-            temp_amplitude_c=float(np.clip(rng.normal(7.0, 2.0), 2.0, 13.0)),
+            base_temp_c=sea_level - LAPSE_RATE_C_PER_M * max(ref_elevation_m, 0.0),
+            # Halbe Tagesschwankung. 6 K bedeutet 12 K zwischen
+            # Nacht- und Nachmittagswert; 9 K ist der wolkenlose
+            # Hochsommertag. Darüber wird es unglaubwürdig, und die
+            # Schweißrate am Nachmittag ist zu empfindlich dafür, um
+            # das durchgehen zu lassen.
+            temp_amplitude_c=float(np.clip(rng.normal(6.0, 1.6), 2.0, 9.0)),
             wind_speed_ms=float(np.clip(rng.gamma(2.0, 2.0), 0.3, 14.0)),
             wind_from_deg=float(rng.uniform(0.0, 360.0)),
             wind_turn_deg_per_h=float(rng.normal(0.0, 3.0)),

@@ -46,6 +46,10 @@ CLIMB_BOOST_REF_GRADE = 0.10
 BIKE_CHANGE_BASE_S = 45.0
 BIKE_CHANGE_SD_S = 15.0
 BIKE_CHANGE_MIN_S = 20.0
+#: Anteil der Radwechsel, bei denen etwas schiefgeht …
+BIKE_CHANGE_TAIL_P = 0.05
+#: … und wie lange es dann dauert.
+BIKE_CHANGE_TAIL_S = (180.0, 480.0)
 
 
 @dataclass
@@ -553,6 +557,13 @@ def stop_duration(planned_s: float, service_factor: float, rng: np.random.Genera
 def bike_change_duration(
     rng: np.random.Generator, service_factor: float, base_s: float = BIKE_CHANGE_BASE_S
 ) -> float:
-    """Dauer eines Radwechsels: Basis × Servicedisziplin + Streuung."""
+    """Dauer eines Radwechsels: Basis × Servicedisziplin + Streuung.
+
+    Im Schwanz der Verteilung (5 %) geht etwas schief — Schaltung
+    verstellt, Pedale falsch, Sattel rutscht — und aus 45 Sekunden werden
+    3–8 Minuten (Abschnitt 6.5).
+    """
+    if rng.random() < BIKE_CHANGE_TAIL_P:
+        return float(rng.uniform(*BIKE_CHANGE_TAIL_S)) * service_factor
     value = base_s * service_factor + float(rng.normal(0.0, BIKE_CHANGE_SD_S))
     return max(BIKE_CHANGE_MIN_S, value)

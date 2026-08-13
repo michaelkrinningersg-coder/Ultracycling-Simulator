@@ -33,6 +33,7 @@ from ..geo.route import Route
 from . import conditions as cond
 from . import fatigue as fat
 from . import form as fm
+from . import incidents as inc
 from . import nutrition as nut
 from . import physics as ph
 from . import sleep as slp
@@ -45,6 +46,7 @@ from .events import (
     CONDITION_START,
     DNF,
     FINISH,
+    INCIDENT,
     PLAN,
     SLEEP,
     SPLIT_PASSED,
@@ -85,6 +87,9 @@ class RaceConfig:
     time_limit_factor: float = 1.4
     #: Zeitfahrrad überhaupt zulassen.
     allow_tt_bike: bool = True
+    #: Zwischenfälle und Aufgabe (Abschnitt 6.5). Abschaltbar, damit sich
+    #: beim Balancing der reine Fahranteil isolieren lässt.
+    enable_incidents: bool = True
     #: Wetter-Vorlage aus ultrasim.core.weather.PRESETS. None = aus dem
     #: Seed ziehen (Abschnitt 6.6).
     weather_preset: str | None = None
@@ -115,6 +120,14 @@ class RaceEntry:
     rank: int | None = None
     status: str = "RUN"  # RUN | FIN | DNF | OTL
     notes: list[str] = field(default_factory=list)
+    #: Gefahrene Distanz bei der Aufgabe, für die Ergebnisliste.
+    dnf_dist_m: float | None = None
+    dnf_reason: str = ""
+    #: An Zwischenfällen verlorene Zeit.
+    lost_s: float = 0.0
+    #: Kumulierter Aufgabedruck am Rennende. Wie nah war er dran? Der
+    #: Kalibrierlauf in ``balance.py`` liest genau diesen Wert aus.
+    give_up_score: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -129,6 +142,10 @@ class RaceEntry:
             "rank": self.rank,
             "status": self.status,
             "notes": self.notes,
+            "dnf_dist_m": None if self.dnf_dist_m is None else round(self.dnf_dist_m, 1),
+            "dnf_reason": self.dnf_reason,
+            "lost_s": round(self.lost_s, 1),
+            "give_up_score": round(self.give_up_score, 4),
         }
 
 
@@ -308,6 +325,7 @@ class RiderStreams:
         "sleep",
         "incident",
         "weather",
+        "give_up",
     )
 
     def __init__(self, seed: int, rider_id: int) -> None:
@@ -416,6 +434,9 @@ def simulate_race(
     drink_cap = nut.drink_ceiling_l_h(
         np.array([r.attr("magenvertraeglichkeit") for r in field_riders])
     )
+    mental_norm = np.array(
+        [r.attr_norm("mentale_widerstandsfaehigkeit") for r in field_riders]
+    )
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -447,7 +468,11 @@ def simulate_race(
     rng_weather = np.random.default_rng(np.random.SeedSequence(config.seed, spawn_key=(0, 99)))
     est_duration_h = max(route.distance_km / 25.0, 1.0)
     weather = wx.draw_profile(
-        rng_weather, day_of_year, est_duration_h, preset=config.weather_preset
+        rng_weather,
+        day_of_year,
+        est_duration_h,
+        preset=config.weather_preset,
+        ref_elevation_m=float(route.ele_m.mean()),
     )
     exposure_pt = wx.exposure_profile(route.ele_m, route.raster_m)
     wind_local_pt = wx.local_wind_factor(exposure_pt)
@@ -499,6 +524,35 @@ def simulate_race(
     misjudge_at = np.array(
         [p.misjudgement.dist_m if p.misjudgement else np.inf for p in plans]
     )
+
+    # ---------------- Zwischenfälle (Abschnitt 6.5) ------------------
+    # Die Kandidaten stehen vor dem Start fest; im Tick bleibt ein
+    # Distanzvergleich. Warum das so gebaut ist, steht in incidents.py.
+    if config.enable_incidents:
+        schedules = [
+            inc.schedule_for_rider(route, r.attributes, streams[i].get("incident"))
+            for i, r in enumerate(field_riders)
+        ]
+    else:
+        schedules = [inc.IncidentSchedule() for _ in field_riders]
+    inc_ptr = np.zeros(n, dtype=np.int64)
+    inc_next = np.array(
+        [s.dist_m[0] if len(s) else np.inf for s in schedules], dtype=np.float64
+    )
+    intake_ratio = intake_g_h / inc.REF_INTAKE_G_H
+    #: Kalorienrückstand gegenüber dem eigenen Zufuhrplan.
+    underfed_kcal = np.zeros(n)
+    #: Kumulierter Aufgabedruck und die persönliche Schwelle, ab der es
+    #: reicht. Die Schwelle wird einmal gezogen, nicht jeden Tick — sonst
+    #: hinge das Ergebnis an der Schrittweite.
+    give_up = np.zeros(n)
+    give_up_limit = np.array(
+        [float(s.get("give_up").exponential(1.0)) for s in streams]
+    )
+    dnf_reason: list[str] = [""] * n
+    #: An Zwischenfällen und Notschlaf verlorene Zeit. Der geplante Halt
+    #: zählt nicht — den hat der Fahrer selbst so gewollt.
+    lost_s = np.zeros(n)
 
     # ---------------- Zustand ----------------------------------------
     dist = np.zeros(n)
@@ -572,6 +626,15 @@ def simulate_race(
         buf_hyd[:, n_samples] = nut.hydration_display_pct(dehyd_pct).astype(np.uint8)
         buf_bike[:, n_samples] = bike.astype(np.uint8)
         buf_state[:, n_samples] = state
+        # Wer ausgestiegen ist, erholt sich nicht mehr im Rennen. Die
+        # physiologischen Kanäle laufen im Modell weiter (der
+        # Flüssigkeitshaushalt füllt sich auf, der Speicher auch), aber
+        # angezeigt gehört der Stand von seinem letzten Kilometer –
+        # sonst steht ein Aufgeber mit 100 % Glykogen im Fahrerdetail.
+        out_of_race = state == STATE_DNF
+        if n_samples > 0 and out_of_race.any():
+            for buf in (buf_form, buf_wp, buf_gly, buf_slp, buf_hyd):
+                buf[out_of_race, n_samples] = buf[out_of_race, n_samples - 1]
         n_samples += 1
 
     total_distance = route.distance_m
@@ -590,6 +653,12 @@ def simulate_race(
     mu_factor = np.ones(n)
     cross_cda = np.ones(n)
     dehyd_pct = np.zeros(n)
+    # Wetterlage des letzten Langsam-Ticks: Die Zwischenfälle werten sie
+    # bei jedem Tick aus, gerechnet wird sie nur alle zehn Sekunden.
+    temp_local = np.full(n, 15.0)
+    rain = 0.0
+    daylight = True
+    glyco_frac = np.ones(n)
     #: Takt der langsam veränderlichen Größen (Form, Ermüdung, Energie).
     slow_steps = max(1, int(round(10.0 / dt)))
     slow_dt = slow_steps * dt
@@ -637,6 +706,73 @@ def simulate_race(
                         "typ": record.typ,
                         "label": record.label,
                         "dist_km": round(dist[i] / 1000.0, 2),
+                        "reason": record.reason,
+                    },
+                )
+            )
+
+    def _retire(i: int, t_s: float, reason: str) -> None:
+        """Fahrer aus dem Rennen nehmen (Abschnitt 6.5)."""
+        state[i] = STATE_DNF
+        v[i] = 0.0
+        power_now[i] = 0.0
+        stop_left[i] = 0.0
+        dnf_reason[i] = reason
+        events.append(
+            RaceEvent(
+                i,
+                t_s,
+                DNF,
+                {"dist_km": round(float(dist[i]) / 1000.0, 2), "reason": reason},
+            )
+        )
+
+    def _apply_incident(i: int, t_s: float, outcome: inc.Outcome) -> None:
+        """Sofortwirkung und Nachwirkung eines Zwischenfalls verbuchen."""
+        events.append(
+            RaceEvent(
+                i,
+                t_s,
+                INCIDENT,
+                {
+                    "typ": outcome.typ,
+                    "label": outcome.label,
+                    "reason": outcome.reason,
+                    "stop_s": round(outcome.stop_s, 1),
+                    "dist_km": round(float(dist[i]) / 1000.0, 2),
+                    "dnf": outcome.dnf,
+                },
+            )
+        )
+        if outcome.dnf:
+            _retire(i, t_s, outcome.reason)
+            return
+        if outcome.stop_s > 0.0:
+            # Kein zusätzliches STOP_START: Das INCIDENT-Ereignis nennt
+            # Grund und Dauer bereits. Zwei Zeilen für denselben Halt
+            # wären im Ticker nur Rauschen.
+            stop_left[i] = outcome.stop_s
+            lost_s[i] += outcome.stop_s
+            state[i] = STATE_STOPPED
+        if outcome.condition:
+            record = conditions.add(
+                i,
+                cond.CATALOG[outcome.condition],
+                t_s=t_s,
+                dist_m=float(dist[i]),
+                duration=outcome.condition_duration,
+                strength=outcome.condition_strength,
+                reason=outcome.reason,
+            )
+            events.append(
+                RaceEvent(
+                    i,
+                    t_s,
+                    CONDITION_START,
+                    {
+                        "typ": record.typ,
+                        "label": record.label,
+                        "dist_km": round(float(dist[i]) / 1000.0, 2),
                         "reason": record.reason,
                     },
                 )
@@ -713,6 +849,42 @@ def simulate_race(
                 )
                 glyco_kcal = np.clip(glyco_kcal - burned + taken, 0.0, glyco_cap)
 
+                # --- Suboptimale Ernährung (Abschnitt 6.5) -----------
+                # Nicht der Plan ist schuld, sondern was davon ankommt:
+                # Wer mit Magenproblemen fährt, sammelt hier den
+                # Rückstand, den der Magen ihm einbrockt.
+                planned_kcal = intake_g_h * (slow_dt / 3600.0) * nut.CARB_KCAL_PER_G
+                underfed_kcal = np.where(
+                    state == STATE_RIDING,
+                    underfed_kcal + (planned_kcal - taken),
+                    underfed_kcal * 0.99,
+                )
+                starving = (underfed_kcal >= inc.UNDERFED_KCAL) & (state == STATE_RIDING)
+                if starving.any():
+                    for i in np.flatnonzero(starving):
+                        record = conditions.add(
+                            int(i),
+                            cond.CATALOG["unterversorgt"],
+                            t_s=t,
+                            dist_m=float(dist[i]),
+                            duration=inc.UNDERFED_DURATION_S,
+                            reason="Zufuhr über Stunden unter Plan",
+                        )
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t,
+                                CONDITION_START,
+                                {
+                                    "typ": record.typ,
+                                    "label": record.label,
+                                    "dist_km": round(dist[i] / 1000.0, 2),
+                                    "reason": record.reason,
+                                },
+                            )
+                        )
+                    underfed_kcal[starving] = 0.0
+
                 glyco_frac = glyco_kcal / glyco_cap
                 bonk = nut.bonk_factor(glyco_frac)
                 fresh_bonk = (glyco_frac < nut.BONK_THRESHOLD) & ~bonked & (state == STATE_RIDING)
@@ -765,11 +937,25 @@ def simulate_race(
                 cross_cda = wx.crosswind_cda_factor(crosswind, frontal, crosswind_norm)
 
                 # --- Hydration (Abschnitt 6.1) -----------------------
-                sweat = nut.sweat_rate_l_h(intensity, temp_local, weather.humidity, heat_norm)
-                drunk = np.minimum(drink_cap, sweat)  # es wird getrunken, was geht
+                # Schwitzen folgt der *absoluten* Leistung, nicht der
+                # relativen: Wer in der Hitze auf 60 % seiner Nennleistung
+                # einbricht, produziert auch entsprechend weniger Wärme.
+                # Mit der relativen Intensität bliebe die Schweißrate
+                # dagegen hoch, obwohl der Fahrer kaum noch tritt – und
+                # die Hitze würde sich selbst verstärken.
+                intensity_abs = mean_power / np.maximum(ftp, 1.0)
+                sweat = nut.sweat_rate_l_h(
+                    intensity_abs, temp_local, weather.humidity, heat_norm
+                )
+                # Getrunken wird der Verbrauch *plus* der Rückstand, den
+                # der Fahrer aufholen will – gedeckelt durch den Magen.
+                want = sweat + fluid_deficit_l / nut.DRINK_CATCH_UP_H
+                drunk = np.minimum(drink_cap, want)
                 riding_now = state == STATE_RIDING
                 fluid_deficit_l = np.maximum(
-                    fluid_deficit_l + np.where(riding_now, (sweat - drunk), -0.25) * (slow_dt / 3600.0),
+                    fluid_deficit_l
+                    + np.where(riding_now, sweat - drunk, -nut.DRINK_AT_STOP_L_H)
+                    * (slow_dt / 3600.0),
                     0.0,
                 )
                 dehyd_pct = fluid_deficit_l / weight * 100.0
@@ -807,6 +993,30 @@ def simulate_race(
                     * mu_factor
                 )
                 crr_mod = cond.channel(cond_mods, "crr") * weather_crr
+
+                # --- Aufgabe (Abschnitt 6.5) -------------------------
+                # Rückstand auf den eigenen Plan × Ermüdung ×
+                # Magenzustand, gedämpft durch mentale Widerstands-
+                # fähigkeit. Als Produkt: Wer im Plan liegt, hört nicht
+                # auf – egal wie mies es ihm geht.
+                if config.enable_incidents:
+                    behind = 1.0 + lost_s / np.maximum(t, 1800.0)
+                    stomach = (
+                        1.0
+                        + 1.8 * np.clip(1.0 - cond.channel(cond_mods, "kcal_aufnahme"), 0.0, 1.0)
+                        + 0.8 * (glyco_frac < nut.BONK_THRESHOLD)
+                    )
+                    rate = inc.give_up_rate(
+                        behind, f_fat, sleep_press, stomach, mental_norm
+                    )
+                    give_up = np.where(
+                        state == STATE_RIDING, give_up + rate * (slow_dt / 3600.0), give_up
+                    )
+                    quitting = (give_up >= give_up_limit) & (state == STATE_RIDING)
+                    for i in np.flatnonzero(quitting):
+                        _retire(int(i), t, "Aufgabe: kein Anschluss mehr an den eigenen Plan")
+                    if quitting.any():
+                        running = state == STATE_RIDING
 
             p_target = ftp_eff_if * (1.0 + ramp_pt[idx] * boost)
             p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
@@ -894,6 +1104,7 @@ def simulate_race(
                         duration = float(rng_stop.uniform(*slp.FORCED_SLEEP_S))
                         _take_sleep(int(i), duration, t_next, rng_stop)
                         stop_left[i] = duration
+                        lost_s[i] += duration  # ungeplant, also verlorene Zeit
                         state[i] = STATE_STOPPED
                         events.append(
                             RaceEvent(
@@ -909,6 +1120,10 @@ def simulate_race(
                             )
                         )
                     sleep_press[critical] = 0.0
+                    # Wer schläft, fährt nicht mehr durch die folgenden
+                    # Blöcke – sonst hielte er am Servicepunkt gleich
+                    # noch einmal.
+                    running = state == STATE_RIDING
 
             # --- Fehlplanung schlaegt durch --------------------------
             # Der Wuerfel ist beim Planen gefallen; hier wird die Rechnung
@@ -940,6 +1155,37 @@ def simulate_race(
                         )
                     )
                 misjudge_at[hit] = np.inf
+
+            # --- Zwischenfälle (Abschnitt 6.5) -----------------------
+            # Der Kandidat liegt fest, die Annahme entscheidet sich hier:
+            # Nässe, Dunkelheit und Müdigkeit kennt man erst jetzt.
+            reached = running & (dist >= inc_next)
+            if reached.any():
+                for i in np.flatnonzero(reached):
+                    i = int(i)
+                    schedule = schedules[i]
+                    typ = schedule.typ[int(inc_ptr[i])]
+                    rng_inc = streams[i].get("incident")
+                    ctx = inc.RideContext(
+                        rain=rain,
+                        daylight=daylight,
+                        sleep_press=float(sleep_press[i]),
+                        temp_c=float(temp_local[i]),
+                        speed_ms=float(v[i]),
+                        intake_ratio=float(intake_ratio[i]),
+                        heat_norm=float(heat_norm[i]),
+                        wet_norm=float(wet_norm[i]),
+                        service_factor=float(service_factor[i]),
+                    )
+                    if rng_inc.random() < inc.accept_probability(typ, ctx):
+                        _apply_incident(i, t_next, inc.resolve(typ, rng_inc, ctx))
+                    inc_ptr[i] += 1
+                    inc_next[i] = (
+                        schedule.dist_m[int(inc_ptr[i])]
+                        if inc_ptr[i] < len(schedule)
+                        else np.inf
+                    )
+                running = state == STATE_RIDING
 
             # --- Servicepunkte: geplanter Radwechsel -----------------
             at_sp = running & (dist >= sp_guard[next_sp])
@@ -1028,17 +1274,9 @@ def simulate_race(
     # Wer nach max_hours noch fährt, gilt als Ausfall.
     unfinished = np.flatnonzero(state < STATE_FINISHED)
     for i in unfinished:
-        state[i] = STATE_DNF
-        events.append(
-            RaceEvent(
-                int(i),
-                t,
-                DNF,
-                {"dist_km": round(dist[i] / 1000.0, 2), "reason": "Zeitrahmen überschritten"},
-            )
-        )
+        _retire(int(i), t, "Zeitrahmen überschritten")
 
-    conditions.close_all(t, dist)
+    conditions.close_all(np.where(np.isnan(finish_t), t, finish_t), dist)
 
     # Abschlussbild festhalten. Die Schleife bricht ab, sobald niemand
     # mehr fährt – der letzte reguläre Abtastpunkt liegt dann vor der
@@ -1074,6 +1312,10 @@ def simulate_race(
             finish_time_s=None if np.isnan(finish_t[i]) else float(finish_t[i]),
             status="FIN" if state[i] == STATE_FINISHED else "DNF",
             notes=[note for _, note in plans[i].notes],
+            dnf_dist_m=None if state[i] == STATE_FINISHED else float(dist[i]),
+            dnf_reason="" if state[i] == STATE_FINISHED else dnf_reason[i],
+            lost_s=float(lost_s[i]),
+            give_up_score=float(give_up[i]),
         )
         for i, (rider, bib, offset) in enumerate(start_list)
     ]

@@ -42,7 +42,9 @@
       <tbody>
         {% for row in dnf %}
         <tr><td class="mono faint">{{ row.entry.bib }}</td><td>{{ row.rider.name }}</td>
-            <td class="bad">{{ row.entry.status }}</td></tr>
+            <td class="bad">{{ row.entry.status }}</td>
+            <td class="right mono faint">{% if row.entry.dnf_dist_m %}km {{ '%.0f'|format(row.entry.dnf_dist_m / 1000) }}{% endif %}</td>
+            <td class="dim">{{ row.entry.dnf_reason }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

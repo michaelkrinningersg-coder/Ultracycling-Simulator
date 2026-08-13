@@ -117,6 +117,12 @@ button:disabled { opacity: .4; cursor: default; }
 .chip.stop { border-color: var(--bad); color: var(--bad); }
 .chip.fin { border-color: var(--good); color: var(--good); }
 .chip.cond { border-color: var(--bad); color: var(--bad); }
+.chip.dnf { border-color: var(--bad); background: var(--bad); color: var(--bg-panel); }
+
+/* Ausgeschieden: die Zeile bleibt lesbar, tritt aber zurück. Sie ganz zu
+   entfernen wäre falsch – die Zuschauer wollen sehen, wer fehlt. */
+tr.dnf td { opacity: .45; text-decoration: line-through; }
+tr.dnf td:last-child { text-decoration: none; opacity: 1; }
 
 .cond-row { display: flex; align-items: center; gap: .4rem; padding: .1rem 0; }
 .cond-row.done { opacity: .55; }

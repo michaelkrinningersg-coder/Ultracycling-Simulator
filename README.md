@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M4, dazu M5 vollständig
+## Stand: Meilensteine M1–M6
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -31,35 +31,43 @@ hier umgesetzt.
 | Energie (M5.2) | Glykogenspeicher, Substratverteilung nach Intensität, Zufuhr gedeckelt durch KH-Verbrennung *und* Magenverträglichkeit, Hungerast unter 15 % Füllstand. Der Rennplan rechnet vorab aus, welche Intensität die Zufuhr über die Distanz trägt, und nimmt das Minimum aus Distanz- und Energiegrenze |
 | Servicestopps (M5.2) | Halt an jedem Servicepunkt, Kurz- oder Vollservice je nach Zeit seit dem letzten großen Halt, Dauer × Servicedisziplin des Teams. Radwechsel läuft parallel statt zusätzlich |
 | Schlaf (M5.3) | Schlafdruck gegen einen persönlichen Wachhorizont (30–50 h), zirkadianer Tiefpunkt zwischen 02:00 und 05:00 Fahrer-Eigenzeit, geplante Schlafstopps am Servicepunkt, Notschlaf am Straßenrand ab kritischem Druck, Schlafgüte aus Regeneration mit Nachwirkung bei schlechtem Schlaf |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch mit Abgleich gegen die Dauerbänder der Klassen, 192 Tests inklusive Golden-Master |
+| Wetter (M6.1) | Zweischichtiges Modell: die Ortsschicht (Höhe, Exposition, lokaler Wind) hängt an der Position, die Zeitschicht (Tagesgang, Sonnenstand, Regenphasen) an der Fahrer-Eigenzeit. Wind wirkt richtungsabhängig aus Segment-Peilung und Windrichtung, Seitenwind über die Frontfläche. Dazu Hydration mit Schweißrate aus Intensität, Temperatur und Luftfeuchte |
+| Zwischenfälle (M6.2) | Der Ereigniskatalog aus Abschnitt 6.5: Panne, mechanischer Defekt, Lichtausfall, Verfahren, Sturz, Magenprobleme, Hitzeeinbruch, Sperrung. Gezogen als Poisson-Prozess entlang der Strecke, angenommen erst beim Erreichen — so gehen Nässe, Dunkelheit und Müdigkeit ein, ohne dass pro Tick gewürfelt wird |
+| Aufgabe (M6.2) | Vier Wege zum DNF: schwerer Sturz, schwerer Defekt ohne Ersatz, Zeitlimit und ein kumulativer Aufgabe-Score aus verlorener Zeit × Ermüdung × Magenzustand, gedämpft durch mentale Widerstandsfähigkeit |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 269 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten** (M6–M8): Hydration, Wetter, Wind und
-Tag-Nacht-Zyklus, Pannen und Zwischenfälle, Saison und Kalender,
-Editoren im Spiel.
+**Noch nicht enthalten** (M7–M8): Saison und Kalender, Editoren im Spiel.
 
-Hydration fehlt bewusst noch: Ihre Eingangsgrößen sind Temperatur und
-Luftfeuchte, und die entstehen erst mit dem Wettermodell. Ohne sie wäre
-die Schweißrate eine Konstante und damit nichts als ein linearer
-Zeitabzug für alle.
+Was gerade wirkt, steht offen in der Oberfläche: Das Fahrerdetail zeigt
+alle 25 Attribute, aber nur die 21, die tatsächlich in die Simulation
+eingreifen, sind hell hervorgehoben. Ein Test hält diese Liste ehrlich —
+er vergleicht sie mit dem, was der Code liest, und schlägt in beide
+Richtungen an.
 
-Für all das steht der Katalog in `ultrasim/core/conditions.py` schon
-bereit: Magenprobleme, Hitzeeinbruch, Schlafdefizit, Sturzfolgen und
-Ersatzrad sind als Datenzeilen hinterlegt und wirken, sobald es einen
-Erzeuger dafür gibt. Der Physikcode muss dafür nicht mehr angefasst
-werden — das war der Zweck von Abschnitt 6.5.
+### DNF-Korridor
 
-Was das praktisch bedeutet, steht offen in der Oberfläche: Das
-Fahrerdetail zeigt alle 25 Attribute, aber nur die 14, die derzeit
-wirklich in die Simulation eingreifen, sind hell hervorgehoben. Ein Test
-hält diese Liste ehrlich — er vergleicht sie mit dem, was der Code
-tatsächlich liest, und schlägt in beide Richtungen an.
+Abschnitt 6.5 nennt 1–2 % für die kurze, 4–7 % für die mittlere und
+8–12 % für die Ultraklasse. Gemessen über je 480 Starts:
 
-Ausfälle gibt es weiterhin praktisch keine: Zum DNF führen laut
-Abschnitt 6.5 schwerer Sturz, schwerer Defekt, Zeitlimit und ein
-kumulativer Aufgabe-Score — und davon existiert bisher nur das Zeitlimit.
-Der Korridor wird erst mit den Zwischenfällen aus M6 erreichbar. Das
-Balancing-Werkzeug sagt das ausdrücklich dazu, statt eine grüne Zahl zu
-behaupten.
+| Strecke | Klasse | DNF | Ziel |
+|---|---|---|---|
+| Voralpen-Runde, 300 km | kurz | 1,2 % | 1–2 % |
+| Hochgebirgs-Marathon, 507 km | mittel | 3,5 % | 4–7 % |
+| Nordroute, 1230 km | ultra | 10,0 % | 8–12 % |
+
+Zwei der drei Klassen liegen mittig im Band, die mittlere 0,5 Punkte
+darunter. Das ist kein Kalibrierungsfehler, sondern die Form des
+Korridors: Er springt bei 400 km und bei 1200 km stufenweise nach oben.
+Unsere mittlere Strecke liegt mit 507 km am unteren Rand ihrer Klasse
+und dauert 17 Stunden — ein 1100-km-Rennen derselben Klasse dauert
+dreimal so lang und landet weit oben im Band. Pro Rennstunde verlangt
+der Korridor in seiner Mitte 0,15, 0,32 und 0,28 Prozentpunkte; er ist
+damit in der Dauer nicht monoton und mit einem einzigen Regler an den
+Klassengrenzen nicht überall gleichzeitig zu treffen. Nachgemessen: Den
+Regler um 18 % anzuheben verschiebt die Ultraklasse von 10,0 auf 10,8 %
+und die mittlere um keinen einzigen Fahrer — dort ist schlicht niemand
+nah genug an der Schwelle. Das Balancing-Werkzeug schreibt diese
+Begründung mit aus, statt eine grüne Zahl zu behaupten.
 
 ---
 
@@ -202,8 +210,8 @@ Browser.
    Wechsel später ein einzelner Austausch ist und nicht eine Suche durch
    die halbe Anwendung.
 
-2. **Der Radplan ist schon da.** Er gehört laut Roadmap zu M6, ist aber
-   Teil des Rennplans aus Abschnitt 7.1 und mit der
+2. **Der Radplan kam vorgezogen.** Er stand in der Roadmap erst bei M6,
+   ist aber Teil des Rennplans aus Abschnitt 7.1 und mit der
    Wirtschaftlichkeitsprüfung aus 6.4 in wenigen Zeilen zu haben. Der
    Effekt ist sichtbar: Auf der flachen Voralpen-Runde fährt das ganze
    Feld Zeitfahrrad, im Hochgebirge wechseln die Kletterer am
@@ -307,7 +315,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 192 Tests, rund 43 s
+pytest -q          # 269 Tests, rund 80 s
 ruff check ultrasim tools tests
 ```
 

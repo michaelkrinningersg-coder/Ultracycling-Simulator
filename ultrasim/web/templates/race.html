@@ -75,7 +75,7 @@
           </div>
           <template x-if="focus.conditions && focus.conditions.length">
             <div style="margin-top:.5rem">
-              <template x-for="c in focus.conditions" :key="c.typ + c.start_dist_m">
+              <template x-for="(c, ci) in focus.conditions" :key="ci">
                 <div class="cond-row" :class="{done: !c.active}">
                   <span class="chip cond" x-text="c.label"></span>
                   <span class="faint mono" style="font-size:.72rem"
@@ -88,7 +88,7 @@
           </template>
 
           <div style="margin-top:.5rem">
-            <span class="chip" :class="{stop: focus.state===1, fin: focus.state===2}"
+            <span class="chip" :class="{stop: focus.state===1, fin: focus.state===2, dnf: focus.state===3}"
                   x-text="stateLabel(focus.state)"></span>
             <a class="faint" style="font-size:.75rem;margin-left:.5rem"
                :href="`/race/{{ race_id }}/rider/${focus.entry_id}`">Fahrerdetail ▸</a>
@@ -218,7 +218,7 @@
 
           <template x-for="row in rows" :key="row.entry_id">
             <tr class="clickable"
-                :class="{focus: focus && row.entry_id === focus.entry_id, provisional: row.provisional}"
+                :class="{focus: focus && row.entry_id === focus.entry_id, provisional: row.provisional, dnf: row.state === 3}"
                 @click="setFocus(row.entry_id)">
               <td class="rank" x-text="row.rank || '–'"></td>
               <td class="bib" x-text="row.bib"></td>
@@ -234,7 +234,12 @@
                 <span class="chip tt" x-show="row.bike === 1">TT</span>
                 <span class="chip stop" x-show="row.state === 1">Stopp</span>
                 <span class="chip fin" x-show="row.state === 2">Ziel</span>
-                <template x-for="label in (row.conditions || [])" :key="label">
+                <span class="chip dnf" x-show="row.state === 3">Aufgabe</span>
+                <!-- Index als Schluessel: Ein Fahrer kann denselben Zustand
+                     mehrfach gleichzeitig haben (zwei Magenphasen ueber-
+                     lappen sich), und ein doppelter Schluessel zerlegt die
+                     x-for-Abgleichung von Alpine. -->
+                <template x-for="(label, ci) in (row.conditions || [])" :key="ci">
                   <span class="chip cond" x-text="label"></span>
                 </template>
               </td>

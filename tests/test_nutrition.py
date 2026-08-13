@@ -226,15 +226,22 @@ def test_glycogen_only_falls_while_riding(energy_race):
         if not stopped.any():
             continue
         idx = np.flatnonzero(stopped)
-        # Über eine Standphase darf der Speicher nicht sinken.
+        # Über eine Standphase darf der Speicher nicht sinken. Der Kanal
+        # ist uint8, deshalb hier in int rechnen: Bei leerem Speicher
+        # wäre "0 − 1" sonst 255 und der Vergleich unsinnig.
+        row = tel.glyco_pct[entry_id].astype(np.int16)
         for i in idx[:-1]:
             if stopped[i + 1]:
-                assert tel.glyco_pct[entry_id, i + 1] >= tel.glyco_pct[entry_id, i] - 1
+                assert row[i + 1] >= row[i] - 1
 
 
 def test_service_stops_cost_time(route_medium):
     teams, riders = generate_pool(12, n_teams=3, seed=3)
-    result = simulate_race(route_medium, riders, teams, RaceConfig(seed=1))
+    # Ohne Zwischenfälle: Hier geht es um den *geplanten* Halt, und ein
+    # Pannenstopp dazwischen würde die Aussage nur verwischen.
+    result = simulate_race(
+        route_medium, riders, teams, RaceConfig(seed=1, enable_incidents=False)
+    )
     starts = [e for e in result.events if e.type == STOP_START]
     ends = [e for e in result.events if e.type == STOP_END]
     assert starts

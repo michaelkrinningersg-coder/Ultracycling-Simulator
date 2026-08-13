@@ -87,6 +87,11 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         # Schlaf (M5.3)
         "schlaftoleranz",
         "regeneration",
+        # Wetter (M6.1)
+        "hitzetoleranz",
+        "kaeltetoleranz",
+        "naesseresistenz",
+        "seitenwindfestigkeit",
     }
 )
 

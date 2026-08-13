@@ -1,16 +1,17 @@
 """Energiehaushalt (Game-Design-Dokument, Abschnitt 6.1).
 
-Der eigentliche Kern eines Ultra-Simulators. Drei Zähler nennt das
-Dokument; zwei davon stehen hier:
+Der eigentliche Kern eines Ultra-Simulators. Alle drei Zähler des
+Dokuments stehen hier:
 
 * **Glykogen** – begrenzt, nur über Zufuhr nachfüllbar, und die Zufuhr
   ist ihrerseits durch KH-Verbrennung und Magenverträglichkeit gedeckelt
 * **Fett** – praktisch unbegrenzt, trägt den Rest
+* **Hydration** – Schweißrate aus Intensität, Temperatur und Luftfeuchte,
+  Nachfüllung wieder durch den Magen begrenzt
 
-Der dritte, **Hydration**, fehlt bewusst noch: Seine Eingangsgrößen sind
-Temperatur und Luftfeuchte, und die entstehen erst mit dem Wettermodell
-(M6). Ohne sie wäre die Schweißrate eine Konstante und damit nichts als
-ein linearer Zeitabzug für alle – viel Maschinerie ohne Wirkung.
+Hydration kam bewusst erst mit dem Wettermodell dazu: Ohne Temperatur
+wäre die Schweißrate eine Konstante und damit nichts als ein linearer
+Zeitabzug für alle.
 
 Die interessante Eigenschaft dieses Modells ist, dass die Zufuhr eine
 **absolute** Obergrenze hat, der Verbrauch aber mit der Leistung
@@ -157,3 +158,81 @@ def bonk_factor(glycogen_fraction: np.ndarray) -> np.ndarray:
     frac = np.clip(np.asarray(glycogen_fraction), 0.0, 1.0)
     ramp = np.clip(frac / BONK_THRESHOLD, 0.0, 1.0)
     return BONK_FLOOR + (1.0 - BONK_FLOOR) * ramp
+
+
+# ----------------------------------------------------------------------
+# Hydration (Abschnitt 6.1, dritter Zähler)
+# ----------------------------------------------------------------------
+# Erst mit dem Wettermodell sinnvoll: Ohne Temperatur wäre die Schweißrate
+# eine Konstante und damit nichts als ein linearer Zeitabzug für alle.
+
+#: Schweißrate in Litern je Stunde: Grundumsatz plus Anteil aus der
+#: Intensität. Bei 70 % FTP und 20 °C ergibt das rund 1,2 l/h – der
+#: Bereich, den man aus Schweißtests kennt.
+SWEAT_BASE_L_H = 0.35
+SWEAT_PER_INTENSITY_L_H = 1.05
+#: Zuschlag je Grad über 20 °C …
+SWEAT_PER_C_WARM = 0.055
+#: … und Abschlag je Grad darunter. Die Kurve ist bewusst unsymmetrisch:
+#: Kühle senkt den Flüssigkeitsverlust, aber nicht auf null – der Körper
+#: verliert auch bei 5 °C über Atmung und Grundumsatz Wasser.
+SWEAT_PER_C_COOL = 0.030
+SWEAT_TEMP_CLIP = (0.35, 2.5)
+#: Feuchte Luft kühlt schlechter, also wird mehr geschwitzt. Das gilt nur
+#: in der Wärme: Bei 8 °C und Regen ist Verdunstung nicht der Engpass,
+#: und ein Fahrer, der im Kalten literweise Wasser verliert, wäre der
+#: sichtbarste Modellfehler überhaupt.
+SWEAT_HUMIDITY_GAIN = 0.30
+SWEAT_HUMIDITY_FROM_C = 20.0
+
+#: Was der Magen an Flüssigkeit durchlässt, aus Magenverträglichkeit.
+DRINK_CEILING_L_H = (0.70, 1.50)
+
+#: Bis zu diesem Verlust in Prozent des Körpergewichts passiert nichts …
+DEHYDRATION_DEADBAND_PCT = 2.0
+#: … danach kostet jedes weitere Prozent so viel Leistung.
+DEHYDRATION_LOSS_PER_PCT = 0.02
+#: Anzeigebereich: 100 % = frisch, 0 % = 4 % Körpergewicht verloren.
+DEHYDRATION_DISPLAY_MAX_PCT = 4.0
+
+
+def sweat_rate_l_h(
+    intensity: np.ndarray, temp_c: np.ndarray, humidity: float, heat_norm: np.ndarray
+) -> np.ndarray:
+    """Schweißrate aus Intensität, Temperatur und Luftfeuchte.
+
+    Das Attribut Hitzetoleranz wirkt hier zweischneidig, genau wie in der
+    Realität: Wer gut hitzeangepasst ist, schwitzt *früher und mehr* –
+    das ist der Kühlmechanismus – und verliert dafür weniger Leistung.
+    Die Trinkmenge wird dadurch zum Engpass, nicht die Hitze selbst.
+    """
+    temp = np.asarray(temp_c)
+    base = SWEAT_BASE_L_H + SWEAT_PER_INTENSITY_L_H * np.clip(intensity, 0.0, 1.5)
+    delta = temp - 20.0
+    slope = np.where(delta >= 0.0, SWEAT_PER_C_WARM, SWEAT_PER_C_COOL)
+    heat = np.clip(1.0 + slope * delta, *SWEAT_TEMP_CLIP)
+    damp = 1.0 + SWEAT_HUMIDITY_GAIN * max(humidity - 0.5, 0.0) * 2.0 * np.clip(
+        (temp - SWEAT_HUMIDITY_FROM_C) / 10.0, 0.0, 1.0
+    )
+    return base * heat * damp * (1.0 + 0.15 * np.asarray(heat_norm))
+
+
+def drink_ceiling_l_h(magenvertraeglichkeit: np.ndarray) -> np.ndarray:
+    lo, hi = DRINK_CEILING_L_H
+    return lo + (hi - lo) * (np.asarray(magenvertraeglichkeit) / 100.0)
+
+
+def hydration_factor(deficit_pct: np.ndarray) -> np.ndarray:
+    """Leistungsfaktor aus dem Flüssigkeitsdefizit.
+
+    Ab −2 % Körpergewicht rund −2 % Leistung je weiterem Prozent.
+    Darunter exakt 1,0 – ein bisschen Durst kostet nichts.
+    """
+    over = np.maximum(np.asarray(deficit_pct) - DEHYDRATION_DEADBAND_PCT, 0.0)
+    return np.maximum(1.0 - DEHYDRATION_LOSS_PER_PCT * over, 0.80)
+
+
+def hydration_display_pct(deficit_pct: np.ndarray) -> np.ndarray:
+    """Anzeigewert 100 (frisch) bis 0 (4 % Körpergewicht verloren)."""
+    ratio = np.clip(np.asarray(deficit_pct) / DEHYDRATION_DISPLAY_MAX_PCT, 0.0, 1.0)
+    return (1.0 - ratio) * 100.0

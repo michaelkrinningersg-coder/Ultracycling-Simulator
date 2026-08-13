@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ race_name }} – Live{% endblock %}
 {% block subtitle %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km ·
-  {{ route.ascent_m|round|int }} hm · {{ n_entries }} Starter{% endblock %}
+  {{ route.ascent_m|round|int }} hm · {{ n_entries }} Starter ·
+  {{ weather.label }} ({{ weather.base_temp_c|round|int }} °C,
+  Wind {{ weather.wind_speed_ms|round|int }} m/s){% endblock %}
 
 {% block head %}
 <script type="module" src="/static/js/live.js"></script>
@@ -61,6 +63,9 @@
             <div class="item"><span class="k">Schlafdruck</span>
               <span class="v" :class="focus.sleep_pct > 120 ? 'bad' : (focus.sleep_pct > 60 ? 'warn' : '')"
                     x-text="focus.sleep_pct + ' %'"></span></div>
+            <div class="item"><span class="k">Hydration</span>
+              <span class="v" :class="focus.hydration_pct < 30 ? 'bad' : (focus.hydration_pct < 60 ? 'warn' : '')"
+                    x-text="focus.hydration_pct + ' %'"></span></div>
             <div class="item"><span class="k">Glykogen</span>
               <span class="v" :class="focus.glyco_pct < 15 ? 'bad' : (focus.glyco_pct < 30 ? 'warn' : '')"
                     x-text="focus.glyco_pct + ' %'"></span></div>

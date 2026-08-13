@@ -124,11 +124,12 @@
              { label: 'Form', stroke: '#4ade80', width: 1.4 },
              { label: 'W′', stroke: '#f8717a', width: 1 }] },
     [x, d.form_pct, d.wprime_pct], document.getElementById('chart-form'));
-  new uPlot({ ...common, title: 'Glykogen und Schlafdruck (%) — Hungerast unter 15 %, Schlafmalus ab 60 %',
+  new uPlot({ ...common, title: 'Glykogen, Schlafdruck und Hydration (%) — Hungerast unter 15 %, Schlafmalus ab 60 %',
     series: [{ label: 'km' },
              { label: 'Glykogen', stroke: '#ffc247', width: 1.4, fill: 'rgba(255,194,71,.12)' },
-             { label: 'Schlafdruck', stroke: '#a78bfa', width: 1.2 }] },
-    [x, d.glyco_pct, d.sleep_pct], document.getElementById('chart-energy'));
+             { label: 'Schlafdruck', stroke: '#a78bfa', width: 1.2 },
+             { label: 'Hydration', stroke: '#47b4ff', width: 1.2 }] },
+    [x, d.glyco_pct, d.sleep_pct, d.hydration_pct], document.getElementById('chart-energy'));
 })();
 </script>
 {% endblock %}

@@ -37,6 +37,7 @@ from . import nutrition as nut
 from . import physics as ph
 from . import sleep as slp
 from . import strategy as st
+from . import weather as wx
 from .events import (
     BIKE_CHANGE,
     BONK,
@@ -84,6 +85,9 @@ class RaceConfig:
     time_limit_factor: float = 1.4
     #: Zeitfahrrad überhaupt zulassen.
     allow_tt_bike: bool = True
+    #: Wetter-Vorlage aus ultrasim.core.weather.PRESETS. None = aus dem
+    #: Seed ziehen (Abschnitt 6.6).
+    weather_preset: str | None = None
     race_date: date | None = None
     name: str = "Rennen"
 
@@ -145,6 +149,7 @@ class Telemetry:
     wprime_pct: np.ndarray  # uint8
     glyco_pct: np.ndarray  # uint8, Glykogenfüllstand in Prozent
     sleep_pct: np.ndarray  # uint8, effektiver Schlafdruck in Prozent
+    hydration_pct: np.ndarray  # uint8, 100 = frisch, 0 = 4 % Gewicht verloren
     bike: np.ndarray  # uint8
     state: np.ndarray  # uint8
 
@@ -167,6 +172,7 @@ class Telemetry:
                 "wprime_pct",
                 "glyco_pct",
                 "sleep_pct",
+                "hydration_pct",
                 "bike",
                 "state",
             )
@@ -183,6 +189,7 @@ class Telemetry:
             wprime_pct=self.wprime_pct,
             glyco_pct=self.glyco_pct,
             sleep_pct=self.sleep_pct,
+            hydration_pct=self.hydration_pct,
             bike=self.bike,
             state=self.state,
         )
@@ -199,6 +206,7 @@ class Telemetry:
                 wprime_pct=data["wprime_pct"],
                 glyco_pct=data["glyco_pct"],
                 sleep_pct=data["sleep_pct"],
+                hydration_pct=data["hydration_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )
@@ -219,6 +227,7 @@ class RaceResult:
     events: list[RaceEvent]
     plans: list[st.RacePlan]
     conditions: list[cond.ConditionRecord] = field(default_factory=list)
+    weather: wx.WeatherProfile = field(default_factory=wx.WeatherProfile)
     compute_seconds: float = 0.0
 
     def conditions_for(self, entry_id: int) -> list[cond.ConditionRecord]:
@@ -400,6 +409,13 @@ def simulate_race(
         np.array([r.attr("schlaftoleranz") for r in field_riders])
     )
     regeneration = np.array([r.attr("regeneration") for r in field_riders])
+    heat_norm = np.array([r.attr_norm("hitzetoleranz") for r in field_riders])
+    cold_norm = np.array([r.attr_norm("kaeltetoleranz") for r in field_riders])
+    wet_norm = np.array([r.attr_norm("naesseresistenz") for r in field_riders])
+    crosswind_norm = np.array([r.attr_norm("seitenwindfestigkeit") for r in field_riders])
+    drink_cap = nut.drink_ceiling_l_h(
+        np.array([r.attr("magenvertraeglichkeit") for r in field_riders])
+    )
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -423,6 +439,30 @@ def simulate_race(
     vcorner_pt = np.sqrt(ph.MU_DRY * ph.G * radius_pt)
     corner_skill = 1.0 + 0.12 * skill_norm + 0.08 * risk_norm
     rho_pt = ph.air_density(route.ele_m)
+
+    # --- Wetter (Abschnitt 6.6) ---------------------------------------
+    # Eigener Zufallsstrom auf Rennebene: Das Wetter haengt am Rennen,
+    # nicht an einem Fahrer, und darf sich nicht verschieben, wenn ein
+    # Fahrer mehr oder weniger wuerfelt.
+    rng_weather = np.random.default_rng(np.random.SeedSequence(config.seed, spawn_key=(0, 99)))
+    est_duration_h = max(route.distance_km / 25.0, 1.0)
+    weather = wx.draw_profile(
+        rng_weather, day_of_year, est_duration_h, preset=config.weather_preset
+    )
+    exposure_pt = wx.exposure_profile(route.ele_m, route.raster_m)
+    wind_local_pt = wx.local_wind_factor(exposure_pt)
+    valley_pt = np.clip(-exposure_pt, 0.0, 1.0)
+    # Peilung je Rasterpunkt, aufgeteilt in cos/sin: Damit wird die
+    # Windzerlegung im Tick zu zwei Multiplikationen statt einem cos.
+    bearing_seg = np.array([s.bearing_deg for s in route.segments])
+    bearing_pt = (
+        bearing_seg[seg_idx_pt] if len(bearing_seg) else np.zeros(route.n_points)
+    )
+    cos_bear_pt = np.cos(np.radians(bearing_pt))
+    sin_bear_pt = np.sin(np.radians(bearing_pt))
+    ref_ele_m = float(route.ele_m.mean())
+    mean_lat = float(route.coords[:, 0].mean()) if len(route.coords) else 47.0
+    sunrise_h, sunset_h = wx.sun_times(mean_lat, day_of_year)
     # Steigungstrigonometrie und Rampenanteil hängen nur an der Strecke.
     cos_pt, sin_pt = ph.slope_trig(grade_pt)
     ramp_pt = np.clip(grade_pt, 0.0, st.CLIMB_BOOST_REF_GRADE) / st.CLIMB_BOOST_REF_GRADE
@@ -468,6 +508,7 @@ def simulate_race(
     glyco_kcal = glyco_cap.copy()
     bonked = np.zeros(n, dtype=bool)
     wake_h = np.zeros(n)  # Stunden seit dem letzten Schlaf
+    fluid_deficit_l = np.zeros(n)  # Fluessigkeitsdefizit in Litern
     wprime = wprime_cap.copy()
     bike = planned_bike[:, 0].astype(np.int64)
     stop_left = np.zeros(n)
@@ -497,6 +538,7 @@ def simulate_race(
     buf_wp = np.zeros((n, cap), dtype=np.uint8)
     buf_gly = np.zeros((n, cap), dtype=np.uint8)
     buf_slp = np.zeros((n, cap), dtype=np.uint8)
+    buf_hyd = np.full((n, cap), 100, dtype=np.uint8)
     buf_bike = np.zeros((n, cap), dtype=np.uint8)
     buf_state = np.zeros((n, cap), dtype=np.uint8)
     n_samples = 0
@@ -504,14 +546,16 @@ def simulate_race(
     def _grow() -> None:
         # Bewusst nicht np.resize: das tilt die Daten in flacher
         # Reihenfolge und würde die Zeilen gegeneinander verschieben.
-        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state
+        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp
+        nonlocal buf_hyd, buf_bike, buf_state
         new_cap = cap * 2
         grown = []
-        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state):
+        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_hyd, buf_bike, buf_state):
             bigger = np.zeros((n, new_cap), dtype=buf.dtype)
             bigger[:, :cap] = buf
             grown.append(bigger)
-        buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state = grown
+        (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_hyd,
+         buf_bike, buf_state) = grown
         cap = new_cap
 
     def _record() -> None:
@@ -525,6 +569,7 @@ def simulate_race(
         buf_wp[:, n_samples] = np.clip(wprime / wprime_cap * 100.0, 0, 255).astype(np.uint8)
         buf_gly[:, n_samples] = np.clip(glyco_kcal / glyco_cap * 100.0, 0, 255).astype(np.uint8)
         buf_slp[:, n_samples] = np.clip(sleep_press * 100.0, 0, 255).astype(np.uint8)
+        buf_hyd[:, n_samples] = nut.hydration_display_pct(dehyd_pct).astype(np.uint8)
         buf_bike[:, n_samples] = bike.astype(np.uint8)
         buf_state[:, n_samples] = state
         n_samples += 1
@@ -539,6 +584,12 @@ def simulate_race(
     bonk = np.ones(n)
     sleep_perf = np.ones(n)
     sleep_press = np.zeros(n)
+    headwind = np.zeros(n)
+    weather_perf = np.ones(n)
+    weather_crr = np.ones(n)
+    mu_factor = np.ones(n)
+    cross_cda = np.ones(n)
+    dehyd_pct = np.zeros(n)
     #: Takt der langsam veränderlichen Größen (Form, Ermüdung, Energie).
     slow_steps = max(1, int(round(10.0 / dt)))
     slow_dt = slow_steps * dt
@@ -682,6 +733,48 @@ def simulate_race(
                 # Wer sich wieder erholt, kann erneut einbrechen.
                 bonked &= glyco_frac < nut.BONK_THRESHOLD * 1.6
 
+                # --- Wetter (Abschnitte 6.6 und 8.1.1) ---------------
+                # Zeitschicht: Skalare aus der Fahrer-Eigenzeit. Weil alle
+                # Fahrer in Eigenzeit rechnen, erlebt jeder denselben
+                # Ablauf – nur zu seiner eigenen Uhr.
+                own_h = slp.own_hour(config.start_time_of_day_s, t)
+                elapsed_h = t / 3600.0
+                temp_sea = weather.temperature_at(own_h)
+                wind_speed, wind_dir = weather.wind_at(own_h, elapsed_h)
+                rain = weather.rain_at(elapsed_h)
+                daylight = wx.is_daylight(own_h, sunrise_h, sunset_h)
+                cos_wind = np.cos(np.radians(wind_dir))
+                sin_wind = np.sin(np.radians(wind_dir))
+
+                # Ortsschicht: haengt an der Position, fuer alle gleich.
+                temp_local = temp_sea - wx.LAPSE_RATE_C_PER_M * (route.ele_m[idx] - ref_ele_m)
+                if not daylight:
+                    temp_local = temp_local - wx.VALLEY_NIGHT_COOLING_C * valley_pt[idx]
+                wind_here = wind_speed * wind_local_pt[idx]
+
+                # cos(Windrichtung - Peilung) ohne trigonometrischen Aufruf
+                # je Fahrer: Die Peilung steckt vorgerechnet in der Strecke.
+                cos_rel = cos_wind * cos_bear_pt[idx] + sin_wind * sin_bear_pt[idx]
+                sin_rel = sin_wind * cos_bear_pt[idx] - cos_wind * sin_bear_pt[idx]
+                headwind = wind_here * cos_rel
+                crosswind = np.abs(wind_here * sin_rel)
+
+                weather_perf = wx.climate_factor(temp_local, heat_norm, cold_norm)
+                weather_crr = wx.wet_crr_factor(rain, wet_norm)
+                mu_factor = np.sqrt(wx.surface_mu(rain, wet_norm) / wx.MU_DRY)
+                cross_cda = wx.crosswind_cda_factor(crosswind, frontal, crosswind_norm)
+
+                # --- Hydration (Abschnitt 6.1) -----------------------
+                sweat = nut.sweat_rate_l_h(intensity, temp_local, weather.humidity, heat_norm)
+                drunk = np.minimum(drink_cap, sweat)  # es wird getrunken, was geht
+                riding_now = state == STATE_RIDING
+                fluid_deficit_l = np.maximum(
+                    fluid_deficit_l + np.where(riding_now, (sweat - drunk), -0.25) * (slow_dt / 3600.0),
+                    0.0,
+                )
+                dehyd_pct = fluid_deficit_l / weight * 100.0
+                hydration_perf = nut.hydration_factor(dehyd_pct)
+
                 # --- Schlafdruck (Abschnitt 6.2) ---------------------
                 # Der zirkadiane Faktor ist ein Skalar, kein Vektor: Alle
                 # Fahrer rechnen in Eigenzeit und starten in ihrem
@@ -698,13 +791,22 @@ def simulate_race(
                 # f_umwelt ist das Produkt aller aktiven Zustände
                 # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
                 f_umwelt = cond.channel(cond_mods, "ftp")
-                form_now = f_season * f_day * f_section * f_fat * f_umwelt * bonk * sleep_perf
+                form_now = (
+                    f_season * f_day * f_section * f_fat * f_umwelt
+                    * bonk * sleep_perf * weather_perf * hydration_perf
+                )
                 ftp_eff = ftp * form_now
                 ftp_eff_if = ftp_eff * target_if
-                descent_mod = cond.channel(cond_mods, "abfahrtstempo") * slp.descent_factor(
-                    sleep_press
+                # Abfahrtstempo: Zustaende, Muedigkeit, Sicht bei Nacht,
+                # Haftung bei Naesse und Seitenwind multiplizieren sich –
+                # unabhaengige Ursachen, unabhaengige Faktoren.
+                descent_mod = (
+                    cond.channel(cond_mods, "abfahrtstempo")
+                    * slp.descent_factor(sleep_press)
+                    * wx.night_descent_factor(daylight)
+                    * mu_factor
                 )
-                crr_mod = cond.channel(cond_mods, "crr")
+                crr_mod = cond.channel(cond_mods, "crr") * weather_crr
 
             p_target = ftp_eff_if * (1.0 + ramp_pt[idx] * boost)
             p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
@@ -717,8 +819,12 @@ def simulate_race(
 
             # --- Physik ----------------------------------------------
             mass = weight + bike_mass[bike] + ph.SUPPORTED_LUGGAGE_KG
-            cda = ph.cda_for(frontal, ph.position_k(grade, flat_norm), bike_cda_f[bike])
-            v_limit = np.minimum(vcorner_pt[idx] * corner_skill * descent_mod, ph.MAX_SPEED)
+            cda = ph.cda_for(frontal, ph.position_k(grade, flat_norm), bike_cda_f[bike]) * cross_cda
+            # Der Faktor greift auf Kurvenlimit *und* Sicherheitsdeckel.
+            # Nur auf das Kurvenlimit angewandt bliebe er auf gerader
+            # Strecke wirkungslos – nachts bombt trotzdem niemand mit
+            # 85 km/h eine unbeleuchtete Abfahrt hinunter.
+            v_limit = np.minimum(vcorner_pt[idx] * corner_skill, ph.MAX_SPEED) * descent_mod
 
             v_new = ph.integrate_step(
                 v,
@@ -730,6 +836,7 @@ def simulate_race(
                 rho_pt[idx],
                 dt,
                 v_limit=v_limit,
+                headwind=headwind,
                 cos_slope=cos_pt[idx],
                 sin_slope=sin_pt[idx],
             )
@@ -950,6 +1057,7 @@ def simulate_race(
         wprime_pct=buf_wp[:, :n_samples].copy(),
         glyco_pct=buf_gly[:, :n_samples].copy(),
         sleep_pct=buf_slp[:, :n_samples].copy(),
+        hydration_pct=buf_hyd[:, :n_samples].copy(),
         bike=buf_bike[:, :n_samples].copy(),
         state=buf_state[:, :n_samples].copy(),
     )
@@ -985,6 +1093,7 @@ def simulate_race(
         events=events,
         plans=plans,
         conditions=conditions.records,
+        weather=weather,
         compute_seconds=time.perf_counter() - t_start,
     )
 

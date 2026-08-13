@@ -35,6 +35,7 @@ from ..core.engine import RaceConfig, RaceEntry, RaceResult, Telemetry
 from ..core.events import RaceEvent
 from ..core.rider import Rider, Team
 from ..core.strategy import Misjudgement, RacePlan, SectionPlan, StopPlan
+from ..core.weather import WeatherProfile
 from ..geo.route import Route
 
 DEFAULT_ROOT = Path("data")
@@ -140,6 +141,7 @@ class Store:
             "events": [e.to_dict() for e in result.events],
             "plans": [_plan_to_dict(p) for p in result.plans],
             "conditions": [c.to_dict() for c in result.conditions],
+            "weather": result.weather.to_dict(),
         }
         (target / "race.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
 
@@ -153,6 +155,7 @@ class Store:
             wprime_pct=result.telemetry.wprime_pct,
             glyco_pct=result.telemetry.glyco_pct,
             sleep_pct=result.telemetry.sleep_pct,
+            hydration_pct=result.telemetry.hydration_pct,
             bike=result.telemetry.bike,
             state=result.telemetry.state,
             split_times_s=result.split_times_s.astype(np.float32),
@@ -177,6 +180,7 @@ class Store:
                 wprime_pct=data["wprime_pct"],
                 glyco_pct=data["glyco_pct"],
                 sleep_pct=data["sleep_pct"],
+                hydration_pct=data["hydration_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )
@@ -195,6 +199,7 @@ class Store:
             events=[RaceEvent(**e) for e in meta["events"]],
             plans=[_plan_from_dict(p) for p in meta["plans"]],
             conditions=[ConditionRecord(**c) for c in meta.get("conditions", [])],
+            weather=WeatherProfile.from_dict(meta.get("weather", {})),
             compute_seconds=meta.get("compute_seconds", 0.0),
         )
         return result, meta["route_id"]

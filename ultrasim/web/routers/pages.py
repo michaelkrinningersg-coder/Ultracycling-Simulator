@@ -40,6 +40,7 @@ def race_live(request: Request, race_id: str) -> HTMLResponse:
             "race_name": result.config.name,
             "route": route,
             "n_entries": len(result.entries),
+            "weather": result.weather,
             "start_interval_s": result.config.resolved_start_interval(route.distance_class),
         },
     )

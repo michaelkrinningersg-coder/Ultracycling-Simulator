@@ -274,6 +274,7 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
             "wprime_pct": int(snap["wprime"][focus]),
             "glyco_pct": int(snap["glyco"][focus]),
             "sleep_pct": int(snap["sleep"][focus]),
+            "hydration_pct": int(snap["hydration"][focus]),
             "bike": BIKE_NAMES[int(snap["bike"][focus])],
             "state": int(snap["state"][focus]),
             "conditions": view.conditions_at(focus, t),
@@ -375,6 +376,7 @@ def rider_curves(request: Request, race_id: str, entry_id: int) -> JSONResponse:
             "wprime_pct": tel.wprime_pct[entry_id, sl].astype(int).tolist(),
             "glyco_pct": tel.glyco_pct[entry_id, sl].astype(int).tolist(),
             "sleep_pct": tel.sleep_pct[entry_id, sl].astype(int).tolist(),
+            "hydration_pct": tel.hydration_pct[entry_id, sl].astype(int).tolist(),
             "bike": tel.bike[entry_id, sl].astype(int).tolist(),
         }
     )

@@ -38,19 +38,24 @@ GOLDEN_ROUTE = {
 #: * M5.1 – Fehlplanung als Zustand (Abschnitt 6.5) und getrennte
 #:   Zufallsströme je Zweck. Drei der zwölf Fahrer brechen jetzt spät
 #:   ein, die Reihenfolge dahinter ändert sich entsprechend.
+#: * M6.1 – Wetter, Wind und Tag-Nacht. Das Feld wird rund 12 % langsamer;
+#:   der Seed zieht für diese Strecke einen milden, aber windigen Tag.
+#:   Wind kostet Zeit, weil man in den Gegenwindabschnitten länger
+#:   unterwegs ist als in den Rückenwindabschnitten – der Effekt hebt
+#:   sich über eine Runde eben *nicht* auf.
 GOLDEN_RESULT = [
-    (8, 5473.20),
-    (6, 5520.59),
-    (12, 5523.01),
-    (11, 5618.91),
-    (5, 5686.97),
-    (9, 5729.10),
-    (7, 5731.67),
-    (10, 5755.48),
-    (3, 5769.41),
-    (2, 5836.25),
-    (4, 6046.45),
-    (1, 6200.81),
+    (8, 6151.26),
+    (12, 6206.73),
+    (6, 6213.62),
+    (11, 6328.11),
+    (5, 6429.78),
+    (9, 6464.33),
+    (7, 6473.78),
+    (10, 6502.05),
+    (3, 6506.74),
+    (2, 6586.24),
+    (4, 6874.38),
+    (1, 7026.88),
 ]
 
 TOLERANCE_S = 0.5

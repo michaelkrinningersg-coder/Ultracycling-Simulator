@@ -36,6 +36,7 @@ from . import form as fm
 from . import incidents as inc
 from . import nutrition as nut
 from . import physics as ph
+from . import season as sn
 from . import sleep as slp
 from . import strategy as st
 from . import weather as wx
@@ -95,6 +96,12 @@ class RaceConfig:
     weather_preset: str | None = None
     race_date: date | None = None
     name: str = "Rennen"
+    #: Restermüdung aus vorherigen Rennen der Saison, je ``rider_id`` in
+    #: Kilojoule (Abschnitt 14, M7). Sie wird als bereits geleistete
+    #: Arbeit in die Langzeitermüdung eingesetzt: Wer mit 5.000 kJ
+    #: Rückstand startet, ist so müde, als lägen die ersten 5.000 kJ des
+    #: Rennens schon hinter ihm. Leer = alle frisch.
+    carry_work_kj: dict[int, float] = field(default_factory=dict)
 
     def resolved_sample_dt(self, distance_class: str) -> int:
         return self.sample_dt_s or SAMPLE_DT_S.get(distance_class, 15)
@@ -125,6 +132,12 @@ class RaceEntry:
     dnf_reason: str = ""
     #: An Zwischenfällen verlorene Zeit.
     lost_s: float = 0.0
+    #: Im Rennen geleistete Arbeit. Grundlage der Restermüdung fürs
+    #: nächste Rennen der Saison (Abschnitt 14).
+    work_kj: float = 0.0
+    #: Frische beim Start: 1,0 = ausgeruht, darunter steckt noch ein
+    #: früheres Rennen der Saison in den Beinen.
+    freshness: float = 1.0
     #: Kumulierter Aufgabedruck am Rennende. Wie nah war er dran? Der
     #: Kalibrierlauf in ``balance.py`` liest genau diesen Wert aus.
     give_up_score: float = 0.0
@@ -145,6 +158,8 @@ class RaceEntry:
             "dnf_dist_m": None if self.dnf_dist_m is None else round(self.dnf_dist_m, 1),
             "dnf_reason": self.dnf_reason,
             "lost_s": round(self.lost_s, 1),
+            "work_kj": round(self.work_kj, 1),
+            "freshness": round(self.freshness, 4),
             "give_up_score": round(self.give_up_score, 4),
         }
 
@@ -557,8 +572,23 @@ def simulate_race(
     # ---------------- Zustand ----------------------------------------
     dist = np.zeros(n)
     v = np.full(n, 4.0)
-    work_j = np.zeros(n)
-    work_j_last = np.zeros(n)
+    # Restermüdung als bereits geleistete Arbeit. ``work_j_last`` startet
+    # auf demselben Wert – sonst zählte der Übertrag beim ersten
+    # Langsam-Tick als in zehn Sekunden verbrannte Energie und der Fahrer
+    # wäre auf dem ersten Kilometer im Hungerast.
+    carry_j = np.array(
+        [config.carry_work_kj.get(r.id, 0.0) * 1000.0 for r in field_riders]
+    )
+    work_j = carry_j.copy()
+    work_j_last = carry_j.copy()
+    # Frische: der bleibende Teil der Restermüdung. Konstant über das
+    # Rennen und deshalb einmal vorab, wie die Saisonform.
+    f_fresh = np.array(
+        [
+            sn.freshness_factor(float(carry_j[i]) / 1000.0, float(work_cap_kj[i]))
+            for i in range(n)
+        ]
+    )
     glyco_kcal = glyco_cap.copy()
     bonked = np.zeros(n, dtype=bool)
     wake_h = np.zeros(n)  # Stunden seit dem letzten Schlaf
@@ -978,7 +1008,7 @@ def simulate_race(
                 # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
                 f_umwelt = cond.channel(cond_mods, "ftp")
                 form_now = (
-                    f_season * f_day * f_section * f_fat * f_umwelt
+                    f_season * f_day * f_fresh * f_section * f_fat * f_umwelt
                     * bonk * sleep_perf * weather_perf * hydration_perf
                 )
                 ftp_eff = ftp * form_now
@@ -1316,6 +1346,10 @@ def simulate_race(
             dnf_reason="" if state[i] == STATE_FINISHED else dnf_reason[i],
             lost_s=float(lost_s[i]),
             give_up_score=float(give_up[i]),
+            # Nur die *eigene* Arbeit, ohne den Übertrag – sonst würde
+            # sich die Restermüdung über die Saison selbst aufschaukeln.
+            work_kj=float(work_j[i] - carry_j[i]) / 1000.0,
+            freshness=float(f_fresh[i]),
         )
         for i, (rider, bib, offset) in enumerate(start_list)
     ]

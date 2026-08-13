@@ -210,3 +210,58 @@ td { padding: .18rem .35rem; border-bottom: 1px solid #1a2131; }
 
 .chart { width: 100%; height: 180px; }
 .u-legend { font-size: .75rem; }
+
+/* ---------- Editoren und Formulare (M7) ---------- */
+input[type="text"], input[type="number"], input[type="date"] {
+  background: var(--bg-panel-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: .3rem .5rem; font: inherit; font-variant-numeric: tabular-nums;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+.form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .6rem; }
+.form-row label {
+  display: flex; flex-direction: column; gap: .18rem;
+  font-size: .64rem; text-transform: uppercase; letter-spacing: .1em; color: var(--fg-faint);
+}
+.form-row input, .form-row select { min-width: 6rem; }
+.form-row input[type="text"] { min-width: 11rem; }
+
+form.inline { display: inline; }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button.danger:hover { background: var(--bad); color: var(--bg); border-color: var(--bad); }
+
+/* Der Zeilen-Editor bleibt eingeklappt: Ein Kalender mit zwanzig
+   aufgeklappten Formularen wäre nicht mehr lesbar. Aufgeklappt schwebt er
+   als Popover über der Tabelle statt in der Zelle zu stehen — ein
+   Formular mit sieben Feldern passt in keine Tabellenspalte, und die
+   Spaltenbreiten dürfen sich beim Aufklappen nicht verschieben. */
+table.calendar td { position: relative; }
+details.edit { display: inline-block; margin-left: .3rem; }
+details.edit > summary {
+  list-style: none; cursor: pointer; color: var(--fg-faint);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: .32rem .5rem;
+}
+details.edit > summary::-webkit-details-marker { display: none; }
+details.edit[open] > summary { border-color: var(--accent); color: var(--accent); }
+details.edit > .editor {
+  position: absolute; right: 0; top: calc(100% + .2rem); z-index: 6;
+  width: min(56rem, calc(100vw - 4rem));
+  padding: .7rem; text-align: left;
+  background: var(--bg-panel-2); border: 1px solid var(--accent);
+  border-radius: var(--radius); box-shadow: 0 10px 28px #000a;
+}
+details.edit .row-actions { display: flex; gap: .5rem; margin-top: .6rem; }
+
+table.calendar tr.done td { color: var(--fg-dim); }
+table.calendar tr.done td:first-child { color: var(--good); }
+
+/* ---------- Fortschritt der Hintergrundrechnungen ---------- */
+.joblist { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .7rem; }
+.job { display: flex; align-items: center; gap: .6rem; font-size: .78rem; }
+.job .bar {
+  flex: 1 1 160px; height: 6px; border-radius: 999px;
+  background: var(--bg-panel-2); border: 1px solid var(--line); overflow: hidden;
+}
+.job .bar .fill { display: block; height: 100%; background: var(--accent); transition: width .4s linear; }
+[x-cloak] { display: none !important; }

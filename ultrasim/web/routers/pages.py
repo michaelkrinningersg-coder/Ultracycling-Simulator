@@ -24,6 +24,7 @@ def index(request: Request) -> HTMLResponse:
         {
             "routes": state.store.list_routes(),
             "races": state.store.list_races(),
+            "seasons": state.store.list_seasons(),
             "pool_exists": state.store.pool_exists(),
         },
     )

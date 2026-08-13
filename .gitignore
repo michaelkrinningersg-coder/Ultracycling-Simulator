@@ -13,6 +13,7 @@ dist/
 # Seed und Strecke neu und gehören nicht ins Repository.
 data/pool.json
 data/races/
+data/seasons/
 
 # Die fertigen Strecken werden dagegen mitgeliefert – die EXE braucht
 # kein Netz und keinen Kartendienst (Abschnitt 16).

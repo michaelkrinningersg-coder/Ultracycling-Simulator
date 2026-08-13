@@ -23,9 +23,14 @@ datas = [
     ("data/routes", "data/routes"),
 ]
 
+# Die Router werden erst zur Laufzeit importiert (create_app vermeidet
+# damit zirkuläre Importe); PyInstaller sieht sie im Quelltext nicht.
+# python_multipart ist die Formularauswertung hinter FastAPIs Form().
 hiddenimports = collect_submodules("uvicorn") + [
     "ultrasim.web.routers.api",
     "ultrasim.web.routers.pages",
+    "ultrasim.web.routers.seasons",
+    "python_multipart",
 ]
 
 a = Analysis(

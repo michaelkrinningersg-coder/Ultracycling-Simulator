@@ -2,3 +2,6 @@ numpy>=1.26
 fastapi>=0.110
 uvicorn[standard]>=0.27
 jinja2>=3.1
+# Formularauswertung für die Editoren (M7). Wenige Kilobyte, aber ohne
+# sie nimmt FastAPI kein einziges POST-Formular an.
+python-multipart>=0.0.9

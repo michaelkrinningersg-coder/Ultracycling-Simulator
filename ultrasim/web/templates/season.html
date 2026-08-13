@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}{{ season.name }} – UltraSim{% endblock %}
+{% block subtitle %}{{ season.name }} · {{ season.year }} · {{ rows|length }} Termine{% endblock %}
+{% block topbar %}<a class="faint" href="/seasons">◂ Saisons</a>{% endblock %}
+
+{% block body %}
+<div class="page" x-data="seasonJobs('{{ season.id }}', {{ busy|lower }})">
+
+  {% if not pool_exists %}
+  <div class="panel"><p class="bad">Kein Fahrerpool vorhanden — Rennen lassen sich nicht rechnen.
+    <span class="mono">python -m ultrasim.cli.simulate pool --riders 250</span></p></div>
+  {% endif %}
+
+  <!-- ----------------------------------------------------------- -->
+  <div class="panel" id="kalender">
+    <div class="panel-title">
+      <span>Kalender</span>
+      <span class="faint" x-show="running.length" x-cloak x-text="running.length + ' in Arbeit'"></span>
+    </div>
+
+    <template x-if="running.length">
+      <div class="joblist">
+        <template x-for="job in running" :key="job.id">
+          <div class="job">
+            <span class="mono" x-text="job.label"></span>
+            <span class="bar"><span class="fill" :style="`width:${(job.progress*100).toFixed(0)}%`"></span></span>
+            <span class="faint mono" x-text="job.state + (job.detail ? ' · ' + job.detail : '')"></span>
+          </div>
+        </template>
+      </div>
+    </template>
+    <template x-if="failed.length">
+      <div class="joblist">
+        <template x-for="job in failed" :key="job.id">
+          <div class="job bad"><span x-text="job.label"></span><span class="mono" x-text="job.error"></span></div>
+        </template>
+      </div>
+    </template>
+
+    {% if rows %}
+    <table class="calendar">
+      <thead>
+        <tr><th>Datum</th><th class="right">Pause</th><th>Rennen</th><th>Strecke</th>
+            <th class="right">Feld</th><th class="right">Koeff.</th><th>Wetter</th>
+            <th>Sieger</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr class="{% if row.race.computed %}done{% endif %}">
+          <td class="mono">{{ row.race.day|de_date }}</td>
+          <td class="right mono {% if row.gap_days is not none and row.gap_days < 14 %}bad{% endif %}">
+            {% if row.gap_days is not none %}{{ row.gap_days }} T{% endif %}</td>
+          <td>{{ row.race.name }}</td>
+          <td class="dim">
+            {% if row.route %}{{ row.route.name }}
+              <span class="badge {{ row.route.distance_class }}">{{ '%.0f'|format(row.route.distance_km) }} km</span>
+            {% else %}<span class="bad">Strecke fehlt: {{ row.race.route_id }}</span>{% endif %}
+          </td>
+          <td class="right mono faint">{{ row.race.n_riders }}</td>
+          <td class="right mono">{{ '%.2f'|format(row.coefficient) }}</td>
+          <td class="faint">{{ row.race.weather_preset or 'aus dem Seed' }}</td>
+          <td class="dim">
+            {% if row.winner %}{{ row.winner.name }} <span class="mono faint">{{ row.winner.time_s|hms }}</span>
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td class="right nowrap">
+            {% if row.race.computed %}
+              <a href="/race/{{ row.race.race_id }}"><button>Live</button></a>
+              <a href="/race/{{ row.race.race_id }}/results"><button>Ergebnis</button></a>
+            {% elif row.job %}
+              <span class="chip">in Arbeit</span>
+            {% elif pool_exists and row.route %}
+              <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}/run" class="inline">
+                <button class="primary" type="submit">Rechnen</button>
+              </form>
+            {% endif %}
+            <details class="edit">
+              <summary>▾</summary>
+              <div class="editor">
+              <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}" class="form-row">
+                <label>Name<input type="text" name="name" value="{{ row.race.name }}" required></label>
+                <label>Strecke
+                  <select name="route_id">
+                    {% for route in routes %}
+                    <option value="{{ route.id }}" {% if route.id == row.race.route_id %}selected{% endif %}>{{ route.name }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Datum<input type="date" name="day" value="{{ row.race.day.isoformat() }}" required></label>
+                <label>Feld<input type="number" name="n_riders" value="{{ row.race.n_riders }}" min="2" max="250"></label>
+                <label>Seed<input type="number" name="seed" value="{{ row.race.seed }}"></label>
+                <label>Wetter
+                  <select name="weather_preset">
+                    <option value="">aus dem Seed</option>
+                    {% for preset in presets %}
+                    <option value="{{ preset }}" {% if preset == row.race.weather_preset %}selected{% endif %}>{{ preset }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label>Koeffizient
+                  <input type="text" name="coefficient" placeholder="auto"
+                         value="{{ row.race.coefficient if row.race.coefficient is not none else '' }}">
+                </label>
+                <button type="submit">Speichern</button>
+              </form>
+              <div class="row-actions">
+                {% if row.race.computed %}
+                <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}/reset" class="inline"
+                      onsubmit="return confirm('Ergebnis verwerfen und den Termin wieder freigeben?')">
+                  <button class="danger" type="submit">Ergebnis verwerfen</button>
+                </form>
+                {% endif %}
+                <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}/delete" class="inline"
+                      onsubmit="return confirm('Termin aus dem Kalender nehmen? Ein gerechnetes Rennen bleibt erhalten.')">
+                  <button class="danger" type="submit">Termin löschen</button>
+                </form>
+              </div>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dim">Noch kein Termin im Kalender.</p>
+    {% endif %}
+
+    {% if pending and pool_exists %}
+    <form method="post" action="/season/{{ season.id }}/run-all" style="margin-top:.7rem">
+      <button class="primary" type="submit">Alle {{ pending }} offenen Termine rechnen</button>
+      <span class="dim" style="margin-left:.6rem">
+        Nacheinander in Terminreihenfolge — die Restermüdung eines Rennens steht
+        erst fest, wenn das vorherige gerechnet ist.
+      </span>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- ----------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title"><span>Termin hinzufügen</span></div>
+    <form method="post" action="/season/{{ season.id }}/race" class="form-row">
+      <label>Name<input type="text" name="name" placeholder="Frühjahrsklassiker" required maxlength="60"></label>
+      <label>Strecke
+        <select name="route_id" required>
+          {% for route in routes %}
+          <option value="{{ route.id }}">{{ route.name }} · {{ '%.0f'|format(route.distance_km) }} km</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Datum<input type="date" name="day" value="{{ season.year }}-06-01" required></label>
+      <label>Feld<input type="number" name="n_riders" value="60" min="2" max="250"></label>
+      <label>Seed<input type="number" name="seed" value="1"></label>
+      <label>Wetter
+        <select name="weather_preset">
+          <option value="">aus dem Seed</option>
+          {% for preset in presets %}<option value="{{ preset }}">{{ preset }}</option>{% endfor %}
+        </select>
+      </label>
+      <button class="primary" type="submit">Hinzufügen</button>
+    </form>
+  </div>
+
+  <!-- ----------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Gesamtwertung</span>
+      <span class="faint">Punkte × Rennkoeffizient · Gleichstand: Siege, dann bessere Einzelplatzierung</span>
+    </div>
+    {% if standings %}
+    <table>
+      <thead>
+        <tr><th class="right">Rg</th><th>Fahrer</th><th></th><th>Team</th>
+            <th class="right">Punkte</th><th class="right">Siege</th><th class="right">Podien</th>
+            <th class="right">Starts</th><th class="right">Ziel</th></tr>
+      </thead>
+      <tbody>
+        {% for row in standings[:40] %}
+        <tr>
+          <td class="right mono rank">{{ row.rank }}</td>
+          <td>{{ row.name }}</td>
+          <td class="faint">{{ row.nation }}</td>
+          <td class="dim">{{ row.team_name }}</td>
+          <td class="right mono">{{ '%.0f'|format(row.points) }}</td>
+          <td class="right mono {% if row.wins %}good{% endif %}">{{ row.wins or '' }}</td>
+          <td class="right mono faint">{{ row.podiums or '' }}</td>
+          <td class="right mono faint">{{ row.starts }}</td>
+          <td class="right mono faint">{{ row.finishes }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem">
+      Punkteschema: {{ points_head|join(', ') }}, danach −2 je Rang bis 0.
+    </p>
+    {% else %}
+    <p class="dim">Noch kein Rennen der Saison gerechnet.</p>
+    {% endif %}
+  </div>
+
+  <!-- ----------------------------------------------------------- -->
+  <div class="panel" id="entwicklung">
+    <div class="panel-title"><span>Saison abschließen</span></div>
+    <p class="dim" style="max-width:78ch">
+      Beim Abschluss altern alle Fahrer um ein Jahr: Die Leistungskurve folgt dem
+      Alter mit Scheitel um 31, Erfahrung wächst mit gefahrenen Rennen und
+      Kilometern, und das Potenzial driftet — bei jungen Fahrern nach oben, bei
+      alten nach unten. Wer zu alt wird, tritt zurück und macht einem Nachwuchs­fahrer
+      Platz. <strong>Das schreibt den Fahrerpool um</strong> und lässt sich nicht
+      zurücknehmen.
+    </p>
+    <form method="post" action="/season/{{ season.id }}/close" class="form-row"
+          onsubmit="return confirm('Fahrerpool endgültig um eine Saison altern lassen?')">
+      <label>Seed<input type="number" name="seed" value="{{ season.year }}"></label>
+      <button class="danger" type="submit">Saison abschließen</button>
+      <a href="/season/{{ season.id }}/development"><button type="button">Entwicklungsprotokoll ▸</button></a>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Saison löschen</span></div>
+    <form method="post" action="/season/{{ season.id }}/delete"
+          onsubmit="return confirm('Saison löschen? Gerechnete Rennen bleiben erhalten.')">
+      <button class="danger" type="submit">Saison löschen</button>
+      <span class="dim" style="margin-left:.6rem">Die gerechneten Rennen bleiben bestehen.</span>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block head %}
+<script defer src="/static/vendor/alpine.min.js"></script>
+<script>
+  function seasonJobs(seasonId, busy) {
+    return {
+      jobs: [],
+      timer: null,
+      get running() { return this.jobs.filter(j => !j.done); },
+      get failed() { return this.jobs.filter(j => j.state === 'fehler'); },
+      init() { if (busy) this.poll(); },
+      async poll() {
+        const res = await fetch(`/api/season/${seasonId}/jobs`);
+        this.jobs = await res.json();
+        // Sobald der letzte Auftrag durch ist, einmal neu laden: Der
+        // Kalender bekommt dann Sieger, Ergebnislinks und Wertung.
+        if (this.running.length) {
+          this.timer = setTimeout(() => this.poll(), 1000);
+        } else {
+          window.location.reload();
+        }
+      },
+      destroy() { if (this.timer) clearTimeout(this.timer); },
+    };
+  }
+  document.addEventListener('alpine:init', () => window.Alpine.data('seasonJobs', seasonJobs));
+</script>
+{% endblock %}

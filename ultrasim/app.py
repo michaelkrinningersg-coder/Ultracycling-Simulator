@@ -50,6 +50,7 @@ def ensure_user_data(verbose: bool = True) -> Path:
     root = user_data_dir()
     (root / "routes").mkdir(parents=True, exist_ok=True)
     (root / "races").mkdir(parents=True, exist_ok=True)
+    (root / "seasons").mkdir(parents=True, exist_ok=True)
 
     source = bundle_dir() / "data" / "routes"
     if source.is_dir() and source.resolve() != (root / "routes").resolve():

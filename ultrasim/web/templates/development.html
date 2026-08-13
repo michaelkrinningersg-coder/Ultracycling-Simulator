@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Entwicklung – {{ season.name }}{% endblock %}
+{% block subtitle %}Fahrerentwicklung nach {{ season.name }}{% endblock %}
+{% block topbar %}<a class="faint" href="/season/{{ season.id }}">◂ Kalender</a>{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  {% if not report %}
+  <div class="panel">
+    <p class="dim">Für diese Saison wurde noch kein Saisonwechsel gerechnet.
+      Der Knopf dafür steht unten auf der <a href="/season/{{ season.id }}#entwicklung">Kalenderseite</a>.</p>
+  </div>
+  {% else %}
+
+  <div class="panel">
+    <div class="panel-title"><span>Bilanz</span></div>
+    <p class="dim">
+      {{ report.active }} Fahrer weiter im Feld ·
+      {{ report.retired|length }} zurückgetreten ·
+      {{ report.newcomers|length }} nachgerückt
+    </p>
+  </div>
+
+  {% if report.retired %}
+  <div class="panel">
+    <div class="panel-title"><span>Rücktritte</span><span class="faint">{{ report.retired|length }}</span></div>
+    <table>
+      <tbody>
+        {% for rider in report.retired %}
+        <tr><td class="mono faint">{{ rider.id }}</td><td>{{ rider.name }}</td>
+            <td class="right mono">{{ rider.age }} Jahre</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if report.newcomers %}
+  <div class="panel">
+    <div class="panel-title"><span>Nachwuchs</span><span class="faint">{{ report.newcomers|length }}</span></div>
+    <table>
+      <tbody>
+        {% for rider in report.newcomers %}
+        <tr><td class="mono faint">{{ rider.id }}</td><td>{{ rider.name }}</td>
+            <td class="right mono">{{ rider.age }} Jahre</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>Entwicklung im Einzelnen</span>
+      <span class="faint">nach Potenzialgewinn sortiert</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Fahrer</th><th class="right">Alter</th>
+            <th class="right">Potenzial</th><th class="right">Δ</th>
+            <th class="right">W/kg</th><th class="right">Starts</th><th>Notiz</th></tr>
+      </thead>
+      <tbody>
+        {% for row in report.log|sort(attribute='potential_after', reverse=true) %}
+        <tr class="{% if row.retired %}dnf{% endif %}">
+          <td>{{ row.name }}</td>
+          <td class="right mono">{{ row.age }}</td>
+          <td class="right mono">{{ '%.1f'|format(row.potential_after) }}</td>
+          {% set delta = row.potential_after - row.potential_before %}
+          <td class="right mono {% if delta > 0.3 %}good{% elif delta < -0.3 %}bad{% endif %}">
+            {{ '%+.1f'|format(delta) }}</td>
+          <td class="right mono faint">{{ '%.2f'|format(row.wkg_after) }}</td>
+          <td class="right mono faint">{{ row.starts }}</td>
+          <td class="dim">{{ row.note }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

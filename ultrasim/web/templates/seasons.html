@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – Saisons{% endblock %}
+{% block subtitle %}Saisons und Kalender{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <div class="panel-title"><span>Saisons</span><span class="faint">{{ seasons|length }}</span></div>
+    {% if seasons %}
+    <table>
+      <thead>
+        <tr><th>Saison</th><th class="right">Jahr</th><th class="right">Termine</th>
+            <th class="right">gerechnet</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for season in seasons %}
+        <tr>
+          <td><a href="/season/{{ season.id }}">{{ season.name }}</a></td>
+          <td class="right mono">{{ season.year }}</td>
+          <td class="right mono">{{ season.n_races }}</td>
+          <td class="right mono {% if season.n_computed == season.n_races and season.n_races %}good{% endif %}">
+            {{ season.n_computed }}</td>
+          <td class="right"><a href="/season/{{ season.id }}">Kalender ▸</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dim">Noch keine Saison angelegt.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Neue Saison</span></div>
+    {% if not routes %}
+    <p class="dim">Ohne Strecken kein Kalender. Zuerst eine GPX-Datei importieren.</p>
+    {% else %}
+    <form method="post" action="/seasons" class="form-row">
+      <label>Name
+        <input type="text" name="name" value="Weltserie" required maxlength="60">
+      </label>
+      <label>Jahr
+        <input type="number" name="year" value="{{ this_year + 1 }}" min="1990" max="2999" required>
+      </label>
+      <label>Kalendervorschlag
+        <select name="n_races">
+          <option value="0">leer lassen</option>
+          <option value="6">6 Termine</option>
+          <option value="10" selected>10 Termine</option>
+          <option value="14">14 Termine</option>
+        </select>
+      </label>
+      <button class="primary" type="submit">Anlegen</button>
+    </form>
+    <p class="dim" style="max-width:78ch;margin-top:.6rem">
+      Der Vorschlag verteilt die vorhandenen Strecken über die Saison und lässt
+      nach langen Rennen mehr Abstand — nach einem Ultra fünf Wochen, nach einem
+      kurzen Rennen zwei. Danach ist jeder Termin einzeln verschiebbar; genau
+      dafür ist der Kalender da.
+    </p>
+    {% endif %}
+    {% if not pool_exists %}
+    <p class="bad" style="margin-top:.6rem">
+      Es gibt noch keinen Fahrerpool. Rechnen lässt sich erst, wenn einer da ist:
+      <span class="mono">python -m ultrasim.cli.simulate pool --riders 250</span>
+    </p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

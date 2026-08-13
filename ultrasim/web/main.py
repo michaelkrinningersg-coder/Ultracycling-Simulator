@@ -4,9 +4,11 @@ Start im Entwicklungsbetrieb:
 
     python -m ultrasim.web.main --reload
 
-Die Web-App ist ein reiner Konsument der Simulation: Sie rechnet nichts,
-sie zeigt gerechnete Rennen. Alles, was sie braucht, liegt unter
-``data/``.
+Die Web-App zeigt gerechnete Rennen. Seit dem Kalender (M7) kann sie
+Rennen auch *anstoßen* — nicht selbst rechnen: Sie legt einen Auftrag in
+die Warteschlange aus ``jobs.py``, der Arbeiterthread ruft dieselbe
+Bibliotheksfunktion auf wie die Kommandozeile. Alles, was sie braucht,
+liegt unter ``data/``.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 from ..core.engine import RaceResult
 from ..data.store import Store
 from ..geo.route import Route
+from .jobs import JobRunner
 from .playback import PlaybackRegistry, RaceView
 
 BASE_DIR = Path(__file__).parent
@@ -35,6 +38,7 @@ class AppState:
     def __init__(self, data_root: str | Path) -> None:
         self.store = Store(data_root)
         self.playback = PlaybackRegistry()
+        self.jobs = JobRunner()
         self._views: OrderedDict[str, tuple[RaceResult, Route, RaceView]] = OrderedDict()
         self._max_cached = 3
 
@@ -69,11 +73,13 @@ def create_app(data_root: str | Path | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
     templates.env.filters["hms"] = _hms
     templates.env.filters["gap"] = _gap
+    templates.env.filters["de_date"] = _de_date
     app.state.templates = templates
 
-    from .routers import api, pages  # zirkuläre Importe vermeiden
+    from .routers import api, pages, seasons  # zirkuläre Importe vermeiden
 
     app.include_router(pages.router)
+    app.include_router(seasons.router)
     app.include_router(api.router)
 
     @app.exception_handler(FileNotFoundError)
@@ -92,6 +98,13 @@ def _hms(seconds: float | None) -> str:
     h, rest = divmod(total, 3600)
     m, s = divmod(rest, 60)
     return f"{h}:{m:02d}:{s:02d}"
+
+
+def _de_date(day) -> str:
+    """Datum, wie man es in Deutschland liest."""
+    if day is None:
+        return "—"
+    return day.strftime("%d.%m.%Y")
 
 
 def _gap(seconds: float | None) -> str:

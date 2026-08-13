@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M6
+## Stand: Meilensteine M1–M7
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -34,9 +34,14 @@ hier umgesetzt.
 | Wetter (M6.1) | Zweischichtiges Modell: die Ortsschicht (Höhe, Exposition, lokaler Wind) hängt an der Position, die Zeitschicht (Tagesgang, Sonnenstand, Regenphasen) an der Fahrer-Eigenzeit. Wind wirkt richtungsabhängig aus Segment-Peilung und Windrichtung, Seitenwind über die Frontfläche. Dazu Hydration mit Schweißrate aus Intensität, Temperatur und Luftfeuchte |
 | Zwischenfälle (M6.2) | Der Ereigniskatalog aus Abschnitt 6.5: Panne, mechanischer Defekt, Lichtausfall, Verfahren, Sturz, Magenprobleme, Hitzeeinbruch, Sperrung. Gezogen als Poisson-Prozess entlang der Strecke, angenommen erst beim Erreichen — so gehen Nässe, Dunkelheit und Müdigkeit ein, ohne dass pro Tick gewürfelt wird |
 | Aufgabe (M6.2) | Vier Wege zum DNF: schwerer Sturz, schwerer Defekt ohne Ersatz, Zeitlimit und ein kumulativer Aufgabe-Score aus verlorener Zeit × Ermüdung × Magenzustand, gedämpft durch mentale Widerstandsfähigkeit |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 269 Tests inklusive Golden-Master |
+| Saison (M7) | Kalender mit Terminen, Startfeld, Wetter und Seed je Rennen; Punkte nach Platzierung × Rennkoeffizient aus Länge und Höhenmetern; Gesamtrangliste mit dreistufigem Tiebreak (Punkte, Siege, bessere Einzelplatzierung) |
+| Kalender-Editor (M7) | Der erste Editor im Browser: Saison anlegen, Termine hinzufügen, verschieben und löschen, Rennen einzeln oder am Stück rechnen lassen. Die Rechnung läuft im Hintergrund mit Fortschrittsanzeige — ein Ultra dauert Minuten, dafür gibt es keinen Request |
+| Restermüdung (M7) | Ein Rennen wirkt ins nächste: Die Rennarbeit klingt exponentiell ab (Zeitkonstante aus dem Attribut Regeneration) und wirkt über zwei Wege — als bereits geleistete Arbeit im Ermüdungszähler und als Frischefaktor auf die haltbare Leistung |
+| Fahrerentwicklung (M7) | Beim Saisonwechsel altern alle Fahrer: Leistungskurve nach Alter mit Scheitel um 31, Erfahrung wächst mit Rennen und Kilometern, Potenzial driftet, Rücktritte ab 34 mit Nachwuchs als Ersatz |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 325 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten** (M7–M8): Saison und Kalender, Editoren im Spiel.
+**Noch nicht enthalten**: die Editoren für Strecke, Fahrer und Team (M5b),
+das Strategiemodul der zweiten Stufe (M7b).
 
 Was gerade wirkt, steht offen in der Oberfläche: Das Fahrerdetail zeigt
 alle 25 Attribute, aber nur die 21, die tatsächlich in die Simulation
@@ -85,6 +90,16 @@ python -m ultrasim.cli.simulate race voralpen-runde --riders 40 --seed 42
 
 # 3. Zuschauen
 python -m ultrasim.web.main --open
+```
+
+Oder gleich eine ganze Saison — Kalender im Browser unter
+`/seasons`, dieselben Schritte auf der Kommandozeile:
+
+```bash
+python -m ultrasim.cli.season new 2027 --name Weltserie --races 10
+python -m ultrasim.cli.season run 2027-weltserie --all
+python -m ultrasim.cli.season show 2027-weltserie      # Kalender + Gesamtwertung
+python -m ultrasim.cli.season close 2027-weltserie     # Fahrer altern lassen
 ```
 
 Drei Strecken liegen bei, je eine pro Distanzklasse:
@@ -140,6 +155,11 @@ python -m ultrasim.cli.simulate list                      # Strecken und Rennen
 python -m ultrasim.cli.simulate result voralpen-runde-42  # Ergebnisliste
 python -m ultrasim.cli.simulate rider  voralpen-runde-42 --bib 29
 python -m ultrasim.cli.balance --route voralpen-runde --runs 20
+
+python -m ultrasim.cli.season new 2027 --races 10        # Saison anlegen
+python -m ultrasim.cli.season run 2027-weltserie --all   # Kalender rechnen
+python -m ultrasim.cli.season show 2027-weltserie        # Wertung ansehen
+python -m ultrasim.cli.season close 2027-weltserie       # Saisonwechsel
 ```
 
 `rider` zeigt den Rennplan mit Begründung, alle Splits mit Rang und den
@@ -179,19 +199,22 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 ```
 ultrasim/
   core/     physics · rider · form · fatigue · nutrition · sleep · conditions
-            strategy · events · engine
+            weather · incidents · strategy · season · development
+            events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
-  web/      main · playback · routers/ · templates/ · static/
-  cli/      simulate · balance
+  season_runner.py         Dienstschicht: Kalender rechnen, werten, altern
+  web/      main · playback · jobs · routers/ · templates/ · static/
+  cli/      simulate · balance · season
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
-tests/      geo · core · engine · conditions · nutrition · sleep · playback
-            golden_master
+tests/      geo · core · engine · conditions · nutrition · sleep · weather
+            incidents · season · season_web · playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
   races/    gerechnete Rennen (erzeugt, nicht eingecheckt)
+  seasons/  Kalender und Wertung (erzeugt, nicht eingecheckt)
 ```
 
 Architekturprinzip aus Abschnitt 13: **Die Simulation ist eine reine
@@ -200,15 +223,24 @@ Renn-Konfiguration ein Ergebnis samt Event-Strom; Web-App und CLI sind
 nur zwei Konsumenten davon. Deshalb laufen Balancing-Batches ohne
 Browser.
 
+Mit der Saison kam eine Schicht dazu. Einen Kalendertermin zu rechnen
+heißt: Feld laden, Restermüdung aus früheren Rennen holen, simulieren,
+ablegen, Kalender fortschreiben — das braucht `core` *und* `data`. In
+`core` gehört es nicht (dann liefe die Simulation nicht mehr ohne
+Datenverzeichnis), in `cli` oder `web` auch nicht (dann gäbe es den
+Ablauf zweimal). Deshalb sitzt er in `season_runner.py` dazwischen, und
+Browser wie Kommandozeile rufen dieselben Funktionen auf.
+
 ### Zwei bewusste Abweichungen vom Design-Dokument
 
 1. **Kein SQLAlchemy/SQLite.** Abschnitt 13 sieht für die Stammdaten
-   SQLAlchemy vor. Solange es weder Saison noch Kalender noch
-   Gesamtwertung gibt (M7), gibt es auch nichts zu joinen — eine Datei je
-   Rennen ist einfacher und hält das PyInstaller-Bundle klein. Alle
-   Zugriffe laufen schon jetzt über `ultrasim/data/store.py`, damit der
-   Wechsel später ein einzelner Austausch ist und nicht eine Suche durch
-   die halbe Anwendung.
+   SQLAlchemy vor. Auch mit Saison und Kalender bleibt es bei Dateien:
+   Eine Saison ist eine Liste von zwanzig Terminen, keine Tabelle mit
+   Millionen Zeilen, und die einzige Verknüpfung ist der Rennschlüssel.
+   Dafür eine Datenbank aufzumachen kostet Startzeit und Bundle-Größe,
+   ohne eine einzige Abfrage zu vereinfachen. Alle Zugriffe laufen über
+   `ultrasim/data/store.py`, damit der Wechsel ein einzelner Austausch
+   bleibt, falls er je nötig wird.
 
 2. **Der Radplan kam vorgezogen.** Er stand in der Roadmap erst bei M6,
    ist aber Teil des Rennplans aus Abschnitt 7.1 und mit der
@@ -258,6 +290,37 @@ Weh tut nicht die erste Nacht, sondern die zweite — dann treffen ein
 hoher Grundwert und der zirkadiane Tiefpunkt aufeinander. Auf der
 1230-km-Strecke plant der Sieger folgerichtig **keinen** Schlafstopp,
 langsamere Fahrer im selben Rennen schon.
+
+### Ein Ultra kostet drei bis vier Wochen
+
+Die Restermüdung entscheidet, ob ein Kalender eine Planungsaufgabe ist
+oder Dekoration. Gemessen auf der 300-km-Strecke, jeweils dieselbe
+Startliste und derselbe Seed, nur der Abstand zum vorherigen 1230er
+unterscheidet sich:
+
+| Abstand | Frische beim Start | Zeitverlust |
+|---|---|---|
+| 7 Tage | 87 % | +11 % |
+| 14 Tage | 94 % | +4 % |
+| 21 Tage | 97 % | +1,6 % |
+| 28 Tage | 98 % | +0,7 % |
+
+Der Weg dahin ist die interessantere Geschichte. Naheliegend wäre, die
+Restarbeit einfach in den Ermüdungszähler einzusetzen: Wer mit 5.000 kJ
+Rückstand startet, ist so müde, als lägen die ersten 5.000 kJ schon
+hinter ihm — eine Größe, eine Kurve, keine zweite Kalibrierung. Genau so
+war es zuerst gebaut, und gemessen kostete eine Woche nach einem Ultra
+ganze **3 %**. Der Effekt wäscht sich über die Renndistanz aus: Am Ende
+stehen 30.000 statt 22.000 kJ auf dem Zähler, und dort ist die
+Ermüdungskurve längst flach.
+
+Physiologisch ist die Auswaschung auch falsch. Wer vor einer Woche
+1200 km gefahren ist, hat nicht „schon einen Teil des Rennens hinter
+sich" — er hat beschädigte Muskulatur, leere Speicher und einen
+gestörten Schlafrhythmus, und das begleitet ihn bis ins Ziel. Deshalb
+gehen aus einer Eingangsgröße jetzt zwei Wege heraus: Die Restarbeit
+zählt weiter im Ermüdungszähler (wer müde startet, erreicht die Wand
+früher), und ein **Frischefaktor** trägt den bleibenden Teil.
 
 ### Abgleich mit den Dauerbändern
 
@@ -315,7 +378,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 269 Tests, rund 80 s
+pytest -q          # 325 Tests, rund 95 s
 ruff check ultrasim tools tests
 ```
 

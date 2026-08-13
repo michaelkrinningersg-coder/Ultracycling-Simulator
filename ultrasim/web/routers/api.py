@@ -380,3 +380,14 @@ def rider_curves(request: Request, race_id: str, entry_id: int) -> JSONResponse:
             "bike": tel.bike[entry_id, sl].astype(int).tolist(),
         }
     )
+
+
+@router.get("/season/{season_id}/jobs")
+def season_jobs(request: Request, season_id: str) -> JSONResponse:
+    """Fortschritt der Rechenaufträge einer Saison.
+
+    Die Kalenderseite fragt das im Sekundentakt ab, solange etwas läuft,
+    und lädt sich neu, sobald die Schlange leer ist.
+    """
+    runner = _state(request).jobs
+    return JSONResponse([job.to_dict() for job in runner.list_jobs(season_id)[:12]])

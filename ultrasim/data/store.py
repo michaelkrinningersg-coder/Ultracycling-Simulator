@@ -10,12 +10,14 @@ Zwei Speicherformen, weil die Daten zwei sehr verschiedene Größen haben:
   Zeitfenster über alle Fahrer schneidet.
 
 Abweichung vom Dokument, bewusst und benannt: Abschnitt 13 sieht für die
-Stammdaten SQLAlchemy + SQLite vor. Solange es weder Saison noch
-Kalender noch Gesamtwertung gibt (M7), gibt es auch nichts zu joinen –
-eine Datei je Rennen ist einfacher, schneller und hält das
-PyInstaller-Bundle klein. Die Zugriffe laufen deshalb schon jetzt über
-dieses Repository-Modul und nicht verstreut über die Anwendung, damit
-der Wechsel auf SQLAlchemy später ein einzelner Austausch ist.
+Stammdaten SQLAlchemy + SQLite vor. Auch mit Saison und Kalender bleibt
+es bei Dateien: Eine Saison ist eine Liste von zwanzig Terminen, keine
+Tabelle mit Millionen Zeilen, und die einzige Verknüpfung ist der
+Rennschlüssel. Dafür eine Datenbank aufzumachen kostet Startzeit und
+Bundle-Größe, ohne eine einzige Abfrage zu vereinfachen. Die Zugriffe
+laufen deshalb über dieses Repository-Modul und nicht verstreut über die
+Anwendung, damit der Wechsel auf SQLAlchemy ein einzelner Austausch
+bleibt, falls er je nötig wird.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from __future__ import annotations
 import json
 import shutil
 from collections.abc import Iterable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -34,11 +36,35 @@ from ..core.conditions import ConditionRecord
 from ..core.engine import RaceConfig, RaceEntry, RaceResult, Telemetry
 from ..core.events import RaceEvent
 from ..core.rider import Rider, Team
+from ..core.season import Season
 from ..core.strategy import Misjudgement, RacePlan, SectionPlan, StopPlan
 from ..core.weather import WeatherProfile
 from ..geo.route import Route
 
 DEFAULT_ROOT = Path("data")
+
+
+@dataclass
+class RaceSummary:
+    """Ein Rennergebnis ohne Telemetrie.
+
+    Genug für Ergebnisliste, Punkte und Gesamtwertung — und um zwei
+    Größenordnungen billiger zu laden als das volle Rennen.
+    """
+
+    race_id: str
+    route_id: str
+    route_name: str
+    name: str
+    entries: list[RaceEntry]
+    riders: list[Rider]
+    teams: list[Team]
+    weather: WeatherProfile
+
+    @property
+    def winner_time_s(self) -> float | None:
+        times = [e.finish_time_s for e in self.entries if e.finish_time_s is not None]
+        return min(times) if times else None
 
 
 class Store:
@@ -204,6 +230,29 @@ class Store:
         )
         return result, meta["route_id"]
 
+    def load_race_summary(self, race_id: str) -> RaceSummary:
+        """Ergebnisdaten ohne Telemetrie.
+
+        Die Gesamtwertung einer Saison braucht von zwanzig Rennen nur die
+        Ergebnislisten. Sie über ``load_race`` zu holen hieße, zwanzigmal
+        zweistellige Megabyte Telemetrie zu entpacken, um zweihundert
+        Zeilen zu addieren.
+        """
+        meta_path = self.race_dir(race_id) / "race.json"
+        if not meta_path.exists():
+            raise FileNotFoundError(f"Rennen '{race_id}' nicht gefunden ({meta_path})")
+        meta = json.loads(meta_path.read_text("utf-8"))
+        return RaceSummary(
+            race_id=meta["race_id"],
+            route_id=meta["route_id"],
+            route_name=meta["route_name"],
+            name=meta["config"].get("name", meta["race_id"]),
+            entries=[RaceEntry(**e) for e in meta["entries"]],
+            riders=[Rider.from_dict(r) for r in meta["riders"]],
+            teams=[Team.from_dict(t) for t in meta["teams"]],
+            weather=WeatherProfile.from_dict(meta.get("weather", {})),
+        )
+
     def list_races(self) -> list[dict[str, Any]]:
         out = []
         if not self.races_dir.exists():
@@ -237,6 +286,54 @@ class Store:
         if target.exists():
             shutil.rmtree(target)
 
+    # ------------------------------------------------------------------
+    # Saisons (Abschnitt 14, M7)
+    # ------------------------------------------------------------------
+    @property
+    def seasons_dir(self) -> Path:
+        return self.root / "seasons"
+
+    def season_path(self, season_id: str) -> Path:
+        return self.seasons_dir / f"{season_id}.json"
+
+    def save_season(self, season: Season) -> Path:
+        self.seasons_dir.mkdir(parents=True, exist_ok=True)
+        path = self.season_path(season.id)
+        path.write_text(json.dumps(season.to_dict(), ensure_ascii=False, indent=1), "utf-8")
+        return path
+
+    def load_season(self, season_id: str) -> Season:
+        path = self.season_path(season_id)
+        if not path.exists():
+            raise FileNotFoundError(f"Saison '{season_id}' nicht gefunden ({path})")
+        return Season.from_dict(json.loads(path.read_text("utf-8")))
+
+    def list_seasons(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        if not self.seasons_dir.exists():
+            return out
+        for path in sorted(self.seasons_dir.glob("*.json")):
+            try:
+                data = json.loads(path.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            races = data.get("races", [])
+            out.append(
+                {
+                    "id": data["id"],
+                    "name": data["name"],
+                    "year": data["year"],
+                    "n_races": len(races),
+                    "n_computed": sum(1 for r in races if r.get("race_id")),
+                }
+            )
+        return sorted(out, key=lambda s: (-s["year"], s["name"]))
+
+    def delete_season(self, season_id: str) -> None:
+        path = self.season_path(season_id)
+        if path.exists():
+            path.unlink()
+
 
 # ----------------------------------------------------------------------
 # (De-)Serialisierung der Hilfsobjekte
@@ -244,14 +341,21 @@ class Store:
 def _config_to_dict(config: RaceConfig) -> dict[str, Any]:
     data = asdict(config)
     data["race_date"] = config.race_date.isoformat() if config.race_date else None
+    # JSON kennt nur Zeichenketten als Schlüssel; die Fahrer-IDs kommen
+    # beim Laden wieder als int zurück.
+    data["carry_work_kj"] = {
+        str(k): round(v, 2) for k, v in (config.carry_work_kj or {}).items()
+    }
     return data
 
 
 def _config_from_dict(data: dict[str, Any]) -> RaceConfig:
     data = dict(data)
     raw_date = data.pop("race_date", None)
+    carry = data.pop("carry_work_kj", None) or {}
     config = RaceConfig(**data)
     config.race_date = date.fromisoformat(raw_date) if raw_date else None
+    config.carry_work_kj = {int(k): float(v) for k, v in carry.items()}
     return config
 
 

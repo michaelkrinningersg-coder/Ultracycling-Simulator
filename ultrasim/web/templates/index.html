@@ -58,15 +58,38 @@ python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</
   </div>
 
   <div class="panel">
+    <div class="panel-title"><span>Saisons</span><span class="faint">{{ seasons|length }}</span></div>
+    {% if seasons %}
+    <div class="cards">
+      {% for season in seasons %}
+      <div class="card">
+        <h2>{{ season.name }}</h2>
+        <div class="meta">{{ season.year }} · {{ season.n_races }} Termine ·
+          {{ season.n_computed }} gerechnet</div>
+        <div class="actions">
+          <a href="/season/{{ season.id }}"><button class="primary">Kalender</button></a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="dim">Noch keine Saison angelegt.
+      <a href="/seasons">Kalender-Editor öffnen ▸</a></p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
     <div class="panel-title"><span>Stand des Aufbaus</span></div>
     <p class="dim" style="max-width:70ch">
-      Diese Fassung deckt die Meilensteine M1–M4 des Game-Design-Dokuments ab:
+      Diese Fassung deckt die Meilensteine M1–M7 des Game-Design-Dokuments ab:
       GPX-Import mit Glättung und Segmentierung, Physikmodell, Fahrergenerator mit
       Archetypen, Form- und Ermüdungsmodell, Rennplan des Strategiemoduls,
-      Einzelstart mit Splits sowie die Live-Telemetrie mit Höhenprofil und
+      Verpflegung, Glykogen und Schlaf, Wetter, Wind und Tag-Nacht-Zyklus,
+      den Ereigniskatalog samt Aufgabe sowie Saisonkalender, Wertung und
+      Fahrerentwicklung — dazu die Live-Telemetrie mit Höhenprofil und
       Playback bis 1000×.
-      Noch nicht enthalten und damit auch nicht wirksam: Verpflegung und Glykogen,
-      Schlaf, Wetter und Wind, Pannen und Zwischenfälle, Saison und Kalender.
+      Noch offen: die Editoren für Strecke, Fahrer und Team (M5b) und das
+      Strategiemodul der zweiten Stufe (M7b).
     </p>
   </div>
 

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Ruff
+        run: ruff check ultrasim tools tests
+
+      - name: Tests
+        run: pytest -q
+
+      # Der Importer ist das Nadelöhr zwischen realer Welt und Simulation.
+      # Wenn er bricht, ist alles andere wertlos – deshalb läuft die
+      # komplette Kette hier einmal echt durch, nicht nur im Testmock.
+      - name: GPX-Importkette gegen die mitgelieferten Strecken
+        run: |
+          python tools/make_demo_gpx.py --all
+          python -m ultrasim.geo.gpx_import data/gpx/demo-voralpen.gpx --name "Voralpen-Runde"
+
+      - name: Rennen im Batch rechnen (Rauchtest fürs Balancing)
+        run: python -m ultrasim.cli.balance --route voralpen-runde --runs 2 --riders 20

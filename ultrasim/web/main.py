@@ -1,0 +1,142 @@
+"""FastAPI-Anwendung (Game-Design-Dokument, Abschnitt 13).
+
+Start im Entwicklungsbetrieb:
+
+    python -m ultrasim.web.main --reload
+
+Die Web-App ist ein reiner Konsument der Simulation: Sie rechnet nichts,
+sie zeigt gerechnete Rennen. Alles, was sie braucht, liegt unter
+``data/``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+from collections import OrderedDict
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from ..core.engine import RaceResult
+from ..data.store import Store
+from ..geo.route import Route
+from .playback import PlaybackRegistry, RaceView
+
+BASE_DIR = Path(__file__).parent
+
+
+class AppState:
+    """Gemeinsamer Zustand: Datenspeicher, Playback-Sitzungen, Cache."""
+
+    def __init__(self, data_root: str | Path) -> None:
+        self.store = Store(data_root)
+        self.playback = PlaybackRegistry()
+        self._views: OrderedDict[str, tuple[RaceResult, Route, RaceView]] = OrderedDict()
+        self._max_cached = 3
+
+    def view(self, race_id: str) -> tuple[RaceResult, Route, RaceView]:
+        """Rennen laden und im Speicher halten.
+
+        Telemetrie eines Ultra-Rennens sind zweistellige Megabyte – die
+        bei jedem Frame neu von der Platte zu lesen wäre grober Unfug,
+        drei Rennen gleichzeitig im Speicher zu halten aber auch.
+        """
+        if race_id in self._views:
+            self._views.move_to_end(race_id)
+            return self._views[race_id]
+        result, route_id = self.store.load_race(race_id)
+        route = self.store.load_route(route_id)
+        bundle = (result, route, RaceView(result, route))
+        self._views[race_id] = bundle
+        while len(self._views) > self._max_cached:
+            self._views.popitem(last=False)
+        return bundle
+
+    def invalidate(self, race_id: str) -> None:
+        self._views.pop(race_id, None)
+
+
+def create_app(data_root: str | Path | None = None) -> FastAPI:
+    root = data_root or os.environ.get("ULTRASIM_DATA", "data")
+    app = FastAPI(title="UltraSim", docs_url=None, redoc_url=None)
+    app.state.ultrasim = AppState(root)
+
+    app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+    templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+    templates.env.filters["hms"] = _hms
+    templates.env.filters["gap"] = _gap
+    app.state.templates = templates
+
+    from .routers import api, pages  # zirkuläre Importe vermeiden
+
+    app.include_router(pages.router)
+    app.include_router(api.router)
+
+    @app.exception_handler(FileNotFoundError)
+    async def _not_found(request: Request, exc: FileNotFoundError) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request, "error.html", {"message": str(exc)}, status_code=404
+        )
+
+    return app
+
+
+def _hms(seconds: float | None) -> str:
+    if seconds is None:
+        return "—"
+    total = int(round(float(seconds)))
+    h, rest = divmod(total, 3600)
+    m, s = divmod(rest, 60)
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def _gap(seconds: float | None) -> str:
+    if seconds is None:
+        return ""
+    sign = "+" if seconds >= 0 else "−"
+    total = int(round(abs(float(seconds))))
+    m, s = divmod(total, 60)
+    if m >= 60:
+        h, m = divmod(m, 60)
+        return f"{sign}{h}:{m:02d}:{s:02d}"
+    return f"{sign}{m}:{s:02d}"
+
+
+app = create_app()
+
+
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover - Startpfad
+    import uvicorn
+
+    parser = argparse.ArgumentParser(description="UltraSim-Weboberfläche starten")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--data", default=None, help="Datenverzeichnis")
+    parser.add_argument("--reload", action="store_true")
+    parser.add_argument("--open", action="store_true", help="Browser öffnen")
+    args = parser.parse_args(argv)
+
+    if args.data:
+        os.environ["ULTRASIM_DATA"] = args.data
+    if args.open:
+        import threading
+        import webbrowser
+
+        threading.Timer(1.2, lambda: webbrowser.open(f"http://{args.host}:{args.port}/")).start()
+
+    uvicorn.run(
+        "ultrasim.web.main:app" if args.reload else app,
+        host=args.host,
+        port=args.port,
+        reload=args.reload,
+        log_level="info",
+    )
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

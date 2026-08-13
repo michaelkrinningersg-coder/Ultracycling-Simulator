@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}UltraSim{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="topbar">
+    <a class="brand" href="/">ULTRASIM</a>
+    <span class="dim">{% block subtitle %}Ultracycling Live Telemetry Simulator{% endblock %}</span>
+    <span class="spacer"></span>
+    {% block topbar %}{% endblock %}
+  </div>
+  {% block body %}{% endblock %}
+</body>
+</html>

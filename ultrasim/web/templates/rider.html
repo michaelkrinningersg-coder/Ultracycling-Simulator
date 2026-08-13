@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}{{ rider.name }} – {{ race_name }}{% endblock %}
+{% block subtitle %}Fahrerdetail · {{ route.name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/vendor/uPlot.min.css">
+<script src="/static/vendor/uPlot.iife.min.js"></script>
+{% endblock %}
+{% block topbar %}<a href="/race/{{ race_id }}">◂ Live-Ansicht</a>{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <h1>
+      {% if team %}<span style="display:inline-block;width:.5rem;height:1rem;background:{{ team.color }};border-radius:1px;margin-right:.4rem;vertical-align:-2px"></span>{% endif %}
+      #{{ entry.bib }} {{ rider.name }}
+      <span class="dim" style="font-weight:400;font-size:.85rem">
+        {{ rider.nation }} · {{ team.name if team else '—' }} · {{ rider.archetype }}
+      </span>
+    </h1>
+    <div class="readout">
+      <div class="item"><span class="k">Zeit</span><span class="v big">{{ entry.finish_time_s|hms }}</span></div>
+      <div class="item"><span class="k">Rang</span><span class="v">{{ entry.rank or '—' }}</span></div>
+      <div class="item"><span class="k">Alter</span><span class="v">{{ rider.age }}</span></div>
+      <div class="item"><span class="k">Größe</span><span class="v">{{ rider.height_cm|round|int }} cm</span></div>
+      <div class="item"><span class="k">Gewicht</span><span class="v">{{ '%.1f'|format(rider.weight_kg) }} kg</span></div>
+      <div class="item"><span class="k">FTP</span><span class="v">{{ rider.ftp_w|round|int }} W</span></div>
+      <div class="item"><span class="k">W/kg</span><span class="v">{{ '%.2f'|format(rider.wkg) }}</span></div>
+      <div class="item"><span class="k">Saisonform</span><span class="v">{{ '%.3f'|format(entry.season_form) }}</span></div>
+      <div class="item"><span class="k">Tagesform</span><span class="v">{{ '%.3f'|format(entry.day_form) }}</span></div>
+      <div class="item"><span class="k">Ziel-IF</span><span class="v">{{ '%.2f'|format(entry.target_if) }}</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Rennplan des Strategiemoduls</span>
+      <span class="faint">jede Entscheidung mit Begründung</span></div>
+    {% for note in plan_notes %}
+      <div class="dim">· {{ note }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Verlauf über die Distanz</span></div>
+    <div id="chart-speed" class="chart"></div>
+    <div id="chart-power" class="chart"></div>
+    <div id="chart-form" class="chart"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Attribute</span>
+      <span class="faint">hell = wirkt in dieser Ausbaustufe, gedämpft = erst mit M5–M7</span></div>
+    <div class="attrgrid">
+      {% for a in attributes %}
+      <div class="attr {% if not a.active %}inactive{% endif %}" title="{{ a.key }}">
+        <span>{{ a.label }}</span>
+        <span class="bar"><span style="width: {{ a.value }}%"></span></span>
+        <span class="right mono">{{ a.value|round|int }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Splits</span></div>
+    <table>
+      <thead><tr><th class="right">km</th><th>Split</th><th class="right">Zeit</th>
+        <th class="right">Rang</th><th class="right">Teilstück</th></tr></thead>
+      <tbody>
+        {% for s in splits %}
+        <tr>
+          <td class="right mono faint">{{ '%.1f'|format(s.split.dist_m / 1000) }}</td>
+          <td>{{ s.split.name }}{% if s.split.kind == 'summit' %} <span class="chip">Gipfel</span>{% endif %}</td>
+          <td class="right mono">{{ s.t_s|hms }}</td>
+          <td class="right mono">{{ s.rank }}</td>
+          <td class="right mono faint">{{ s.section_s|hms }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Ereignisse</span></div>
+    {% if events %}
+    <table>
+      <tbody>
+        {% for e in events %}
+        <tr><td class="mono faint" style="width:6rem">{{ e.t_s|hms }}</td>
+            <td class="mono faint" style="width:9rem">{{ e.type }}</td>
+            <td class="dim">{{ e.payload }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dim">Keine Ereignisse – Pannen, Schlaf und Verpflegung kommen mit M5/M6.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(async function () {
+  const res = await fetch('/api/race/{{ race_id }}/rider/{{ entry.entry_id }}/curves');
+  const d = await res.json();
+  const x = d.dist_km;
+  const common = {
+    width: document.querySelector('.panel').clientWidth - 40,
+    height: 170,
+    cursor: { drag: { x: true, y: false } },
+    axes: [
+      { stroke: '#8f9cb5', grid: { stroke: '#1e2637' }, label: 'km' },
+      { stroke: '#8f9cb5', grid: { stroke: '#1e2637' } },
+    ],
+  };
+  new uPlot({ ...common, title: 'Geschwindigkeit (km/h)',
+    series: [{ label: 'km' }, { label: 'km/h', stroke: '#47b4ff', width: 1 }] },
+    [x, d.v_kmh], document.getElementById('chart-speed'));
+  new uPlot({ ...common, title: 'Leistung (W)',
+    series: [{ label: 'km' }, { label: 'W', stroke: '#ffc247', width: 1 }] },
+    [x, d.power_w], document.getElementById('chart-power'));
+  new uPlot({ ...common, title: 'Form und W′ (%)',
+    series: [{ label: 'km' },
+             { label: 'Form', stroke: '#4ade80', width: 1.4 },
+             { label: 'W′', stroke: '#f8717a', width: 1 }] },
+    [x, d.form_pct, d.wprime_pct], document.getElementById('chart-form'));
+})();
+</script>
+{% endblock %}

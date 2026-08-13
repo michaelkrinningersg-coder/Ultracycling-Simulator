@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}{{ race_name }} – Live{% endblock %}
+{% block subtitle %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km ·
+  {{ route.ascent_m|round|int }} hm · {{ n_entries }} Starter{% endblock %}
+
+{% block head %}
+<script type="module" src="/static/js/live.js"></script>
+<script defer src="/static/vendor/alpine.min.js"></script>
+{% endblock %}
+
+{% block topbar %}
+<a href="/race/{{ race_id }}/results" title="Achtung: verrät den Ausgang">Ergebnis ▸</a>
+{% endblock %}
+
+{% block body %}
+<div class="live" x-data="raceLive('{{ race_id }}')" x-init="init()">
+
+  <!-- ------------------------------------------------ Sidebar -->
+  <aside class="sidebar">
+    <div class="panel">
+      <div class="panel-title"><span>Fokusfahrer</span></div>
+      <template x-if="focus">
+        <div>
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <span class="board" style="display:inline-block">
+              <span class="swatch" :style="`background:${focus.color}`"></span>
+            </span>
+            <div>
+              <div style="font-weight:600" x-text="focus.name"></div>
+              <div class="faint" style="font-size:.75rem">
+                #<span x-text="focus.bib"></span> · <span x-text="focus.nation"></span> ·
+                <span x-text="focus.team"></span>
+              </div>
+            </div>
+          </div>
+          <div class="readout" style="margin-top:.6rem">
+            <div class="item"><span class="k">Gefahrene Zeit</span>
+              <span class="v big" x-text="hms(focus.own_time_s)"></span></div>
+          </div>
+          <div class="readout" style="margin-top:.4rem">
+            <div class="item"><span class="k">Fahrerzeit</span>
+              <span class="v" x-text="focus.own_clock || '—'"></span></div>
+            <div class="item"><span class="k">Kilometer</span>
+              <span class="v" x-text="(focus.dist_m/1000).toFixed(1)"></span></div>
+            <div class="item"><span class="k">Rest</span>
+              <span class="v" x-text="(focus.remaining_m/1000).toFixed(1)"></span></div>
+          </div>
+          <div class="readout" style="margin-top:.4rem">
+            <div class="item"><span class="k">Tempo</span>
+              <span class="v" x-text="focus.v_kmh.toFixed(1) + ' km/h'"></span></div>
+            <div class="item"><span class="k">Steigung</span>
+              <span class="v" x-text="focus.grade_pct.toFixed(1) + ' %'"></span></div>
+            <div class="item"><span class="k">Leistung</span>
+              <span class="v" x-text="focus.power_w + ' W'"></span></div>
+          </div>
+          <div class="readout" style="margin-top:.4rem">
+            <div class="item"><span class="k">Form</span>
+              <span class="v" x-text="focus.form_pct + ' %'"></span></div>
+            <div class="item"><span class="k">W′</span>
+              <span class="v" x-text="focus.wprime_pct + ' %'"></span></div>
+            <div class="item"><span class="k">Rad</span>
+              <span class="v"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
+                    x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>
+          </div>
+          <div style="margin-top:.5rem">
+            <span class="chip" :class="{stop: focus.state===1, fin: focus.state===2}"
+                  x-text="stateLabel(focus.state)"></span>
+            <a class="faint" style="font-size:.75rem;margin-left:.5rem"
+               :href="`/race/{{ race_id }}/rider/${focus.entry_id}`">Fahrerdetail ▸</a>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>Startliste</span>
+        <span class="faint" x-text="frame ? `${frame.field.on_course} unterwegs · ${frame.field.finished} im Ziel` : ''"></span>
+      </div>
+      <input class="field-input" placeholder="Name, Team oder Startnummer" x-model="filter">
+      <div class="startlist" style="margin-top:.4rem">
+        <template x-for="r in filteredStart" :key="r.entry_id">
+          <div class="row" :class="{focus: focus && r.entry_id === focus.entry_id}"
+               @click="setFocus(r.entry_id)">
+            <span class="b" x-text="r.bib"></span>
+            <span>
+              <span class="swatch" style="display:inline-block;width:.35rem;height:.8rem;border-radius:1px;margin-right:.35rem;vertical-align:-1px"
+                    :style="`background:${r.color}`"></span>
+              <span x-text="r.name"></span>
+            </span>
+            <span class="faint mono" x-text="hms(r.start_offset_s)"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ------------------------------------------------ Bühne -->
+  <div class="stage">
+
+    <!-- Steuerleiste -->
+    <div class="panel">
+      <div class="controls">
+        <button class="primary" @click="control('toggle')"
+                x-text="frame && frame.playing ? '❚❚ Pause' : '▶ Start'"></button>
+        <template x-for="s in speeds" :key="s">
+          <button @click="setSpeed(s)" :class="{on: frame && frame.speed === s}" x-text="s + '×'"></button>
+        </template>
+        <button @click="control('next_split')" title="Sprung zum nächsten Split des Fokusfahrers">▸ Split</button>
+        <button @click="control('next_event')" title="Sprung zum nächsten Ereignis des Fokusfahrers">▸ Ereignis</button>
+        <input class="scrub" type="range" min="0" max="1000" step="1"
+               :value="frame ? (frame.t_wall / Math.max(frame.horizon_s,1)) * 1000 : 0"
+               @input="seekFraction($event.target.value / 1000)">
+        <span class="faint mono" style="font-size:.75rem"
+              x-text="frame ? `Renn-Wanduhr ${hms(frame.t_wall)} / ${hms(frame.horizon_s)}` : ''"></span>
+      </div>
+      <template x-if="error"><div class="bad" style="margin-top:.4rem" x-text="error"></div></template>
+    </div>
+
+    <!-- Höhenprofil -->
+    <div class="panel">
+      <div class="panel-title">
+        <span>Höhenprofil</span>
+        <span class="faint">Übersicht gesamt · darunter Ausschnitt ±20 km um den Fokusfahrer</span>
+      </div>
+      <div class="profile-wrap">
+        <canvas class="profile" x-ref="overview"></canvas>
+        <canvas class="profile" x-ref="detail"></canvas>
+        <div class="legend">
+          <span><i style="background:#3d7fd1"></i>Abfahrt</span>
+          <span><i style="background:#3f8f5a"></i>flach</span>
+          <span><i style="background:#d9853f"></i>5–8 %</span>
+          <span><i style="background:#ff3b30"></i>&gt; 11 %</span>
+          <span><i style="background:rgba(217,83,79,.35)"></i>kategorisierter Anstieg</span>
+          <span><i style="background:#47b4ff"></i>Servicepunkt</span>
+          <span><i style="background:#ffc247"></i>Fokusfahrer</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Telemetrie-Board -->
+    <div class="panel">
+      <div class="board-head">
+        <div>
+          <strong>Live-Telemetrie</strong>
+          <span class="faint" x-text="board ? ` · ${board.split.name}` : ''"></span>
+        </div>
+        <div class="controls">
+          <button @click="toggleMode()" :class="{on: frame && frame.mode === 'virtual'}">
+            <span x-text="frame && frame.mode === 'virtual' ? 'Virtuelle Rangliste' : 'Splitwertung'"></span>
+          </button>
+          <select @change="setSplit($event.target.value)" x-show="frame && frame.mode !== 'virtual'">
+            <template x-for="s in (route ? route.splits : [])" :key="s.idx">
+              <option :value="s.idx" :selected="board && board.split.idx === s.idx"
+                      x-text="`${s.name} — km ${(s.dist_m/1000).toFixed(1)}`"></option>
+            </template>
+          </select>
+          <button x-show="frame && frame.mode !== 'virtual'"
+                  @click="control('split_follow', !frame.split_follow)"
+                  :class="{on: frame && frame.split_follow}"
+                  title="Board folgt automatisch dem zuletzt passierten Split des Fokusfahrers">
+            ⟳ folgen
+          </button>
+          <span class="faint" style="font-size:.75rem"
+                x-text="board ? `${board.n_reached} von ${board.n_total} durch` : ''"></span>
+        </div>
+      </div>
+
+      <table class="board">
+        <thead>
+          <tr>
+            <th>Rg</th><th>Nr</th><th>Fahrer</th><th>Team</th>
+            <th class="right">Zeit</th><th class="right">Rückstand</th><th class="right">km</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Fixierte Kopfzeile mit dem Führenden: Sonst weiß man bei
+               Rang 180 nicht mehr, worauf sich der Rückstand bezieht. -->
+          <template x-if="board && board.leader && !rows.some(r => r.entry_id === board.leader.entry_id)">
+            <tr class="leader-row clickable" @click="setFocus(board.leader.entry_id)">
+              <td class="rank" x-text="board.leader.rank || '–'"></td>
+              <td class="bib" x-text="board.leader.bib"></td>
+              <td><span class="swatch" :style="`background:${board.leader.color}`"></span>
+                  <span x-text="board.leader.name"></span></td>
+              <td class="dim" x-text="board.leader.team"></td>
+              <td class="time" x-text="hms(board.leader.t_s)"></td>
+              <td class="gap faint">Führender</td>
+              <td class="right mono faint" x-text="board.leader.dist_km.toFixed(1)"></td>
+              <td></td>
+            </tr>
+          </template>
+
+          <template x-for="row in rows" :key="row.entry_id">
+            <tr class="clickable"
+                :class="{focus: focus && row.entry_id === focus.entry_id, provisional: row.provisional}"
+                @click="setFocus(row.entry_id)">
+              <td class="rank" x-text="row.rank || '–'"></td>
+              <td class="bib" x-text="row.bib"></td>
+              <td><span class="swatch" :style="`background:${row.color}`"></span>
+                  <span x-text="row.name"></span>
+                  <span class="faint" style="font-size:.7rem" x-text="' ' + row.nation"></span></td>
+              <td class="dim" x-text="row.team"></td>
+              <td class="time" x-text="row.t_s === null ? '—' : hms(row.t_s)"></td>
+              <td class="gap" :class="row.gap_s > 0 ? 'pos' : (row.gap_s < 0 ? 'neg' : '')"
+                  x-text="row.gap_s === null || row.gap_s === 0 ? '' : gap(row.gap_s)"></td>
+              <td class="right mono faint" x-text="row.dist_km.toFixed(1)"></td>
+              <td>
+                <span class="chip tt" x-show="row.bike === 1">TT</span>
+                <span class="chip stop" x-show="row.state === 1">Stopp</span>
+                <span class="chip fin" x-show="row.state === 2">Ziel</span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <div class="faint" style="font-size:.72rem;margin-top:.4rem">
+        Kursiv = Split noch nicht erreicht, Zeit ist eine Prognose aus aktuellem Tempo und Reststrecke.
+      </div>
+    </div>
+
+    <!-- Ticker -->
+    <div class="panel">
+      <div class="panel-title"><span>Ticker</span>
+        <span class="faint">Fokusfahrer vollständig, vom Feld das Nennenswerte ·
+          Zeitangabe ist die Eigenzeit des jeweiligen Fahrers</span></div>
+      <div class="ticker">
+        <template x-for="(e, i) in ticker" :key="i">
+          <div :class="{focus: e.focus}">
+            <span class="t" x-text="hms(e.t_s)"></span><span x-text="e.text"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <template x-if="tooltip">
+    <div class="tooltip" :style="`left:${tooltip.x}px; top:${tooltip.y}px`" x-text="tooltip.text"></div>
+  </template>
+</div>
+{% endblock %}

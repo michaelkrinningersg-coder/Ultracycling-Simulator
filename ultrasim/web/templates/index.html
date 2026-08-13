@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – Übersicht{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <div class="panel-title"><span>Gerechnete Rennen</span><span class="faint">{{ races|length }}</span></div>
+    {% if races %}
+    <div class="cards">
+      {% for race in races %}
+      <div class="card">
+        <h2>{{ race.name }}</h2>
+        <div class="meta">
+          {{ race.route_name }} · {{ race.n_entries }} Starter · Seed {{ race.seed }}<br>
+          Siegerzeit {{ race.winner_time_s|hms }}
+        </div>
+        <div class="actions">
+          <a href="/race/{{ race.race_id }}"><button class="primary">Live ansehen</button></a>
+          <a href="/race/{{ race.race_id }}/results"><button>Ergebnis</button></a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="dim">Noch kein Rennen gerechnet. Auf der Kommandozeile:</p>
+    <pre class="mono dim">python -m ultrasim.cli.simulate pool --riders 250
+python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</pre>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Strecken</span><span class="faint">{{ routes|length }}</span></div>
+    {% if routes %}
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Name</th><th class="right">Distanz</th><th class="right">Höhenmeter</th>
+            <th>Klasse</th><th class="right">Anstiege</th><th class="right">Splits</th></tr>
+      </thead>
+      <tbody>
+        {% for route in routes %}
+        <tr>
+          <td class="mono faint">{{ route.id }}</td>
+          <td>{{ route.name }}</td>
+          <td class="right mono">{{ '%.1f'|format(route.distance_km) }} km</td>
+          <td class="right mono">{{ route.ascent_m }} m</td>
+          <td><span class="badge {{ route.distance_class }}">{{ route.distance_class }}</span></td>
+          <td class="right mono">{{ route.n_climbs }}</td>
+          <td class="right mono">{{ route.n_splits }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dim">Keine Strecken gefunden. GPX importieren:</p>
+    <pre class="mono dim">python -m ultrasim.geo.gpx_import meine-strecke.gpx</pre>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Stand des Aufbaus</span></div>
+    <p class="dim" style="max-width:70ch">
+      Diese Fassung deckt die Meilensteine M1–M4 des Game-Design-Dokuments ab:
+      GPX-Import mit Glättung und Segmentierung, Physikmodell, Fahrergenerator mit
+      Archetypen, Form- und Ermüdungsmodell, Rennplan des Strategiemoduls,
+      Einzelstart mit Splits sowie die Live-Telemetrie mit Höhenprofil und
+      Playback bis 1000×.
+      Noch nicht enthalten und damit auch nicht wirksam: Verpflegung und Glykogen,
+      Schlaf, Wetter und Wind, Pannen und Zwischenfälle, Saison und Kalender.
+    </p>
+  </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,289 @@
+"""Tests von Speicherung, Playback-Server und Web-Schnittstelle (M4).
+
+Der wichtigste Test dieser Datei ist ``test_no_data_from_the_future``:
+Das Rennen ist vorberechnet, und die einzige Zusicherung, die das
+Playback wie live wirken lässt, ist die, dass der Client nie etwas sieht,
+was zur Wanduhrzeit noch nicht passiert ist.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from ultrasim.core.engine import RaceConfig, simulate_race
+from ultrasim.core.rider import generate_pool
+from ultrasim.data.store import Store
+from ultrasim.web.main import create_app
+from ultrasim.web.playback import BOARD_WINDOW, PlaybackSession, RaceView, _window
+
+
+@pytest.fixture(scope="module")
+def stored(route, tmp_path_factory):
+    """Ein kleines Rennen, einmal gerechnet und abgelegt."""
+    root = tmp_path_factory.mktemp("data")
+    store = Store(root)
+    route.save(store.routes_dir / "teststrecke.json.gz")
+    teams, riders = generate_pool(16, n_teams=4, seed=21)
+    store.save_pool(teams, riders)
+    result = simulate_race(route, riders, teams, RaceConfig(seed=77, name="Testrennen"))
+    store.save_race("testrennen", "teststrecke", result)
+    return store, result, route
+
+
+@pytest.fixture(scope="module")
+def view(stored):
+    _, result, route = stored
+    return RaceView(result, route)
+
+
+@pytest.fixture(scope="module")
+def client(stored):
+    store, _, _ = stored
+    return TestClient(create_app(store.root))
+
+
+# ----------------------------------------------------------------------
+# Persistenz
+# ----------------------------------------------------------------------
+def test_race_roundtrip(stored):
+    store, result, _ = stored
+    again, route_id = store.load_race("testrennen")
+    assert route_id == "teststrecke"
+    # Zeiten werden beim Speichern auf Hundertstel gerundet und
+    # Splitzeiten als float32 abgelegt – für ein Rennergebnis mehr als
+    # genug, aber eben nicht bitgleich.
+    for a, b in zip(again.entries, result.entries, strict=True):
+        assert a.finish_time_s == pytest.approx(b.finish_time_s, abs=0.05)
+    assert np.allclose(again.split_times_s, result.split_times_s, equal_nan=True, atol=0.05)
+    assert np.array_equal(again.telemetry.dist_m, result.telemetry.dist_m)
+    assert len(again.events) == len(result.events)
+    assert len(again.plans) == len(result.plans)
+    assert again.config.seed == result.config.seed
+    assert again.config.name == "Testrennen"
+
+
+def test_pool_roundtrip(stored):
+    store, _, _ = stored
+    teams, riders = store.load_pool()
+    assert len(teams) == 4
+    assert len(riders) == 16
+    assert all(r.attributes for r in riders)
+
+
+def test_listing(stored):
+    store, _, _ = stored
+    routes = store.list_routes()
+    assert [r["id"] for r in routes] == ["teststrecke"]
+    races = store.list_races()
+    assert races[0]["race_id"] == "testrennen"
+    assert races[0]["winner_time_s"] > 0
+
+
+def test_missing_race_raises(stored):
+    store, _, _ = stored
+    with pytest.raises(FileNotFoundError):
+        store.load_race("gibtsnicht")
+
+
+# ----------------------------------------------------------------------
+# Die zentrale Zusicherung
+# ----------------------------------------------------------------------
+def test_no_data_from_the_future(view, stored):
+    """Zu keiner Wanduhrzeit darf ein Fahrer weiter sein, als er ist.
+
+    Geprüft an drei Stellen gleichzeitig: die Momentaufnahme, die
+    Splitwertung und die virtuelle Rangliste.
+    """
+    _, result, route = stored
+    horizon = result.last_finish_wallclock_s
+    for fraction in (0.05, 0.2, 0.45, 0.7, 0.95):
+        t = horizon * fraction
+        snap = view.snapshot(t)
+        for i, entry in enumerate(result.entries):
+            elapsed = t - entry.start_offset_s
+            if elapsed < 0:
+                assert snap["dist"][i] == 0.0, "Ein Fahrer fährt vor seinem Start"
+                continue
+            # Kein Fahrer darf weiter sein, als seine Zeit erlaubt.
+            if entry.finish_time_s is not None and elapsed < entry.finish_time_s:
+                assert snap["dist"][i] < route.distance_m + 1.0
+
+            # Splitzeiten dürfen nur zählen, wenn der Split durch ist.
+            for s_idx, split_time in enumerate(result.split_times_s[i]):
+                if np.isfinite(split_time) and split_time > elapsed:
+                    board = view.board_rows(t, s_idx, focus=i)
+                    row = next((r for r in board["rows"] if r["entry_id"] == i), None)
+                    if row is not None:
+                        assert row["provisional"], (
+                            f"Splitzeit von Fahrer {i} an Split {s_idx} wurde verraten"
+                        )
+                    break
+
+
+def test_board_marks_unreached_splits_as_provisional(view, stored):
+    _, result, _ = stored
+    board = view.board_rows(60.0, len(result.split_times_s[0]) - 1, focus=0)
+    assert board["n_reached"] == 0
+    assert all(r["provisional"] for r in board["rows"])
+    assert all(r["rank"] is None for r in board["rows"])
+
+
+def test_board_ranks_reached_riders_by_split_time(view, stored):
+    _, result, _ = stored
+    horizon = result.last_finish_wallclock_s
+    board = view.board_rows(horizon, 2, focus=0)
+    reached = [r for r in board["rows"] if not r["provisional"]]
+    assert len(reached) == len(result.entries)
+    assert [r["rank"] for r in reached] == list(range(1, len(reached) + 1))
+    assert [r["t_s"] for r in reached] == sorted(r["t_s"] for r in reached)
+    assert reached[0]["gap_s"] == 0.0
+
+
+def test_elapsed_at_distance_refuses_to_look_ahead(view, stored):
+    _, result, route = stored
+    assert view.elapsed_at_distance(0, route.distance_m, t_wall=10.0) is None
+    horizon = result.last_finish_wallclock_s
+    value = view.elapsed_at_distance(0, route.distance_m * 0.5, t_wall=horizon)
+    assert value is not None and value > 0
+
+
+def test_virtual_ranking_projects_everyone_to_the_same_distance(view, stored):
+    _, result, _ = stored
+    t = result.last_finish_wallclock_s * 0.6
+    board = view.virtual_rows(t, focus=0)
+    assert board["split"]["kind"] == "virtual"
+    times = [r["t_s"] for r in board["rows"]]
+    assert times == sorted(times)
+    assert board["rows"][0]["rank"] == 1
+
+
+def test_last_split_index_follows_the_focus_rider(view, stored):
+    _, result, _ = stored
+    assert view.last_split_index(0.0, 0) == 0
+    late = view.last_split_index(result.last_finish_wallclock_s, 0)
+    assert late == result.split_times_s.shape[1] - 1
+
+
+# ----------------------------------------------------------------------
+# Board-Fenster
+# ----------------------------------------------------------------------
+def test_window_centres_on_focus_and_sticks_at_the_edges():
+    rows = [{"entry_id": i} for i in range(250)]
+    top = _window(rows, focus=0, size=BOARD_WINDOW)
+    assert [r["entry_id"] for r in top] == list(range(BOARD_WINDOW))
+
+    middle = _window(rows, focus=120, size=BOARD_WINDOW)
+    assert middle[BOARD_WINDOW // 2]["entry_id"] == 120
+
+    bottom = _window(rows, focus=249, size=BOARD_WINDOW)
+    assert bottom[-1]["entry_id"] == 249
+    assert len(bottom) == BOARD_WINDOW
+
+    small = [{"entry_id": i} for i in range(10)]
+    assert len(_window(small, focus=3, size=BOARD_WINDOW)) == 10
+
+
+# ----------------------------------------------------------------------
+# Playback-Uhr
+# ----------------------------------------------------------------------
+def test_clock_only_advances_while_playing():
+    session = PlaybackSession(race_id="x", horizon_s=10_000.0, speed=1000)
+    assert session.now() == 0.0
+    session.seek(500.0)
+    assert session.now() == 500.0
+    session.play()
+    assert session.playing
+    session.pause()
+    assert not session.playing
+    frozen = session.now()
+    assert session.now() == frozen
+
+
+def test_clock_stops_at_the_horizon():
+    session = PlaybackSession(race_id="x", horizon_s=100.0, speed=1000)
+    session.seek(1e9)
+    assert session.now() == 100.0
+    session.play()
+    assert session.now() <= 100.0
+
+
+def test_frame_interval_coarsens_with_speed():
+    session = PlaybackSession(race_id="x", horizon_s=1.0)
+    for speed, expected in ((1, 0.25), (10, 0.25), (60, 0.5), (300, 1.0), (1000, 1.0)):
+        session.speed = speed
+        assert session.frame_interval_s() == expected
+
+
+def test_high_speed_streams_only_major_events(view, stored):
+    _, result, _ = stored
+    horizon = result.last_finish_wallclock_s
+    slow = view.events_between(0.0, horizon, speed=1, focus=None)
+    fast = view.events_between(0.0, horizon, speed=1000, focus=None)
+    assert len(fast) <= len(slow)
+    assert all(e.type != "START" for e in fast)
+
+
+# ----------------------------------------------------------------------
+# Web-Schnittstelle
+# ----------------------------------------------------------------------
+def test_pages_render(client):
+    assert client.get("/").status_code == 200
+    assert client.get("/race/testrennen").status_code == 200
+    assert client.get("/race/testrennen/results").status_code == 200
+    assert client.get("/race/testrennen/rider/0").status_code == 200
+
+
+def test_unknown_race_returns_404(client):
+    assert client.get("/race/gibtsnicht").status_code == 404
+
+
+def test_route_endpoint_delivers_a_drawable_profile(client):
+    data = client.get("/api/race/testrennen/route").json()
+    profile = data["profile"]
+    assert len(profile["dist_m"]) == len(profile["ele_m"]) == len(profile["grade"])
+    assert profile["dist_m"][0] == 0
+    assert profile["dist_m"] == sorted(profile["dist_m"])
+    assert data["splits"][-1]["kind"] == "finish"
+
+
+def test_playback_session_and_frame(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+    client.post(f"/api/playback/{token}/control", json={"action": "seek", "value": 3600})
+    frame = client.get(f"/api/playback/{token}/frame").json()
+    assert frame["t_wall"] == pytest.approx(3600, abs=2)
+    assert frame["focus"]["entry_id"] >= 0
+    assert frame["board"]["rows"]
+    assert frame["field"]["total"] == 16
+
+
+def test_control_rejects_nonsense(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+    assert client.post(f"/api/playback/{token}/control", json={"action": "fliegen"}).status_code == 400
+    assert client.post(f"/api/playback/{token}/control", json={"action": "speed", "value": 7}).status_code == 400
+    assert client.get("/api/playback/unbekannt/frame").status_code == 404
+
+
+def test_manual_split_choice_disables_following(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+    state = client.post(f"/api/playback/{token}/control", json={"action": "split", "value": 2}).json()
+    assert state["split_idx"] == 2
+    assert state["split_follow"] is False
+    frame = client.get(f"/api/playback/{token}/frame").json()
+    assert frame["board"]["split"]["idx"] == 2
+
+
+def test_next_split_jump_moves_the_clock_forward(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+    before = client.get(f"/api/playback/{token}/frame").json()["t_wall"]
+    after = client.post(f"/api/playback/{token}/control", json={"action": "next_split"}).json()
+    assert after["sim_t"] > before
+
+
+def test_curves_endpoint_is_consistent(client):
+    data = client.get("/api/race/testrennen/rider/0/curves").json()
+    n = len(data["t_s"])
+    assert n > 10
+    assert all(len(data[k]) == n for k in ("dist_km", "v_kmh", "power_w", "form_pct", "wprime_pct"))
+    assert data["dist_km"] == sorted(data["dist_km"])

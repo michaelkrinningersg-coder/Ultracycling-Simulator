@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+*.spec.bak
+
+# Erzeugte Spieldaten: Fahrerpool und gerechnete Rennen entstehen aus
+# Seed und Strecke neu und gehören nicht ins Repository.
+data/pool.json
+data/races/
+
+# Die fertigen Strecken werden dagegen mitgeliefert – die EXE braucht
+# kein Netz und keinen Kartendienst (Abschnitt 16).
+!data/routes/
+
+# Die Demo-GPX-Dateien nicht: 5 MB, die aus einem Seed in einer Sekunde
+# neu entstehen (python tools/make_demo_gpx.py --all).
+data/gpx/

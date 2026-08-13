@@ -30,10 +30,11 @@ from typing import Any
 
 import numpy as np
 
+from ..core.conditions import ConditionRecord
 from ..core.engine import RaceConfig, RaceEntry, RaceResult, Telemetry
 from ..core.events import RaceEvent
 from ..core.rider import Rider, Team
-from ..core.strategy import RacePlan, SectionPlan
+from ..core.strategy import Misjudgement, RacePlan, SectionPlan
 from ..geo.route import Route
 
 DEFAULT_ROOT = Path("data")
@@ -138,6 +139,7 @@ class Store:
             "teams": [t.to_dict() for t in result.teams],
             "events": [e.to_dict() for e in result.events],
             "plans": [_plan_to_dict(p) for p in result.plans],
+            "conditions": [c.to_dict() for c in result.conditions],
         }
         (target / "race.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
 
@@ -188,6 +190,7 @@ class Store:
             telemetry=telemetry,
             events=[RaceEvent(**e) for e in meta["events"]],
             plans=[_plan_from_dict(p) for p in meta["plans"]],
+            conditions=[ConditionRecord(**c) for c in meta.get("conditions", [])],
             compute_seconds=meta.get("compute_seconds", 0.0),
         )
         return result, meta["route_id"]
@@ -250,6 +253,7 @@ def _plan_to_dict(plan: RacePlan) -> dict[str, Any]:
         "climb_boost": round(plan.climb_boost, 4),
         "sections": [asdict(s) for s in plan.sections],
         "notes": [[round(d, 1), note] for d, note in plan.notes],
+        "misjudgement": asdict(plan.misjudgement) if plan.misjudgement else None,
     }
 
 
@@ -260,4 +264,7 @@ def _plan_from_dict(data: dict[str, Any]) -> RacePlan:
         climb_boost=data["climb_boost"],
         sections=[SectionPlan(**s) for s in data["sections"]],
         notes=[(d, note) for d, note in data["notes"]],
+        misjudgement=(
+            Misjudgement(**data["misjudgement"]) if data.get("misjudgement") else None
+        ),
     )

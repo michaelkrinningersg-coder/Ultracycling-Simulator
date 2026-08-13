@@ -41,6 +41,7 @@ export class ProfileView {
     this.positions = [];
     this.focus = -1;
     this.neighbours = new Set();
+    this.conditions = [];
     this.viewStart = 0;
     this.viewEnd = 0;
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -62,10 +63,11 @@ export class ProfileView {
     this.viewEnd = route.distance_m;
   }
 
-  setFrame(positions, focusEntry, neighbourIds) {
+  setFrame(positions, focusEntry, neighbourIds, conditions) {
     this.positions = positions;
     this.focus = focusEntry;
     this.neighbours = new Set(neighbourIds || []);
+    this.conditions = conditions || [];
   }
 
   /** Sichtfenster aus der Fokusposition ableiten. */
@@ -254,6 +256,17 @@ export class ProfileView {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.drawImage(this._base, 0, 0);
     ctx.scale(this.dpr, this.dpr);
+
+    // Zustände des Fokusfahrers als Balken unter der Profillinie:
+    // "Magenprobleme km 1180-1290" wird dadurch sichtbar statt nur wirksam.
+    const barY = this._size.h - this.padBottom + 1;
+    for (const c of this.conditions) {
+      const x0 = this.x(c.start_dist_m);
+      const x1 = this.x(c.end_dist_m);
+      if (x1 < this.padX || x0 > this._size.w - this.padX) continue;
+      ctx.fillStyle = c.active ? 'rgba(248,113,122,.85)' : 'rgba(248,113,122,.35)';
+      ctx.fillRect(x0, barY, Math.max(x1 - x0, 2), 3);
+    }
 
     const p = this.route.profile;
     let focusPoint = null;

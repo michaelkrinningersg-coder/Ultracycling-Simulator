@@ -274,6 +274,7 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
             "wprime_pct": int(snap["wprime"][focus]),
             "bike": BIKE_NAMES[int(snap["bike"][focus])],
             "state": int(snap["state"][focus]),
+            "conditions": view.conditions_at(focus, t),
             "finished": bool(
                 entry.finish_time_s is not None
                 and view.offsets[focus] + entry.finish_time_s <= t

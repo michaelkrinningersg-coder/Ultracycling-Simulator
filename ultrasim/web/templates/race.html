@@ -62,6 +62,20 @@
               <span class="v"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
                     x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>
           </div>
+          <template x-if="focus.conditions && focus.conditions.length">
+            <div style="margin-top:.5rem">
+              <template x-for="c in focus.conditions" :key="c.typ + c.start_dist_m">
+                <div class="cond-row" :class="{done: !c.active}">
+                  <span class="chip cond" x-text="c.label"></span>
+                  <span class="faint mono" style="font-size:.72rem"
+                        x-text="`km ${(c.start_dist_m/1000).toFixed(0)}–${(c.end_dist_m/1000).toFixed(0)}`"></span>
+                  <span class="faint" style="font-size:.72rem"
+                        x-text="c.active ? 'läuft' : 'überstanden'"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+
           <div style="margin-top:.5rem">
             <span class="chip" :class="{stop: focus.state===1, fin: focus.state===2}"
                   x-text="stateLabel(focus.state)"></span>
@@ -134,6 +148,7 @@
           <span><i style="background:rgba(217,83,79,.35)"></i>kategorisierter Anstieg</span>
           <span><i style="background:#47b4ff"></i>Servicepunkt</span>
           <span><i style="background:#ffc247"></i>Fokusfahrer</span>
+          <span><i style="background:#f8717a"></i>Zustand des Fokusfahrers</span>
         </div>
       </div>
     </div>
@@ -208,6 +223,9 @@
                 <span class="chip tt" x-show="row.bike === 1">TT</span>
                 <span class="chip stop" x-show="row.state === 1">Stopp</span>
                 <span class="chip fin" x-show="row.state === 2">Ziel</span>
+                <template x-for="label in (row.conditions || [])" :key="label">
+                  <span class="chip cond" x-text="label"></span>
+                </template>
               </td>
             </tr>
           </template>

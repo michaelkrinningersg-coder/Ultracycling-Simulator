@@ -115,6 +115,10 @@ button:disabled { opacity: .4; cursor: default; }
 .chip.tt { border-color: var(--accent-2); color: var(--accent-2); }
 .chip.stop { border-color: var(--bad); color: var(--bad); }
 .chip.fin { border-color: var(--good); color: var(--good); }
+.chip.cond { border-color: var(--bad); color: var(--bad); }
+
+.cond-row { display: flex; align-items: center; gap: .4rem; padding: .1rem 0; }
+.cond-row.done { opacity: .55; }
 
 /* ---------- Profil ---------- */
 .profile-wrap { display: flex; flex-direction: column; gap: .35rem; }

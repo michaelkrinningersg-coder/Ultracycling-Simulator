@@ -30,12 +30,15 @@ from typing import Any
 import numpy as np
 
 from ..geo.route import Route
+from . import conditions as cond
 from . import fatigue as fat
 from . import form as fm
 from . import physics as ph
 from . import strategy as st
 from .events import (
     BIKE_CHANGE,
+    CONDITION_END,
+    CONDITION_START,
     DNF,
     FINISH,
     PLAN,
@@ -195,7 +198,11 @@ class RaceResult:
     telemetry: Telemetry
     events: list[RaceEvent]
     plans: list[st.RacePlan]
+    conditions: list[cond.ConditionRecord] = field(default_factory=list)
     compute_seconds: float = 0.0
+
+    def conditions_for(self, entry_id: int) -> list[cond.ConditionRecord]:
+        return [c for c in self.conditions if c.entry_id == entry_id]
 
     @property
     def winner_time_s(self) -> float | None:
@@ -241,16 +248,54 @@ def build_start_list(
     return [(rider, i + 1, i * interval_s) for i, rider in enumerate(order)]
 
 
-def _rider_rng(seed: int, rider_id: int) -> np.random.Generator:
-    """Eigener Zufallsstrom je Fahrer.
+class RiderStreams:
+    """Unabhängige Zufallsströme je Fahrer und Zweck.
 
-    Über ``SeedSequence`` mit ``spawn_key`` hängt der Strom nur an Seed
-    und Fahrer-ID – nicht an der Position in der Startliste. Damit
-    ändert sich das Verhalten eines Fahrers nicht, wenn ein anderer dem
-    Feld hinzugefügt wird. Für Golden-Master-Tests ist das der
-    entscheidende Punkt.
+    Über ``SeedSequence`` mit ``spawn_key`` hängt ein Strom nur an Seed,
+    Fahrer-ID und Zweck – nicht an der Position in der Startliste und
+    nicht daran, wie viele Zufallszahlen ein *anderer* Zweck vorher
+    gezogen hat.
+
+    Warum das zweite so wichtig ist: Mit einem gemeinsamen Strom je
+    Fahrer verschiebt jede neue Mechanik, die irgendwo würfelt, sämtliche
+    Ziehungen dahinter. Beim Einbau der Fehlplanung wurde dadurch ein
+    Fahrer *schneller*, obwohl nur ein Malus dazukam – die Tagesform war
+    verrutscht. Mit getrennten Strömen ändert eine neue Mechanik nur das,
+    was sie selbst betrifft, und der Golden-Master bleibt aussagekräftig.
+
+    ``NAMES`` darf hinten wachsen; bestehende Einträge dürfen weder ihre
+    Position noch ihren Namen ändern.
     """
-    return np.random.default_rng(np.random.SeedSequence(seed, spawn_key=(rider_id,)))
+
+    NAMES: tuple[str, ...] = (
+        "plan",
+        "misjudge",
+        "day_form",
+        "section_form",
+        "stops",
+        # ab M5 reserviert – die Namen jetzt festzulegen kostet nichts
+        # und macht spätere Ergänzungen rückwirkungsfrei
+        "nutrition",
+        "sleep",
+        "incident",
+        "weather",
+    )
+
+    def __init__(self, seed: int, rider_id: int) -> None:
+        self.seed = seed
+        self.rider_id = rider_id
+        self._cache: dict[str, np.random.Generator] = {}
+
+    def get(self, name: str) -> np.random.Generator:
+        if name not in self._cache:
+            try:
+                stream = self.NAMES.index(name)
+            except ValueError:  # pragma: no cover - Programmierfehler
+                raise KeyError(f"Unbekannter Zufallsstrom: {name}") from None
+            self._cache[name] = np.random.default_rng(
+                np.random.SeedSequence(self.seed, spawn_key=(self.rider_id, stream))
+            )
+        return self._cache[name]
 
 
 # ----------------------------------------------------------------------
@@ -280,7 +325,7 @@ def simulate_race(
     start_list = build_start_list(riders, config, interval, rng_global)
     n = len(start_list)
     field_riders = [r for r, _, _ in start_list]
-    rngs = [_rider_rng(config.seed, r.id) for r in field_riders]
+    streams = [RiderStreams(config.seed, r.id) for r in field_riders]
 
     day_of_year = (config.race_date or date(2026, 6, 21)).timetuple().tm_yday
 
@@ -290,7 +335,14 @@ def simulate_race(
     for entry_id, (rider, _, _) in enumerate(start_list):
         team = team_map.get(rider.team_id)
         service_factor = team.service_factor if team else 1.0
-        plan = st.build_plan(rider, route, rngs[entry_id], service_factor, config.allow_tt_bike)
+        plan = st.build_plan(
+            rider,
+            route,
+            streams[entry_id].get("plan"),
+            streams[entry_id].get("misjudge"),
+            service_factor,
+            config.allow_tt_bike,
+        )
         plans.append(plan)
         for _, note in plan.notes:
             events.append(RaceEvent(entry_id, 0.0, PLAN, {"note": note}))
@@ -313,8 +365,10 @@ def simulate_race(
     )
 
     f_season = np.array([season_form(r, day_of_year) for r in field_riders])
-    f_day = fm.draw_day_form(field_riders, rngs)
-    section_track, section_grid = fm.build_section_form(n, route.distance_m, rngs)
+    f_day = fm.draw_day_form(field_riders, [s.get("day_form") for s in streams])
+    section_track, section_grid = fm.build_section_form(
+        n, route.distance_m, [s.get("section_form") for s in streams]
+    )
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -356,6 +410,14 @@ def simulate_race(
         for section in plan.sections:
             if section.idx < n_sections:
                 planned_bike[i, section.idx] = section.bike
+
+    # ---------------- Zustände (Abschnitt 6.5) -----------------------
+    conditions = cond.ConditionStore(n)
+    cond_mods = np.ones((n, len(cond.CHANNELS)))
+    # Distanzmarke, an der eine Fehlplanung zuschlägt; inf = geht auf.
+    misjudge_at = np.array(
+        [p.misjudgement.dist_m if p.misjudgement else np.inf for p in plans]
+    )
 
     # ---------------- Zustand ----------------------------------------
     dist = np.zeros(n)
@@ -423,6 +485,8 @@ def simulate_race(
     form_now = np.ones(n)
     ftp_eff = ftp.copy()
     ftp_eff_if = ftp * target_if
+    descent_mod = np.ones(n)
+    crr_mod = np.ones(n)
     #: Takt der langsam veränderlichen Größen (Form, Ermüdung) in Ticks.
     slow_steps = max(1, int(round(10.0 / dt)))
 
@@ -464,13 +528,30 @@ def simulate_race(
             # spürbar Rechenzeit und ändert am Ergebnis nichts – deshalb
             # laufen sie im langsamen Takt.
             if tick % slow_steps == 0:
+                for record in conditions.expire(t, dist):
+                    events.append(
+                        RaceEvent(
+                            record.entry_id,
+                            t,
+                            CONDITION_END,
+                            {
+                                "typ": record.typ,
+                                "label": record.label,
+                                "dist_km": round(dist[record.entry_id] / 1000.0, 2),
+                            },
+                        )
+                    )
+                cond_mods = conditions.update(t, dist)
                 f_section = fm.section_form_at(section_track, dist, section_grid)
                 f_fat = fat.fatigue_factor(work_j / 1000.0, work_cap_kj)
-                # f_umwelt bleibt in dieser Ausbaustufe 1,0 – hier greifen
-                # später Wetter, Zustände und Ernährung (Abschnitte 6.5/6.6).
-                form_now = f_season * f_day * f_section * f_fat
+                # f_umwelt ist das Produkt aller aktiven Zustände
+                # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
+                f_umwelt = cond.channel(cond_mods, "ftp")
+                form_now = f_season * f_day * f_section * f_fat * f_umwelt
                 ftp_eff = ftp * form_now
                 ftp_eff_if = ftp_eff * target_if
+                descent_mod = cond.channel(cond_mods, "abfahrtstempo")
+                crr_mod = cond.channel(cond_mods, "crr")
 
             p_target = ftp_eff_if * (1.0 + ramp_pt[idx] * boost)
             p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
@@ -484,7 +565,7 @@ def simulate_race(
             # --- Physik ----------------------------------------------
             mass = weight + bike_mass[bike] + ph.SUPPORTED_LUGGAGE_KG
             cda = ph.cda_for(frontal, ph.position_k(grade, flat_norm), bike_cda_f[bike])
-            v_limit = np.minimum(vcorner_pt[idx] * corner_skill, ph.MAX_SPEED)
+            v_limit = np.minimum(vcorner_pt[idx] * corner_skill * descent_mod, ph.MAX_SPEED)
 
             v_new = ph.integrate_step(
                 v,
@@ -492,7 +573,7 @@ def simulate_race(
                 grade,
                 mass,
                 cda,
-                crr_pt[idx],
+                crr_pt[idx] * crr_mod,
                 rho_pt[idx],
                 dt,
                 v_limit=v_limit,
@@ -541,6 +622,37 @@ def simulate_race(
                     )
                 next_split[crossing] += 1
 
+            # --- Fehlplanung schlaegt durch --------------------------
+            # Der Wuerfel ist beim Planen gefallen; hier wird die Rechnung
+            # nur noch praesentiert. Deshalb reicht ein Distanzvergleich.
+            hit = running & (dist >= misjudge_at)
+            if hit.any():
+                for i in np.flatnonzero(hit):
+                    misjudge = plans[i].misjudgement
+                    record = conditions.add(
+                        int(i),
+                        cond.CATALOG["fehlplanung"],
+                        t_s=t_next,
+                        dist_m=float(dist[i]),
+                        duration=misjudge.length_m,
+                        strength=misjudge.strength,
+                        reason=misjudge.reason,
+                    )
+                    events.append(
+                        RaceEvent(
+                            int(i),
+                            t_next,
+                            CONDITION_START,
+                            {
+                                "typ": record.typ,
+                                "label": record.label,
+                                "dist_km": round(dist[i] / 1000.0, 2),
+                                "reason": misjudge.reason,
+                            },
+                        )
+                    )
+                misjudge_at[hit] = np.inf
+
             # --- Servicepunkte: geplanter Radwechsel -----------------
             at_sp = running & (dist >= sp_guard[next_sp])
             if at_sp.any():
@@ -548,7 +660,9 @@ def simulate_race(
                     section = int(next_sp[i]) + 1
                     want = int(planned_bike[i, min(section, n_sections - 1)])
                     if want != int(bike[i]):
-                        duration = st.bike_change_duration(rngs[i], float(service_factor[i]))
+                        duration = st.bike_change_duration(
+                            streams[i].get("stops"), float(service_factor[i])
+                        )
                         stop_left[i] = duration
                         state[i] = STATE_STOPPED
                         bike[i] = want
@@ -607,6 +721,8 @@ def simulate_race(
             )
         )
 
+    conditions.close_all(t, dist)
+
     # Abschlussbild festhalten. Die Schleife bricht ab, sobald niemand
     # mehr fährt – der letzte reguläre Abtastpunkt liegt dann vor der
     # Zieldurchfahrt des letzten Fahrers, und ohne diesen Nachtrag stünde
@@ -656,6 +772,7 @@ def simulate_race(
         telemetry=telemetry,
         events=events,
         plans=plans,
+        conditions=conditions.records,
         compute_seconds=time.perf_counter() - t_start,
     )
 

@@ -287,3 +287,65 @@ def test_curves_endpoint_is_consistent(client):
     assert n > 10
     assert all(len(data[k]) == n for k in ("dist_km", "v_kmh", "power_w", "form_pct", "wprime_pct"))
     assert data["dist_km"] == sorted(data["dist_km"])
+
+
+# ----------------------------------------------------------------------
+# Zustände im Playback (M5.1)
+# ----------------------------------------------------------------------
+def test_conditions_survive_the_roundtrip(stored):
+    store, result, _ = stored
+    again, _ = store.load_race("testrennen")
+    assert len(again.conditions) == len(result.conditions)
+    for a, b in zip(again.conditions, result.conditions, strict=True):
+        assert a.typ == b.typ
+        assert a.entry_id == b.entry_id
+        assert a.start_dist_m == pytest.approx(b.start_dist_m, abs=0.1)
+        assert a.reason == b.reason
+    # und der Plan, aus dem sie stammen, ebenso
+    assert [p.misjudgement is None for p in again.plans] == [
+        p.misjudgement is None for p in result.plans
+    ]
+
+
+def test_conditions_never_leak_from_the_future(view, stored):
+    """Ein Zustand, der noch nicht begonnen hat, existiert nicht.
+
+    Und ein laufender endet für den Zuschauer *jetzt* – sonst verriete
+    der Balken über dem Profil, wie lange der Einbruch noch dauert.
+    """
+    _, result, _ = stored
+    if not result.conditions:
+        pytest.skip("Dieses Rennen hat keine Zustände")
+    horizon = result.last_finish_wallclock_s
+    for fraction in (0.1, 0.35, 0.6, 0.85):
+        t = horizon * fraction
+        for entry in result.entries:
+            elapsed = t - entry.start_offset_s
+            shown = view.conditions_at(entry.entry_id, t)
+            for row in shown:
+                assert row["start_t_s"] <= elapsed
+                assert row["end_t_s"] <= elapsed + 1e-6
+            real = [c for c in result.conditions if c.entry_id == entry.entry_id]
+            started = [c for c in real if c.start_t_s <= elapsed]
+            assert len(shown) == len(started)
+
+
+def test_active_filter_only_returns_running_conditions(view, stored):
+    _, result, _ = stored
+    if not result.conditions:
+        pytest.skip("Dieses Rennen hat keine Zustände")
+    record = result.conditions[0]
+    offset = result.entries[record.entry_id].start_offset_s
+    mid = offset + 0.5 * (record.start_t_s + record.end_t_s)
+    active = view.conditions_at(record.entry_id, mid, only_active=True)
+    assert active and all(row["active"] for row in active)
+    after = view.conditions_at(record.entry_id, offset + record.end_t_s + 60.0, only_active=True)
+    assert not after
+
+
+def test_board_rows_carry_condition_labels(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+    client.post(f"/api/playback/{token}/control", json={"action": "seek", "value": 4000})
+    frame = client.get(f"/api/playback/{token}/frame").json()
+    assert all("conditions" in row for row in frame["board"]["rows"])
+    assert isinstance(frame["focus"]["conditions"], list)

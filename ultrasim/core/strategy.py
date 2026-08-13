@@ -67,14 +67,23 @@ class RacePlan:
     climb_boost: float
     sections: list[SectionPlan] = field(default_factory=list)
     notes: list[tuple[float, str]] = field(default_factory=list)  # (dist_m, Begründung)
+    #: Wo der zu ambitionierte Plan zurückschlägt (None = geht auf).
+    misjudgement: Misjudgement | None = None
 
 
 def base_target_if(distance_km: float) -> float:
     return float(np.clip(IF_A - IF_B * math.log(max(distance_km, 1.0)), *IF_CLIP))
 
 
-def target_intensity(rider: Rider, distance_km: float, rng: np.random.Generator) -> tuple[float, str]:
-    """Ziel-Intensität eines Fahrers samt Begründung für das Log."""
+def target_intensity(
+    rider: Rider, distance_km: float, rng: np.random.Generator
+) -> tuple[float, float, str]:
+    """Ziel-Intensität eines Fahrers samt Planungsfehler und Begründung.
+
+    Der zurückgegebene ``overreach`` ist der Betrag, um den der Plan zu
+    ambitioniert ist. Er wird später gebraucht, um zu entscheiden, ob
+    dieser Fahrer die Rechnung dafür präsentiert bekommt.
+    """
     base = base_target_if(distance_km)
     skill = 0.030 * rider.attr_norm("ausdauer") + 0.018 * rider.attr_norm("erfahrung")
 
@@ -92,7 +101,70 @@ def target_intensity(rider: Rider, distance_km: float, rng: np.random.Generator)
         f"(Basis {base * 100:.0f} %, Fahrerprofil {skill * 100:+.1f} pp, "
         f"Planungsfehler {overreach * 100:+.1f} pp)"
     )
-    return value, note
+    return value, overreach, note
+
+
+# ----------------------------------------------------------------------
+# Fehlplanung als Zustand
+# ----------------------------------------------------------------------
+#: Ab diesem Planungsfehler wird eine Fehlplanung überhaupt möglich …
+MISJUDGE_THRESHOLD = 0.005
+#: … und bei diesem Überschuss ist sie so gut wie sicher.
+MISJUDGE_FULL = 0.060
+MISJUDGE_MAX_P = 0.85
+#: Der Einbruch kommt spät — vorher merkt niemand etwas.
+MISJUDGE_ONSET = (0.45, 0.70)
+#: Wirkungsdauer laut Katalog: 100–300 km, begrenzt auf die Reststrecke.
+MISJUDGE_LENGTH_M = (100_000.0, 300_000.0)
+#: Stärke skaliert den Katalogwert (−8 % FTP) auf −5 bis −12 %.
+MISJUDGE_STRENGTH = (0.625, 1.5)
+
+
+@dataclass
+class Misjudgement:
+    """Wo und wie hart ein zu ambitionierter Plan zurückschlägt."""
+
+    dist_m: float
+    length_m: float
+    strength: float
+    reason: str
+
+
+def plan_misjudgement(
+    route: Route, overreach: float, rng: np.random.Generator
+) -> Misjudgement | None:
+    """Entscheidet vor dem Start, ob die Rechnung präsentiert wird.
+
+    Bewusst hier und nicht im Tick: Der Fahrer *hat* sich schon beim
+    Planen vertan, sichtbar wird es nur später. Das macht die Sache auch
+    reproduzierbar — der Würfel fällt einmal je Fahrer und Seed, nicht
+    hunderttausendmal während des Rennens.
+    """
+    if overreach <= MISJUDGE_THRESHOLD:
+        return None
+    p = np.clip(
+        (overreach - MISJUDGE_THRESHOLD) / (MISJUDGE_FULL - MISJUDGE_THRESHOLD),
+        0.0,
+        MISJUDGE_MAX_P,
+    )
+    if rng.random() >= p:
+        return None
+
+    onset = float(rng.uniform(*MISJUDGE_ONSET)) * route.distance_m
+    remaining = route.distance_m - onset
+    length = float(np.clip(rng.uniform(*MISJUDGE_LENGTH_M), 0.0, remaining * 0.95))
+    strength = float(rng.uniform(*MISJUDGE_STRENGTH))
+    drop = (1.0 - 0.92) * strength * 100.0
+    return Misjudgement(
+        dist_m=onset,
+        length_m=length,
+        strength=strength,
+        reason=(
+            f"Fehlplanung schlägt durch: Plan lag {overreach * 100:.1f} pp über dem "
+            f"Haltbaren, −{drop:.0f} % FTP ab km {onset / 1000:.0f} über "
+            f"{length / 1000:.0f} km"
+        ),
+    )
 
 
 def climb_boost(rider: Rider) -> float:
@@ -236,16 +308,29 @@ def build_plan(
     rider: Rider,
     route: Route,
     rng: np.random.Generator,
+    rng_misjudge: np.random.Generator | None = None,
     service_factor: float = 1.0,
     allow_tt: bool = True,
 ) -> RacePlan:
-    """Kompletter Rennplan eines Fahrers."""
-    target_if, note = target_intensity(rider, route.distance_km, rng)
+    """Kompletter Rennplan eines Fahrers.
+
+    ``rng_misjudge`` ist bewusst ein eigener Strom: Ob dieser Fahrer
+    seinen Planungsfehler ausbaden muss, darf nicht davon abhängen, wie
+    viele Zufallszahlen die Radwahl vorher verbraucht hat.
+    """
+    target_if, overreach, note = target_intensity(rider, route.distance_km, rng)
     boost = climb_boost(rider)
     change_cost = BIKE_CHANGE_BASE_S * service_factor
     sections, notes = build_bike_plan(rider, route, target_if, boost, change_cost, allow_tt)
+    misjudgement = plan_misjudgement(route, overreach, rng_misjudge or rng)
 
-    plan = RacePlan(rider_id=rider.id, target_if=target_if, climb_boost=boost, sections=sections)
+    plan = RacePlan(
+        rider_id=rider.id,
+        target_if=target_if,
+        climb_boost=boost,
+        sections=sections,
+        misjudgement=misjudgement,
+    )
     plan.notes.append((0.0, note))
     plan.notes.extend(notes)
     return plan

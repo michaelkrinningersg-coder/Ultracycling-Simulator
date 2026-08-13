@@ -27,9 +27,13 @@ DNF = "DNF"
 SLEEP = "SLEEP"
 MECHANICAL = "MECHANICAL"
 BONK = "BONK"
+CONDITION_START = "CONDITION_START"
+CONDITION_END = "CONDITION_END"
 
 #: Ereignisse, die auch bei starkem Zeitraffer noch gestreamt werden.
-MAJOR_EVENTS = frozenset({SPLIT_PASSED, FINISH, DNF, BIKE_CHANGE, MECHANICAL, BONK})
+MAJOR_EVENTS = frozenset(
+    {SPLIT_PASSED, FINISH, DNF, BIKE_CHANGE, MECHANICAL, BONK, CONDITION_START}
+)
 
 
 @dataclass(slots=True)
@@ -69,6 +73,10 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
         return f"{who}Aufgabe bei km {p.get('dist_km', 0):.0f} – {p.get('reason', '')}"
     if event.type == START:
         return f"{who}gestartet"
+    if event.type == CONDITION_START:
+        return f"{who}{p.get('label', 'Zustand')} ab km {p.get('dist_km', 0):.0f}"
+    if event.type == CONDITION_END:
+        return f"{who}{p.get('label', 'Zustand')} überstanden (km {p.get('dist_km', 0):.0f})"
     return f"{who}{event.type}"
 
 

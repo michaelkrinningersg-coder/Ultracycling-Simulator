@@ -33,19 +33,24 @@ GOLDEN_ROUTE = {
 }
 
 #: (Startnummer, Zielzeit in s) für Seed 2024, Fahrerpool-Seed 31.
+#:
+#: Historie der bewussten Verschiebungen:
+#: * M5.1 – Fehlplanung als Zustand (Abschnitt 6.5) und getrennte
+#:   Zufallsströme je Zweck. Drei der zwölf Fahrer brechen jetzt spät
+#:   ein, die Reihenfolge dahinter ändert sich entsprechend.
 GOLDEN_RESULT = [
-    (8, 5448.48),
-    (5, 5521.01),
-    (11, 5550.27),
-    (12, 5563.15),
-    (6, 5593.58),
-    (9, 5632.09),
-    (7, 5648.11),
-    (3, 5658.64),
-    (10, 5765.86),
-    (2, 5831.76),
-    (4, 6023.87),
-    (1, 6159.90),
+    (8, 5473.20),
+    (6, 5520.59),
+    (12, 5523.01),
+    (11, 5618.91),
+    (5, 5686.97),
+    (9, 5729.10),
+    (7, 5731.67),
+    (10, 5755.48),
+    (3, 5769.41),
+    (2, 5836.25),
+    (4, 6046.45),
+    (1, 6200.81),
 ]
 
 TOLERANCE_S = 0.5

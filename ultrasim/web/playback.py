@@ -167,6 +167,54 @@ class RaceView:
         self._event_wall = np.array(
             [e.t_s + result.entries[e.entry_id].start_offset_s for e in self._events]
         )
+        # Zustände je Fahrer vorsortieren: das Board fragt sie bei 250
+        # Zeilen und mehreren Frames pro Sekunde ab, ein Listendurchlauf
+        # über alle Zustände des Rennens wäre dafür die falsche Antwort.
+        self._conditions: dict[int, list] = {}
+        for record in result.conditions:
+            self._conditions.setdefault(record.entry_id, []).append(record)
+
+    # ------------------------------------------------------------------
+    def conditions_at(self, entry_id: int, t_wall: float, only_active: bool = False) -> list[dict[str, Any]]:
+        """Zustände eines Fahrers, abgeschnitten an der Wanduhr.
+
+        Ein Zustand, der noch nicht begonnen hat, existiert für den
+        Zuschauer nicht – und ein laufender endet für ihn *jetzt*, nicht
+        an seinem späteren echten Ende. Sonst verriete der Balken über dem
+        Profil, wie lange der Einbruch noch dauert.
+        """
+        offset = self.offsets[entry_id]
+        elapsed = t_wall - offset
+        out: list[dict[str, Any]] = []
+        for record in self._conditions.get(entry_id, ()):
+            if record.start_t_s > elapsed:
+                continue
+            end_t = record.end_t_s
+            end_d = record.end_dist_m
+            active = end_t is None or end_t > elapsed
+            if only_active and not active:
+                continue
+            out.append(
+                {
+                    "typ": record.typ,
+                    "label": record.label,
+                    "start_t_s": record.start_t_s,
+                    "start_dist_m": record.start_dist_m,
+                    "end_t_s": min(end_t, elapsed) if end_t is not None else elapsed,
+                    "end_dist_m": (
+                        end_d
+                        if end_d is not None and not active
+                        else float(self._dist_now(entry_id, elapsed))
+                    ),
+                    "active": active,
+                    "reason": record.reason,
+                }
+            )
+        return out
+
+    def _dist_now(self, entry_id: int, elapsed: float) -> float:
+        idx = self.sample_idx(np.array([max(elapsed, 0.0)]))[0]
+        return float(self.telemetry.dist_m[entry_id, idx])
 
     # ------------------------------------------------------------------
     def elapsed(self, t_wall: float) -> np.ndarray:
@@ -314,6 +362,9 @@ class RaceView:
                 "bike": int(snap["bike"][i]),
                 "state": int(snap["state"][i]),
                 "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
+                "conditions": [
+                    c["label"] for c in self.conditions_at(i, t_wall, only_active=True)
+                ],
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
                 rows.append({**base, "t_s": float(times[i]), "provisional": False})
@@ -397,6 +448,9 @@ class RaceView:
                     "bike": int(snap["bike"][i]),
                     "state": int(snap["state"][i]),
                     "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
+                    "conditions": [
+                        c["label"] for c in self.conditions_at(i, t_wall, only_active=True)
+                    ],
                     "t_s": actual,
                     "provisional": provisional,
                 }

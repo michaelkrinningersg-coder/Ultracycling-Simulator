@@ -106,7 +106,9 @@ function raceLive(raceId) {
       const neighbours = frame.board.rows.map((r) => r.entry_id);
       for (const view of [this.overview, this.detail]) {
         if (!view) continue;
-        view.setFrame(frame.positions, frame.focus.entry_id, neighbours);
+        view.setFrame(
+          frame.positions, frame.focus.entry_id, neighbours, frame.focus.conditions
+        );
       }
       if (this.detail && this.overview) {
         this.detail._updateWindow();

@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M4 (v0.1.0)
+## Stand: Meilensteine M1–M4, dazu M5 Schritt 1
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -27,12 +27,18 @@ hier umgesetzt.
 | Strategie | Rennplan je Fahrer: Ziel-Intensität aus der Distanz, Anstiegs-Aufschlag, Radwahl je Servicepunkt-Abschnitt mit Wirtschaftlichkeitsprüfung — jede Entscheidung mit Begründung protokolliert |
 | Rennen (M3) | Vektorisiert über das ganze Feld, Einzelstart, Splitzeiten mit Sub-Tick-Interpolation, Ereignis-Strom, quantisierte Telemetrie |
 | Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit Zeitraffer 1×–1000×, Ergebnisliste, Fahrerdetail mit Verlaufskurven |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch, 119 Tests inklusive Golden-Master |
+| Zustände (M5.1) | Zustandssystem aus Abschnitt 6.5: multiplikative Modifikatoren auf FTP, Abfahrtstempo, Rollwiderstand und Energieaufnahme, verankert wahlweise in Zeit oder Distanz, mit linearem oder hartem Abklingen. Erster Erzeuger ist die Fehlplanung — der zu ambitionierte Plan schlägt spät zurück. Sichtbar als Balken über dem Profil, Chip in der Board-Zeile und Eintrag im Ticker |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch, 147 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten** (Meilensteine M5–M8, im Datenmodell vorbereitet):
-Verpflegung und Glykogen, Hydration, Schlaf und Schlafdruck, Wetter, Wind
-und Tag-Nacht-Zyklus, Pannen und Zwischenfälle, Saison und Kalender,
-Editoren im Spiel.
+**Noch nicht enthalten** (Meilensteine M5–M8): Verpflegung und Glykogen,
+Hydration, Schlaf und Schlafdruck, Wetter, Wind und Tag-Nacht-Zyklus,
+Pannen und Zwischenfälle, Saison und Kalender, Editoren im Spiel.
+
+Für all das steht der Katalog in `ultrasim/core/conditions.py` schon
+bereit: Magenprobleme, Hitzeeinbruch, Schlafdefizit, Sturzfolgen und
+Ersatzrad sind als Datenzeilen hinterlegt und wirken, sobald es einen
+Erzeuger dafür gibt. Der Physikcode muss dafür nicht mehr angefasst
+werden — das war der Zweck von Abschnitt 6.5.
 
 Was das praktisch bedeutet, steht offen in der Oberfläche: Das
 Fahrerdetail zeigt alle 25 Attribute, aber die zehn, die derzeit wirklich
@@ -150,14 +156,14 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 
 ```
 ultrasim/
-  core/     physics · rider · form · fatigue · strategy · events · engine
+  core/     physics · rider · form · fatigue · conditions · strategy · events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
   web/      main · playback · routers/ · templates/ · static/
   cli/      simulate · balance
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
-tests/      geo · core · engine · playback · golden_master
+tests/      geo · core · engine · conditions · playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
@@ -235,7 +241,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 119 Tests, rund 12 s
+pytest -q          # 147 Tests, rund 16 s
 ruff check ultrasim tools tests
 ```
 

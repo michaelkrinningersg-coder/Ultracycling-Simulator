@@ -26,6 +26,7 @@ import numpy as np
 from ..geo.route import Route
 from . import nutrition as nut
 from . import physics as ph
+from . import sleep as slp
 from .rider import Rider
 
 #: Ziel-Intensität als Funktion der Distanz: IF = a − b · ln(km).
@@ -366,8 +367,16 @@ def build_plan(
         )
 
     misjudgement = plan_misjudgement(route, overreach, rng_misjudge or rng)
+    horizon_h = float(slp.wake_horizon_h(rider.attr("schlaftoleranz")))
+    # Wer viel Schlaf verträgt und schlecht regeneriert, nimmt lieber
+    # kurze Nickerchen; wer gut regeneriert, holt sich einen echten Block.
+    prefers_short = rider.attr("schlaftoleranz") > rider.attr("regeneration")
     stops = plan_service_stops(
-        route, _section_times(sections, target_if, wish_if), rng_stops or rng
+        route,
+        _section_times(sections, target_if, wish_if),
+        rng_stops or rng,
+        wake_horizon_h=horizon_h,
+        prefers_short_sleep=prefers_short,
     )
 
     plan = RacePlan(
@@ -384,11 +393,17 @@ def build_plan(
     plan.notes.append((0.0, limit_note))
     if stops:
         full = sum(1 for s in stops if s.kind == "voll")
+        naps = sum(1 for s in stops if s.kind == "schlaf")
         planned_total = sum(s.planned_s for s in stops) * service_factor
+        sleep_note = (
+            f", {naps} Schlafstopp{'s' if naps != 1 else ''}"
+            if naps
+            else f", kein Schlaf geplant (Wachhorizont {horizon_h:.0f} h reicht)"
+        )
         plan.notes.append(
             (
                 0.0,
-                f"Stoppplan: {len(stops)} Halte ({full} Vollservice), "
+                f"Stoppplan: {len(stops)} Halte ({full} Vollservice{sleep_note}), "
                 f"zusammen rund {planned_total / 60.0:.0f} min geplante Standzeit",
             )
         )
@@ -439,6 +454,18 @@ FULL_SERVICE_INTERVAL_H = 8.0
 #: Streuung der tatsächlichen Stoppdauer um die geplante.
 SERVICE_JITTER = 0.18
 
+#: Ab diesem Anteil des Wachhorizonts plant ein Fahrer einen Schlafstopp.
+#: 0,72 × 40 h = knapp 29 h – wer die Strecke schneller schafft, faehrt
+#: durch, und genau das ist bei einem 1200er auch die richtige Antwort.
+SLEEP_PLAN_TRIGGER = 0.72
+#: Geplante Schlafdauer, je nach Typ.
+SLEEP_SHORT_S = (3600.0, 5400.0)  # 60–90 min, der Schlafgeizige
+SLEEP_LONG_S = (10800.0, 14400.0)  # 3–4 h, der Vorsichtige
+#: Bleibt weniger übrig, wird gar nicht mehr geschlafen …
+SLEEP_SKIP_REMAINING_H = 4.0
+#: … und unterhalb dieser Restzeit höchstens ein Nickerchen.
+SLEEP_LONG_MIN_REMAINING_H = 14.0
+
 
 @dataclass
 class StopPlan:
@@ -446,48 +473,68 @@ class StopPlan:
 
     service_idx: int
     dist_m: float
-    kind: str  # "kurz" | "voll"
+    kind: str  # "kurz" | "voll" | "schlaf"
     planned_s: float
 
     @property
     def label(self) -> str:
-        return "Vollservice" if self.kind == "voll" else "Kurzservice"
+        return {"voll": "Vollservice", "schlaf": "Schlafstopp"}.get(self.kind, "Kurzservice")
 
 
 def plan_service_stops(
-    route: Route, section_times_s: list[float], rng: np.random.Generator
+    route: Route,
+    section_times_s: list[float],
+    rng: np.random.Generator,
+    wake_horizon_h: float | None = None,
+    prefers_short_sleep: bool = False,
 ) -> list[StopPlan]:
     """Legt fest, an welchem Servicepunkt wie lange gehalten wird.
 
     Gehalten wird an jedem Servicepunkt – das Begleitfahrzeug ist ja da.
-    Der Unterschied liegt im Typ: normalerweise Kurzservice, aber wenn
-    seit dem letzten Vollservice genug Zeit vergangen ist, wird daraus
-    ein richtiger Halt mit Essen und Kleidungswechsel.
+    Der Unterschied liegt im Typ: normalerweise Kurzservice, nach genug
+    Zeit ein Vollservice, und wenn der Wachhorizont zur Neige geht, ein
+    Schlafstopp.
 
     ``section_times_s`` sind die geschätzten Fahrzeiten der Abschnitte
     zwischen den Servicepunkten; daraus ergibt sich, *wann* ein Fahrer
     einen Punkt erreicht, ohne dass das Rennen dafür laufen müsste.
+
+    Ein Rennen, das vor dem Trigger zu Ende ist, bekommt gar keinen
+    Schlafstopp – bei 1200 km ist Durchfahren die richtige Antwort, nicht
+    ein Modellartefakt.
     """
     stops: list[StopPlan] = []
-    elapsed_h = 0.0
     since_full_h = 0.0
+    since_sleep_h = 0.0
+    trigger_h = (
+        wake_horizon_h * SLEEP_PLAN_TRIGGER if wake_horizon_h else float("inf")
+    )
+
     for idx, sp in enumerate(route.service_points):
         if idx < len(section_times_s):
-            elapsed_h += section_times_s[idx] / 3600.0
-            since_full_h += section_times_s[idx] / 3600.0
-        full = since_full_h >= FULL_SERVICE_INTERVAL_H
-        if full:
+            hours = section_times_s[idx] / 3600.0
+            since_full_h += hours
+            since_sleep_h += hours
+
+        remaining_h = sum(section_times_s[idx + 1 :]) / 3600.0
+        # Kurz vor dem Ziel legt sich niemand mehr hin.
+        if since_sleep_h >= trigger_h and remaining_h > SLEEP_SKIP_REMAINING_H:
+            since_sleep_h = 0.0
             since_full_h = 0.0
-            planned = float(rng.uniform(*FULL_SERVICE_S))
+            # Ein Vier-Stunden-Block sieben Stunden vor dem Ziel wäre
+            # Unsinn: Wer absehbar ankommt, bevor die Müdigkeit ihn
+            # wirklich einholt, nimmt höchstens ein Nickerchen.
+            short = prefers_short_sleep or remaining_h < SLEEP_LONG_MIN_REMAINING_H
+            span = SLEEP_SHORT_S if short else SLEEP_LONG_S
+            kind, planned = "schlaf", float(rng.uniform(*span))
+        elif since_full_h >= FULL_SERVICE_INTERVAL_H:
+            since_full_h = 0.0
+            kind, planned = "voll", float(rng.uniform(*FULL_SERVICE_S))
         else:
-            planned = float(rng.uniform(*SHORT_SERVICE_S))
+            kind, planned = "kurz", float(rng.uniform(*SHORT_SERVICE_S))
+
         stops.append(
-            StopPlan(
-                service_idx=idx,
-                dist_m=sp.dist_m,
-                kind="voll" if full else "kurz",
-                planned_s=planned,
-            )
+            StopPlan(service_idx=idx, dist_m=sp.dist_m, kind=kind, planned_s=planned)
         )
     return stops
 

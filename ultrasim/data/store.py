@@ -152,6 +152,7 @@ class Store:
             form_pct=result.telemetry.form_pct,
             wprime_pct=result.telemetry.wprime_pct,
             glyco_pct=result.telemetry.glyco_pct,
+            sleep_pct=result.telemetry.sleep_pct,
             bike=result.telemetry.bike,
             state=result.telemetry.state,
             split_times_s=result.split_times_s.astype(np.float32),
@@ -175,6 +176,7 @@ class Store:
                 form_pct=data["form_pct"],
                 wprime_pct=data["wprime_pct"],
                 glyco_pct=data["glyco_pct"],
+                sleep_pct=data["sleep_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )

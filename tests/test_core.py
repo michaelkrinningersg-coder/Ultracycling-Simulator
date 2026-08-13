@@ -330,3 +330,28 @@ def test_bike_change_duration_respects_service_discipline():
     slick = np.mean([st.bike_change_duration(np.random.default_rng(i), 0.75) for i in range(500)])
     assert sloppy > slick
     assert st.bike_change_duration(np.random.default_rng(0), 0.75) >= st.BIKE_CHANGE_MIN_S
+
+
+def test_active_attribute_list_matches_the_code():
+    """Die Liste ist eine Zusicherung an den Nutzer, kein Kommentar.
+
+    Das Fahrerdetail hebt genau diese Attribute hervor. Steht dort eines,
+    das die Simulation gar nicht liest, ist die Anzeige eine Lüge – und
+    umgekehrt bleibt eine echte Stärke unsichtbar.
+    """
+    from pathlib import Path
+
+    from ultrasim.core.rider import ACTIVE_ATTRIBUTES, ATTRIBUTES
+
+    root = Path(__file__).resolve().parents[1] / "ultrasim"
+    sources = "\n".join(
+        path.read_text("utf-8")
+        for path in root.rglob("*.py")
+        if path.name not in ("rider.py", "names.py")
+    )
+    for key in ATTRIBUTES:
+        used = f'"{key}"' in sources
+        assert used == (key in ACTIVE_ATTRIBUTES), (
+            f"'{key}' wird {'benutzt' if used else 'nicht benutzt'}, steht aber "
+            f"{'nicht ' if used else ''}in ACTIVE_ATTRIBUTES"
+        )

@@ -70,6 +70,7 @@ ATTRIBUTES: dict[str, float] = {
 #: und wird in der UI angezeigt.
 ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
     {
+        # Physik und Pacing (M2–M4)
         "flach",
         "berg",
         "ausdauer",
@@ -79,7 +80,13 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         "abfahrtstechnik",
         "risikobereitschaft",
         "erfahrung",
-        "mentale_widerstandsfaehigkeit",
+        # Energiehaushalt (M5.2)
+        "fettverbrennung",
+        "kohlenhydratverbrennung",
+        "magenvertraeglichkeit",
+        # Schlaf (M5.3)
+        "schlaftoleranz",
+        "regeneration",
     }
 )
 

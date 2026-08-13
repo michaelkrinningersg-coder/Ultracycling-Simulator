@@ -26,6 +26,11 @@ from ..data.store import Store
 #: Ziel-DNF-Korridor je Distanzklasse (Abschnitt 6.5).
 DNF_TARGET = {"kurz": (0.01, 0.02), "mittel": (0.04, 0.07), "ultra": (0.08, 0.12)}
 
+#: Dauerband je Distanzklasse aus Abschnitt 2. Das ist der einzige
+#: Kalibrierungsanker, den das Dokument selbst liefert – und damit der
+#: erste, gegen den sich die Simulation messen lassen muss.
+DURATION_TARGET_H = {"kurz": (5.0, 15.0), "mittel": (15.0, 50.0), "ultra": (50.0, 110.0)}
+
 
 def percentile_line(label: str, values: np.ndarray, unit: str = "", scale: float = 1.0) -> str:
     if values.size == 0:
@@ -96,6 +101,23 @@ def run(args: argparse.Namespace) -> int:
     print(percentile_line("Rangkorrelation Potenzial", np.array(rank_corr)))
     print(percentile_line("Radwechsel je Rennen", np.array(bike_changes, dtype=float)))
     print(percentile_line("Rechenzeit (s)", np.array(compute)))
+    print()
+
+    # --- Abgleich mit dem Dauerband der Klasse ----------------------
+    lo_h, hi_h = DURATION_TARGET_H.get(route.distance_class, (0.0, 1e9))
+    field_h = np.array(all_times) / 3600.0
+    inside = float(np.mean((field_h >= lo_h) & (field_h <= hi_h))) * 100.0
+    print(
+        f"Dauerband Klasse '{route.distance_class}': {lo_h:.0f}–{hi_h:.0f} h · "
+        f"Feld liegt zu {inside:.0f} % darin "
+        f"(Sieger {wt.mean() / 3600:.1f} h, Letzter {field_h.max():.1f} h)"
+    )
+    if wt.mean() / 3600.0 < lo_h:
+        print(
+            "  Hinweis: Die Siegerzeit unterschreitet das Band. Bei einer Strecke am "
+            "unteren Rand der Klasse ist das erwartbar – die Klasse wird aus Distanz "
+            "*und* Höhenmetern abgeleitet, das Dauerband gilt für ihre Mitte."
+        )
     print()
 
     dnf_rate = dnf / max(starters, 1)

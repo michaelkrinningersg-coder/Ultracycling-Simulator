@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M4, dazu M5 Schritte 1–2
+## Stand: Meilensteine M1–M4, dazu M5 vollständig
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -30,11 +30,12 @@ hier umgesetzt.
 | Zustände (M5.1) | Zustandssystem aus Abschnitt 6.5: multiplikative Modifikatoren auf FTP, Abfahrtstempo, Rollwiderstand und Energieaufnahme, verankert wahlweise in Zeit oder Distanz, mit linearem oder hartem Abklingen. Erster Erzeuger ist die Fehlplanung — der zu ambitionierte Plan schlägt spät zurück. Sichtbar als Balken über dem Profil, Chip in der Board-Zeile und Eintrag im Ticker |
 | Energie (M5.2) | Glykogenspeicher, Substratverteilung nach Intensität, Zufuhr gedeckelt durch KH-Verbrennung *und* Magenverträglichkeit, Hungerast unter 15 % Füllstand. Der Rennplan rechnet vorab aus, welche Intensität die Zufuhr über die Distanz trägt, und nimmt das Minimum aus Distanz- und Energiegrenze |
 | Servicestopps (M5.2) | Halt an jedem Servicepunkt, Kurz- oder Vollservice je nach Zeit seit dem letzten großen Halt, Dauer × Servicedisziplin des Teams. Radwechsel läuft parallel statt zusätzlich |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch, 170 Tests inklusive Golden-Master |
+| Schlaf (M5.3) | Schlafdruck gegen einen persönlichen Wachhorizont (30–50 h), zirkadianer Tiefpunkt zwischen 02:00 und 05:00 Fahrer-Eigenzeit, geplante Schlafstopps am Servicepunkt, Notschlaf am Straßenrand ab kritischem Druck, Schlafgüte aus Regeneration mit Nachwirkung bei schlechtem Schlaf |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis und Fahrerdetail, Balancing-Batch mit Abgleich gegen die Dauerbänder der Klassen, 192 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten** (M5 Schritte 3–4, M6–M8): Schlaf und
-Schlafdruck, Hydration, Wetter, Wind und Tag-Nacht-Zyklus, Pannen und
-Zwischenfälle, Saison und Kalender, Editoren im Spiel.
+**Noch nicht enthalten** (M6–M8): Hydration, Wetter, Wind und
+Tag-Nacht-Zyklus, Pannen und Zwischenfälle, Saison und Kalender,
+Editoren im Spiel.
 
 Hydration fehlt bewusst noch: Ihre Eingangsgrößen sind Temperatur und
 Luftfeuchte, und die entstehen erst mit dem Wettermodell. Ohne sie wäre
@@ -48,11 +49,17 @@ Erzeuger dafür gibt. Der Physikcode muss dafür nicht mehr angefasst
 werden — das war der Zweck von Abschnitt 6.5.
 
 Was das praktisch bedeutet, steht offen in der Oberfläche: Das
-Fahrerdetail zeigt alle 25 Attribute, aber die zehn, die derzeit wirklich
-in die Simulation eingreifen, sind hell hervorgehoben — der Rest ist
-gedämpft. Und weil es noch keine Zwischenfälle gibt, gibt es auch fast
-keine Ausfälle; der DNF-Zielkorridor aus Abschnitt 6.5 wird erst mit
-M5/M6 erreichbar. Das Balancing-Werkzeug sagt das ausdrücklich dazu.
+Fahrerdetail zeigt alle 25 Attribute, aber nur die 14, die derzeit
+wirklich in die Simulation eingreifen, sind hell hervorgehoben. Ein Test
+hält diese Liste ehrlich — er vergleicht sie mit dem, was der Code
+tatsächlich liest, und schlägt in beide Richtungen an.
+
+Ausfälle gibt es weiterhin praktisch keine: Zum DNF führen laut
+Abschnitt 6.5 schwerer Sturz, schwerer Defekt, Zeitlimit und ein
+kumulativer Aufgabe-Score — und davon existiert bisher nur das Zeitlimit.
+Der Korridor wird erst mit den Zwischenfällen aus M6 erreichbar. Das
+Balancing-Werkzeug sagt das ausdrücklich dazu, statt eine grüne Zahl zu
+behaupten.
 
 ---
 
@@ -163,14 +170,16 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 
 ```
 ultrasim/
-  core/     physics · rider · form · fatigue · nutrition · conditions · strategy · events · engine
+  core/     physics · rider · form · fatigue · nutrition · sleep · conditions
+            strategy · events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
   web/      main · playback · routers/ · templates/ · static/
   cli/      simulate · balance
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
-tests/      geo · core · engine · conditions · nutrition · playback · golden_master
+tests/      geo · core · engine · conditions · nutrition · sleep · playback
+            golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
@@ -223,6 +232,39 @@ Hungerast vorbei, genau die Dramaturgie, die Abschnitt 6.1 beschreibt.
 Auf 1230 km bleiben 60 % übrig: Über 34 Stunden ist die geplante
 Speicherentnahme so dünn verteilt, dass praktisch die Zufuhr allein zählt.
 
+### Schlaf greift bewusst spät
+
+34 Stunden ohne Schlaf sind im Ultracycling normal. Der Malus ist
+deshalb bis rund 60 % des persönlichen Wachhorizonts **exakt null** und
+steigt erst danach:
+
+| Wachzeit | Uhrzeit (Eigenzeit) | Leistung |
+|---|---|---|
+| 12 h | 20:00 | 100 % |
+| 20 h | 03:30, erste Nacht | 97,8 % |
+| 34 h | 18:00 | 96,2 % |
+| 40 h | 03:30, zweite Nacht | 72,2 % |
+| 48 h | 03:30 | Notschlaf erzwungen |
+
+Weh tut nicht die erste Nacht, sondern die zweite — dann treffen ein
+hoher Grundwert und der zirkadiane Tiefpunkt aufeinander. Auf der
+1230-km-Strecke plant der Sieger folgerichtig **keinen** Schlafstopp,
+langsamere Fahrer im selben Rennen schon.
+
+### Abgleich mit den Dauerbändern
+
+Das Dokument liefert in Abschnitt 2 selbst einen Kalibrierungsanker.
+`ultrasim.cli.balance` prüft dagegen:
+
+| Strecke | Klasse | Band | Feld im Band | Sieger |
+|---|---|---|---|---|
+| Voralpen-Runde | kurz | 5–15 h | 100 % | 8,7 h |
+| Hochgebirgs-Marathon | mittel | 15–50 h | 100 % | 16,6 h |
+
+Die 1230-km-Strecke liegt mit 36 h unter ihrem Band (50–110 h) — sie ist
+mit 1230 km und 8000 hm am untersten Rand der Ultra-Klasse und dazu
+flach. Das Band beschreibt die Mitte der Klasse, nicht ihren Rand.
+
 Die interessante Eigenschaft des Modells: Die Zufuhr hat eine **absolute**
 Obergrenze, der Verbrauch skaliert mit der Leistung. Ein starker Fahrer
 kann nicht proportional mehr essen und wird relativ zu seiner FTP härter
@@ -265,7 +307,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 170 Tests, rund 36 s
+pytest -q          # 192 Tests, rund 43 s
 ruff check ultrasim tools tests
 ```
 

@@ -242,6 +242,7 @@ class RaceView:
         form = self.telemetry.form_pct[rows, idx]
         wprime = self.telemetry.wprime_pct[rows, idx]
         glyco = self.telemetry.glyco_pct[rows, idx]
+        sleep = self.telemetry.sleep_pct[rows, idx]
         dist[~started] = 0.0
         v[~started] = 0.0
         power[~started] = 0.0
@@ -256,6 +257,7 @@ class RaceView:
             "form": form,
             "wprime": wprime,
             "glyco": glyco,
+            "sleep": sleep,
         }
 
     # ------------------------------------------------------------------

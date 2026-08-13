@@ -35,6 +35,7 @@ from . import fatigue as fat
 from . import form as fm
 from . import nutrition as nut
 from . import physics as ph
+from . import sleep as slp
 from . import strategy as st
 from .events import (
     BIKE_CHANGE,
@@ -44,6 +45,7 @@ from .events import (
     DNF,
     FINISH,
     PLAN,
+    SLEEP,
     SPLIT_PASSED,
     START,
     STOP_END,
@@ -142,6 +144,7 @@ class Telemetry:
     form_pct: np.ndarray  # uint8, FTP_eff / FTP_basis in Prozent
     wprime_pct: np.ndarray  # uint8
     glyco_pct: np.ndarray  # uint8, Glykogenfüllstand in Prozent
+    sleep_pct: np.ndarray  # uint8, effektiver Schlafdruck in Prozent
     bike: np.ndarray  # uint8
     state: np.ndarray  # uint8
 
@@ -163,6 +166,7 @@ class Telemetry:
                 "form_pct",
                 "wprime_pct",
                 "glyco_pct",
+                "sleep_pct",
                 "bike",
                 "state",
             )
@@ -178,6 +182,7 @@ class Telemetry:
             form_pct=self.form_pct,
             wprime_pct=self.wprime_pct,
             glyco_pct=self.glyco_pct,
+            sleep_pct=self.sleep_pct,
             bike=self.bike,
             state=self.state,
         )
@@ -193,6 +198,7 @@ class Telemetry:
                 form_pct=data["form_pct"],
                 wprime_pct=data["wprime_pct"],
                 glyco_pct=data["glyco_pct"],
+                sleep_pct=data["sleep_pct"],
                 bike=data["bike"],
                 state=data["state"],
             )
@@ -390,6 +396,10 @@ def simulate_race(
         weight, np.array([r.attr("ausdauer") for r in field_riders])
     )
     intake_g_h = np.array([p.intake_g_h for p in plans])
+    wake_horizon = slp.wake_horizon_h(
+        np.array([r.attr("schlaftoleranz") for r in field_riders])
+    )
+    regeneration = np.array([r.attr("regeneration") for r in field_riders])
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -457,6 +467,7 @@ def simulate_race(
     work_j_last = np.zeros(n)
     glyco_kcal = glyco_cap.copy()
     bonked = np.zeros(n, dtype=bool)
+    wake_h = np.zeros(n)  # Stunden seit dem letzten Schlaf
     wprime = wprime_cap.copy()
     bike = planned_bike[:, 0].astype(np.int64)
     stop_left = np.zeros(n)
@@ -485,6 +496,7 @@ def simulate_race(
     buf_form = np.zeros((n, cap), dtype=np.uint8)
     buf_wp = np.zeros((n, cap), dtype=np.uint8)
     buf_gly = np.zeros((n, cap), dtype=np.uint8)
+    buf_slp = np.zeros((n, cap), dtype=np.uint8)
     buf_bike = np.zeros((n, cap), dtype=np.uint8)
     buf_state = np.zeros((n, cap), dtype=np.uint8)
     n_samples = 0
@@ -492,14 +504,14 @@ def simulate_race(
     def _grow() -> None:
         # Bewusst nicht np.resize: das tilt die Daten in flacher
         # Reihenfolge und würde die Zeilen gegeneinander verschieben.
-        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state
+        nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state
         new_cap = cap * 2
         grown = []
-        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state):
+        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state):
             bigger = np.zeros((n, new_cap), dtype=buf.dtype)
             bigger[:, :cap] = buf
             grown.append(bigger)
-        buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_bike, buf_state = grown
+        buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_bike, buf_state = grown
         cap = new_cap
 
     def _record() -> None:
@@ -512,6 +524,7 @@ def simulate_race(
         buf_form[:, n_samples] = np.clip(form_now * 100.0, 0, 255).astype(np.uint8)
         buf_wp[:, n_samples] = np.clip(wprime / wprime_cap * 100.0, 0, 255).astype(np.uint8)
         buf_gly[:, n_samples] = np.clip(glyco_kcal / glyco_cap * 100.0, 0, 255).astype(np.uint8)
+        buf_slp[:, n_samples] = np.clip(sleep_press * 100.0, 0, 255).astype(np.uint8)
         buf_bike[:, n_samples] = bike.astype(np.uint8)
         buf_state[:, n_samples] = state
         n_samples += 1
@@ -524,9 +537,59 @@ def simulate_race(
     descent_mod = np.ones(n)
     crr_mod = np.ones(n)
     bonk = np.ones(n)
+    sleep_perf = np.ones(n)
+    sleep_press = np.zeros(n)
     #: Takt der langsam veränderlichen Größen (Form, Ermüdung, Energie).
     slow_steps = max(1, int(round(10.0 / dt)))
     slow_dt = slow_steps * dt
+
+    def _take_sleep(i: int, duration_s: float, t_s: float, rng: np.random.Generator) -> None:
+        """Schlafstopp abrechnen: Wachzeit senken, Guete auswuerfeln.
+
+        Schlaf am Strassenrand oder im Fahrzeug ist nicht das Bett zu
+        Hause. Bleibt die Guete unter der Schwelle, wird der Druck nur
+        teilweise abgebaut *und* es bleibt ein Zustand zurueck, der ueber
+        die restliche Nacht nachwirkt (Abschnitt 6.5).
+        """
+        quality = slp.sleep_quality(float(regeneration[i]), rng)
+        recovered_h = duration_s / 3600.0 * quality * 3.0
+        wake_h[i] = max(0.0, wake_h[i] - recovered_h)
+        events.append(
+            RaceEvent(
+                i,
+                t_s,
+                SLEEP,
+                {
+                    "duration_s": round(duration_s, 1),
+                    "quality": round(quality, 2),
+                    "dist_km": round(dist[i] / 1000.0, 2),
+                    "wake_h_after": round(float(wake_h[i]), 1),
+                },
+            )
+        )
+        if quality < slp.POOR_SLEEP_QUALITY:
+            record = conditions.add(
+                i,
+                cond.CATALOG["schlafdefizit"],
+                t_s=t_s,
+                dist_m=float(dist[i]),
+                duration=4.0 * 3600.0,
+                strength=float(np.clip((slp.POOR_SLEEP_QUALITY - quality) / 0.3, 0.3, 1.0)),
+                reason=f"Schlecht geschlafen (Guete {quality:.0%})",
+            )
+            events.append(
+                RaceEvent(
+                    i,
+                    t_s,
+                    CONDITION_START,
+                    {
+                        "typ": record.typ,
+                        "label": record.label,
+                        "dist_km": round(dist[i] / 1000.0, 2),
+                        "reason": record.reason,
+                    },
+                )
+            )
 
     t = 0.0
     for tick in range(max_ticks + 1):
@@ -619,15 +682,28 @@ def simulate_race(
                 # Wer sich wieder erholt, kann erneut einbrechen.
                 bonked &= glyco_frac < nut.BONK_THRESHOLD * 1.6
 
+                # --- Schlafdruck (Abschnitt 6.2) ---------------------
+                # Der zirkadiane Faktor ist ein Skalar, kein Vektor: Alle
+                # Fahrer rechnen in Eigenzeit und starten in ihrem
+                # persoenlichen "08:00" (Entscheidung 13).
+                wake_h = np.where(state == STATE_RIDING, wake_h + slow_dt / 3600.0, wake_h)
+                circadian = slp.circadian_factor(
+                    slp.own_hour(config.start_time_of_day_s, t)
+                )
+                sleep_press = slp.pressure(wake_h, wake_horizon) * circadian
+                sleep_perf = slp.performance_factor(sleep_press)
+
                 f_section = fm.section_form_at(section_track, dist, section_grid)
                 f_fat = fat.fatigue_factor(work_j / 1000.0, work_cap_kj)
                 # f_umwelt ist das Produkt aller aktiven Zustände
                 # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
                 f_umwelt = cond.channel(cond_mods, "ftp")
-                form_now = f_season * f_day * f_section * f_fat * f_umwelt * bonk
+                form_now = f_season * f_day * f_section * f_fat * f_umwelt * bonk * sleep_perf
                 ftp_eff = ftp * form_now
                 ftp_eff_if = ftp_eff * target_if
-                descent_mod = cond.channel(cond_mods, "abfahrtstempo")
+                descent_mod = cond.channel(cond_mods, "abfahrtstempo") * slp.descent_factor(
+                    sleep_press
+                )
                 crr_mod = cond.channel(cond_mods, "crr")
 
             p_target = ftp_eff_if * (1.0 + ramp_pt[idx] * boost)
@@ -699,6 +775,34 @@ def simulate_race(
                     )
                 next_split[crossing] += 1
 
+            # --- Notschlaf (Abschnitt 6.2) ---------------------------
+            # Ab dem kritischen Druck geht nichts mehr. Anders als der
+            # geplante Schlafstopp haengt der nicht am Servicepunkt: Wer
+            # so muede ist, legt sich hin, wo er steht.
+            if tick % slow_steps == 0:
+                critical = running & (sleep_press >= slp.FORCED_SLEEP_PRESSURE)
+                if critical.any():
+                    for i in np.flatnonzero(critical):
+                        rng_stop = streams[i].get("sleep")
+                        duration = float(rng_stop.uniform(*slp.FORCED_SLEEP_S))
+                        _take_sleep(int(i), duration, t_next, rng_stop)
+                        stop_left[i] = duration
+                        state[i] = STATE_STOPPED
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t_next,
+                                STOP_START,
+                                {
+                                    "reason": "Notschlaf am Strassenrand",
+                                    "kind": "notschlaf",
+                                    "duration_s": round(duration, 1),
+                                    "dist_km": round(dist[i] / 1000.0, 2),
+                                },
+                            )
+                        )
+                    sleep_press[critical] = 0.0
+
             # --- Fehlplanung schlaegt durch --------------------------
             # Der Wuerfel ist beim Planen gefallen; hier wird die Rechnung
             # nur noch praesentiert. Deshalb reicht ein Distanzvergleich.
@@ -745,7 +849,12 @@ def simulate_race(
                         float(service_factor[i]),
                         rng_stop,
                     )
-                    reason = "Vollservice" if kind == "voll" else "Kurzservice"
+                    reason = {"voll": "Vollservice", "schlaf": "Schlafstopp"}.get(
+                        kind, "Kurzservice"
+                    )
+
+                    if kind == "schlaf":
+                        _take_sleep(int(i), duration, t_next, rng_stop)
 
                     # … und der Radwechsel, falls einer ansteht. Beides
                     # passiert gleichzeitig, also zählt die längere Dauer,
@@ -840,6 +949,7 @@ def simulate_race(
         form_pct=buf_form[:, :n_samples].copy(),
         wprime_pct=buf_wp[:, :n_samples].copy(),
         glyco_pct=buf_gly[:, :n_samples].copy(),
+        sleep_pct=buf_slp[:, :n_samples].copy(),
         bike=buf_bike[:, :n_samples].copy(),
         state=buf_state[:, :n_samples].copy(),
     )

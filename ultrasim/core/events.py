@@ -32,7 +32,7 @@ CONDITION_END = "CONDITION_END"
 
 #: Ereignisse, die auch bei starkem Zeitraffer noch gestreamt werden.
 MAJOR_EVENTS = frozenset(
-    {SPLIT_PASSED, FINISH, DNF, BIKE_CHANGE, MECHANICAL, BONK, CONDITION_START}
+    {SPLIT_PASSED, FINISH, DNF, BIKE_CHANGE, MECHANICAL, BONK, SLEEP, CONDITION_START}
 )
 
 
@@ -77,6 +77,11 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
         return (
             f"{who}{p.get('reason', 'Stopp')} bei km {p.get('dist_km', 0):.0f} "
             f"({p.get('duration_s', 0):.0f} s)"
+        )
+    if event.type == SLEEP:
+        return (
+            f"{who}Schlafstopp bei km {p.get('dist_km', 0):.0f} – "
+            f"{p.get('duration_s', 0) / 60:.0f} min, Güte {p.get('quality', 0):.0%}"
         )
     if event.type == BONK:
         return (

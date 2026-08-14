@@ -79,6 +79,13 @@ PRESETS: dict[str, tuple[str, list[tuple[float, float]], tuple[float, float, flo
     "langstrecke": ("Nordroute Langstrecke (Demo)", LANGSTRECKE, (52.3759, 9.7320, 58.0)),
 }
 
+#: Kehren an steilen Stellen. Eine Peilungsschwingung von ±0,26 rad
+#: (20°) alle 200 m ergibt rund 250 Grad Richtungsänderung je Kilometer —
+#: die Größenordnung einer Passstraße mit Serpentinen. Zum Vergleich:
+#: Die glatte Grundwelle des Kurses liefert unter 20 Grad je Kilometer.
+SWITCHBACK_RAD = 0.34
+SWITCHBACK_WAVELENGTH_M = 200.0
+
 #: Überlagerte Wellen: (Amplitude in m, Wellenlänge in km, Phase)
 ROLLING = [(4.5, 7.3, 0.0), (2.6, 3.9, 1.7), (1.4, 2.1, 0.6)]
 
@@ -120,6 +127,20 @@ def build_track(
         base += (hi - lo) * grade
     ele[dist > marks[-1]] = base
 
+    # --- Netto-Höhendrift herausnehmen ------------------------------
+    # Die Steigungen der Profiltabelle summieren sich nicht auf null,
+    # und ohne Korrektur steigt jede Strecke durchgehend an: Die
+    # „Voralpen-Runde" endete 800 m über ihrem Start, die 1230-km-Route
+    # durchs Flachland auf 3283 m. Eine Runde kommt dort an, wo sie
+    # losgefahren ist.
+    #
+    # Abgezogen wird eine Gerade. Die Anstiege bleiben dadurch erhalten
+    # — bei 800 m auf 300 km sind es 0,27 Prozentpunkte, die jede
+    # Steigung gleichmäßig verliert.
+    drift = ele[-1] - ele[0]
+    if abs(drift) > 1.0:
+        ele = ele - drift * (dist / max(dist[-1], 1.0))
+
     for amp, wl_km, phase in ROLLING:
         ele += amp * np.sin(2.0 * math.pi * dist / (wl_km * 1000.0) + phase)
 
@@ -136,6 +157,26 @@ def build_track(
         0.9 * np.sin(2.0 * math.pi * dist / 41_000.0)
         + 0.55 * np.sin(2.0 * math.pi * dist / 12_500.0 + 2.1)
         + 0.25 * np.sin(2.0 * math.pi * dist / 3_100.0 + 0.4)
+    )
+
+    # --- Kehren, wo es steil ist ------------------------------------
+    # Ohne sie war der Kurs auf jeder Distanz so glatt, dass das
+    # Kurvenlimit der Physik bei 300 km/h lag und nie gebunden hat —
+    # Abfahrtstechnik und Risikobereitschaft waren dadurch auf allen
+    # mitgelieferten Strecken wirkungslos. Eine echte Passstraße dreht
+    # sich auf einem Kilometer um mehrere hundert Grad; eine
+    # Bundesstraße um zwanzig.
+    #
+    # Die Amplitude wächst mit der Steigung: Bis 4 % bleibt es eine
+    # gestreckte Landstraße, ab 8 % sind es Serpentinen.
+    grade_at_point = np.gradient(ele, dist, edge_order=1)
+    steep = np.clip((np.abs(grade_at_point) - 0.04) / 0.04, 0.0, 1.0)
+    # Weichzeichnen, damit die Kehren nicht an der Segmentgrenze
+    # anspringen, sondern in den Anstieg hineinwachsen.
+    span = 41
+    steep = np.convolve(np.pad(steep, span // 2, mode="edge"), np.ones(span) / span, mode="valid")
+    heading = heading + SWITCHBACK_RAD * steep * np.sin(
+        2.0 * math.pi * dist / SWITCHBACK_WAVELENGTH_M
     )
     lat = np.empty(n)
     lon = np.empty(n)

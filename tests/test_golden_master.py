@@ -28,9 +28,9 @@ from ultrasim.core.rider import generate_pool
 #: Streckenkennzahlen der Testroute (siehe conftest).
 GOLDEN_ROUTE = {
     "distance_m": 60_100.0,
-    "ascent_m": 543.1,
+    "ascent_m": 457.2,
     "n_splits": 6,
-    "n_segments": 187,
+    "n_segments": 189,
     "n_climbs": 1,
 }
 
@@ -72,19 +72,27 @@ GOLDEN_ROUTE = {
 #:   sich Gewicht und FTP aller neu erzeugten Fahrer, und die Reihenfolge
 #:   verschiebt sich entsprechend – Startnummer 6 und 3 gewinnen, 10
 #:   verliert drei Minuten.
+#: * Sechs tote Attribute (nach M8). Fünf Mechaniken kamen dazu —
+#:   Sitzbeschwerden ab zwölf Stunden, Reparaturzeit aus der
+#:   Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein bindendes
+#:   Kurvenlimit und Kehren im Streckengenerator. Dazu die Reparatur
+#:   einer alten Datenschwäche: Die Profile stiegen netto durchgehend an,
+#:   die „Runde" endete 800 m über ihrem Start. Seit der Entdriftung ist
+#:   die Teststrecke flacher (457 statt 543 hm) und das Feld entsprechend
+#:   zweieinhalb Minuten schneller.
 GOLDEN_RESULT = [
-    (6, 6149.69),
-    (8, 6153.77),
-    (12, 6209.28),
-    (11, 6330.70),
-    (3, 6431.96),
-    (5, 6432.69),
-    (9, 6466.89),
-    (2, 6589.41),
-    (10, 6683.31),
-    (4, 6877.14),
-    (7, 7198.12),
-    (1, 7238.15),
+    (6, 5997.48),
+    (8, 6004.64),
+    (12, 6050.98),
+    (11, 6166.06),
+    (5, 6259.57),
+    (3, 6259.59),
+    (9, 6293.92),
+    (2, 6401.40),
+    (10, 6501.66),
+    (4, 6672.42),
+    (1, 7009.87),
+    (7, 7027.00),
 ]
 
 TOLERANCE_S = 0.5
@@ -120,7 +128,7 @@ def test_race_result_is_stable(route):
 #:
 #: Die Toleranz ist mit zwei Sekunden auf 40 Stunden lockerer als oben –
 #: dieselbe Begründung, nur über 25-mal so viele Rechenschritte.
-GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 6847.0, "class": "mittel"}
+GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mittel"}
 
 #: * Radwechsel am Anstieg. Vorher konnte ein Fahrer nur am
 #:   Servicepunkt wechseln; auf 507 km mit fünf Servicepunkten war ein
@@ -132,13 +140,13 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 6847.0, "class": "mi
 #:   wird auf dieser welligen Strecke rund 10 Minuten langsamer: Die
 #:   Wechsel kosten Zeit, die sich erst auf steileren Pässen auszahlt.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (5, 143389.09),
-    (7, 144156.60),
-    (8, 147473.97),
-    (3, 151516.47),
-    (1, 158590.47),
-    (4, 164359.10),
-    (6, 167968.84),
+    (5, 145771.09),
+    (7, 146199.34),
+    (8, 149599.83),
+    (3, 152527.19),
+    (1, 161803.22),
+    (4, 164690.77),
+    (6, 168135.97),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -146,15 +154,14 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
 GOLDEN_LONG_EVENTS: dict[str, int] = {
-    "BIKE_CHANGE": 11,
-    "CONDITION_END": 32,
-    "CONDITION_START": 32,
-    "DECISION": 9,
+    "CONDITION_END": 33,
+    "CONDITION_START": 41,
+    "DECISION": 10,
     "DNF": 1,
     "FINISH": 7,
     "INCIDENT": 48,
-    "PLAN": 75,
-    "SLEEP": 2,
+    "PLAN": 56,
+    "SLEEP": 3,
     "SPLIT_PASSED": 315,
     "START": 8,
     "STOP_END": 129,

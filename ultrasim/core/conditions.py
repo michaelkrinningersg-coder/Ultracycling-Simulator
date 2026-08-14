@@ -121,6 +121,15 @@ CATALOG: dict[str, ConditionSpec] = {
         anchor=ANCHOR_TIME,
         decay=DECAY_LINEAR,
     ),
+    "sitzbeschwerden": ConditionSpec(
+        typ="sitzbeschwerden",
+        label="Sitzbeschwerden",
+        # Wundsein zwingt aus dem Sattel und kostet vor allem Leistung;
+        # bergab traut sich niemand mehr, der im Sitzen Schmerzen hat.
+        effects={"ftp": 0.94, "abfahrtstempo": 0.94},
+        anchor=ANCHOR_TIME,
+        decay=DECAY_STEP,
+    ),
     "hitze": ConditionSpec(
         typ="hitze",
         label="Hitzeeinbruch",

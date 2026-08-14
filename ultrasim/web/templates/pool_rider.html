@@ -23,6 +23,7 @@
   "fieldMean": field_mean,
   "wkgRange": wkg_range,
   "attrRange": attr_range,
+  "routes": routes,
 }|tojson }}</script>
 
 <div class="page" x-data="riderEditor()">
@@ -105,6 +106,56 @@
     </p>
   </div>
 
+  <!-- Probelauf ---------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Probelauf</span>
+      <span class="faint">was die Änderungen auf einer Strecke bringen</span>
+    </div>
+    {% if routes %}
+    <div class="form-row">
+      <label>Strecke
+        <select x-model="probeRoute">
+          {% for route in routes %}
+          <option value="{{ route.id }}">{{ route.name }} · {{ '%.0f'|format(route.distance_km) }} km</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="button" @click="probe()" :disabled="probing"
+              x-text="probing ? 'rechnet …' : 'Rechnen'"></button>
+      <span x-show="probing" x-cloak>
+        <span class="bar" style="display:inline-block;width:8rem;vertical-align:middle">
+          <span class="fill" :style="`width:${(probeProgress*100).toFixed(0)}%`"></span></span>
+      </span>
+    </div>
+
+    <template x-if="probeResult">
+      <div class="readout" style="margin-top:.5rem">
+        <div class="item"><span class="k">vorher</span>
+          <span class="v mono" x-text="hms(probeResult.before_s)"></span></div>
+        <div class="item"><span class="k">nachher</span>
+          <span class="v mono" x-text="hms(probeResult.after_s)"></span></div>
+        <div class="item"><span class="k">Unterschied</span>
+          <span class="v mono big"
+                :class="probeResult.delta_s < 0 ? 'good' : (probeResult.delta_s > 0 ? 'bad' : '')"
+                x-text="deltaText"></span></div>
+      </div>
+    </template>
+    <template x-if="probeError">
+      <p class="bad" x-text="probeError"></p>
+    </template>
+
+    <p class="dim">
+      Beide Fassungen fahren dasselbe Rennen — mit derselben Fahrer-ID und
+      damit demselben Wetter, denselben Pannenkandidaten und derselben
+      Tagesform. Was an Zeit übrig bleibt, sind die Änderungen und sonst
+      nichts. Gespeichert wird dabei nichts.
+    </p>
+    {% else %}
+    <p class="dim">Ohne Strecke kein Probelauf.</p>
+    {% endif %}
+  </div>
+
   <div class="panel">
     <div class="panel-title"><span>Fahrer löschen</span></div>
     <form method="post" action="/pool/rider/{{ rider.id }}/delete"
@@ -145,6 +196,53 @@
       get wkg() { return this.r.ftp_w / Math.max(this.r.weight_kg, 1); },
       get wkgOk() { return this.wkg >= meta.wkgRange[0] && this.wkg <= meta.wkgRange[1]; },
       reset() { this.r = structuredClone(original); this.saved = false; this.error = ''; },
+
+      // --- Probelauf ------------------------------------------------
+      probeRoute: (meta.routes && meta.routes.length) ? meta.routes[0].id : '',
+      probing: false,
+      probeProgress: 0,
+      probeResult: null,
+      probeError: '',
+      get deltaText() {
+        const d = this.probeResult ? this.probeResult.delta_s : null;
+        if (d === null || d === undefined) return '—';
+        const sign = d < 0 ? '\u2212' : '+';
+        const total = Math.round(Math.abs(d));
+        return `${sign}${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+      },
+      hms(seconds) {
+        if (seconds === null || seconds === undefined) return 'DNF';
+        const total = Math.round(seconds);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        return `${h}:${String(m).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+      },
+      async probe() {
+        this.probing = true; this.probeError = ''; this.probeResult = null; this.probeProgress = 0;
+        try {
+          const res = await fetch(`/pool/rider/${original.id}/probe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...this.r, route_id: this.probeRoute }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || 'Probelauf fehlgeschlagen');
+          this.pollProbe(data.poll, data.job_id);
+        } catch (err) {
+          this.probeError = String(err.message || err);
+          this.probing = false;
+        }
+      },
+      async pollProbe(url, jobId) {
+        const jobs = await (await fetch(url)).json();
+        const job = jobs.find((j) => j.id === jobId);
+        if (!job) { this.probing = false; return; }
+        this.probeProgress = job.progress;
+        if (!job.done) { setTimeout(() => this.pollProbe(url, jobId), 400); return; }
+        this.probing = false;
+        if (job.state === 'fehler') this.probeError = job.error;
+        else this.probeResult = job.result;
+      },
       async save() {
         this.saving = true; this.error = ''; this.saved = false;
         try {

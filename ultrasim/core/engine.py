@@ -213,6 +213,7 @@ class Telemetry:
         "sleep": "Schlafmangel",
         "weather": "Wetter",
         "hydration": "Flüssigkeit",
+        "altitude": "Höhe",
     }
 
     @property
@@ -450,6 +451,11 @@ def simulate_race(
     target_if = np.array([p.target_if for p in plans])
     skill_norm = np.array([r.attr_norm("abfahrtstechnik") for r in field_riders])
     risk_norm = np.array([r.attr_norm("risikobereitschaft") for r in field_riders])
+    altitude_norm = np.array([r.attr_norm("hoehenanpassung") for r in field_riders])
+    mechanic_norm = np.array([r.attr_norm("mechanikerfaehigkeit") for r in field_riders])
+    saddle_onset_s = inc.saddle_onset_h(
+        np.array([r.attr("sitzkomfort") for r in field_riders])
+    ) * 3600.0
     service_factor = np.array(
         [
             team_map[r.team_id].service_factor if r.team_id in team_map else 1.0
@@ -518,7 +524,7 @@ def simulate_race(
     curv_pt = curv_seg[seg_idx_pt] if len(curv_seg) else np.full(route.n_points, 1.0)
     # Kurvenlimit ohne Fahreranteil vorrechnen: sqrt(µ·g·r) hängt nur an
     # der Strecke, der Fahreranteil ist ein Faktor.
-    radius_pt = np.clip(57296.0 / curv_pt, 8.0, 4000.0)
+    radius_pt = ph.corner_radius_m(curv_pt)
     vcorner_pt = np.sqrt(ph.MU_DRY * ph.G * radius_pt)
     corner_skill = 1.0 + 0.12 * skill_norm + 0.08 * risk_norm
     rho_pt = ph.air_density(route.ele_m)
@@ -712,6 +718,7 @@ def simulate_race(
             ("sleep", sleep_perf),
             ("weather", weather_perf),
             ("hydration", hydration_perf),
+            ("altitude", altitude_perf),
         ):
             # Runden statt abschneiden: Sieben Faktoren mit je einem
             # halben Prozent Abschneidefehler summieren sich sonst zu
@@ -756,6 +763,8 @@ def simulate_race(
     f_fat = np.ones(n)
     f_umwelt = np.ones(n)
     hydration_perf = np.ones(n)
+    altitude_perf = np.ones(n)
+    saddle_sore = np.zeros(n, dtype=bool)
     sleep_press = np.zeros(n)
     headwind = np.zeros(n)
     weather_perf = np.ones(n)
@@ -995,6 +1004,44 @@ def simulate_race(
                         )
                     underfed_kcal[starving] = 0.0
 
+                # --- Sitzbeschwerden (Abschnitt 6.5) -----------------
+                # Wundsein kommt aus der Zeit im Sattel, nicht aus der
+                # Distanz: Wer langsam fährt, sitzt länger und leidet
+                # früher. Deshalb die Eigenzeit als Maß und nicht der
+                # Kilometerstand.
+                # ``t`` ist die Eigenzeit des Fahrers — die Simulation
+                # rechnet jeden Fahrer in seiner eigenen Uhr, der
+                # Startversatz kommt erst bei der Anzeige dazu.
+                sore = (
+                    (t >= saddle_onset_s)
+                    & ~saddle_sore
+                    & (state == STATE_RIDING)
+                )
+                if sore.any():
+                    for i in np.flatnonzero(sore):
+                        record = conditions.add(
+                            int(i),
+                            cond.CATALOG["sitzbeschwerden"],
+                            t_s=t,
+                            dist_m=float(dist[i]),
+                            duration=inc.SADDLE_DURATION_S,
+                            reason=f"{saddle_onset_s[i] / 3600.0:.0f} h im Sattel",
+                        )
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t,
+                                CONDITION_START,
+                                {
+                                    "typ": record.typ,
+                                    "label": record.label,
+                                    "dist_km": round(dist[i] / 1000.0, 2),
+                                    "reason": record.reason,
+                                },
+                            )
+                        )
+                    saddle_sore[sore] = True
+
                 glyco_frac = glyco_kcal / glyco_cap
                 bonk = nut.bonk_factor(glyco_frac)
                 fresh_bonk = (glyco_frac < nut.BONK_THRESHOLD) & ~bonked & (state == STATE_RIDING)
@@ -1137,9 +1184,10 @@ def simulate_race(
                 # f_umwelt ist das Produkt aller aktiven Zustände
                 # (Abschnitt 6.5); Wetter kommt mit M6 in denselben Kanal.
                 f_umwelt = cond.channel(cond_mods, "ftp")
+                altitude_perf = ph.altitude_factor(route.ele_m[idx], altitude_norm)
                 form_now = (
                     f_season * f_day * f_fresh * f_section * f_fat * f_umwelt
-                    * bonk * sleep_perf * weather_perf * hydration_perf
+                    * bonk * sleep_perf * weather_perf * hydration_perf * altitude_perf
                 )
                 ftp_eff = ftp * form_now
                 ftp_eff_if = ftp_eff * target_if * if_mod
@@ -1336,6 +1384,7 @@ def simulate_race(
                         heat_norm=float(heat_norm[i]),
                         wet_norm=float(wet_norm[i]),
                         service_factor=float(service_factor[i]),
+                        mechanic_norm=float(mechanic_norm[i]),
                     )
                     if rng_inc.random() < inc.accept_probability(typ, ctx):
                         _apply_incident(i, t_next, inc.resolve(typ, rng_inc, ctx))

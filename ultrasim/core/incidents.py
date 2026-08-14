@@ -129,6 +129,30 @@ ROUGH_SURFACES = frozenset({"gravel", "cobbles"})
 #: Bezugszufuhr, an der die Magenbelastung gemessen wird.
 REF_INTAKE_G_H = 80.0
 
+#: Ab dieser Fahrzeit meldet sich der Sattel. Zwölf Stunden sind der
+#: Punkt, ab dem im Ultracycling von Wundsein die Rede ist: darunter ist
+#: es eine Frage der Hose, darüber eine des Rennens.
+SADDLE_ONSET_H = 12.0
+#: Spanne des Attributs um diese Schwelle. Sitzkomfort 90 hält gut
+#: doppelt so lange durch wie 50, Sitzkomfort 10 kaum die halbe Zeit.
+SADDLE_SCALE_H = 6.0
+#: Einmal da, bleibt es: Wundsein heilt nicht im Sattel. Die Dauer ist
+#: deshalb so gewählt, dass sie jedes Rennen überdauert.
+SADDLE_DURATION_S = 400.0 * 3600.0
+
+#: Wie stark die Mechanikerfähigkeit die Standzeit streckt oder kürzt.
+#: ±30 % zwischen den Enden der Skala — genug, dass es über ein Ultra
+#: mit drei Pannen eine Viertelstunde ausmacht, wenig genug, dass
+#: niemand das Attribut deswegen maximiert.
+REPAIR_SKILL_SPAN = 0.30
+
+
+def saddle_onset_h(sitzkomfort: np.ndarray) -> np.ndarray:
+    """Nach wie vielen Stunden im Sattel es wehtut."""
+    norm = (np.asarray(sitzkomfort, dtype=np.float64) - 50.0) / 50.0
+    return SADDLE_ONSET_H + SADDLE_SCALE_H * (1.0 + norm)
+
+
 #: Kalorienrückstand gegenüber dem Plan, ab dem ein Fahrer als
 #: unterversorgt gilt (Abschnitt 6.5: "Zufuhr über 3 h unter Plan").
 UNDERFED_KCAL = 350.0
@@ -272,6 +296,16 @@ class RideContext:
     wet_norm: float = 0.0
     on_rough: bool = False
     service_factor: float = 1.0
+    #: Mechanikerfähigkeit des Fahrers, −1 … +1 um den Mittelwert. Auch
+    #: im unterstützten Rennen wechselt nicht das Begleitfahrzeug allein:
+    #: Wer selbst am Straßenrand anfängt, statt zu warten, steht kürzer —
+    #: und wer den Schnellspanner sucht, länger.
+    mechanic_norm: float = 0.0
+
+
+def _repair_factor(ctx: RideContext) -> float:
+    """Standzeit-Faktor aus der Mechanikerfähigkeit."""
+    return float(np.clip(1.0 - REPAIR_SKILL_SPAN * ctx.mechanic_norm, 0.5, 1.6))
 
 
 def accept_probability(typ: str, ctx: RideContext) -> float:
@@ -326,11 +360,11 @@ def resolve(typ: str, rng: np.random.Generator, ctx: RideContext) -> Outcome:
 
     if typ == PANNE:
         # Supported: das Begleitfahrzeug wechselt das Rad, 1,5–4 min.
-        stop = float(rng.uniform(90.0, 240.0)) * ctx.service_factor
+        stop = float(rng.uniform(90.0, 240.0)) * ctx.service_factor * _repair_factor(ctx)
         return Outcome(typ, spec.label, stop_s=stop, reason="Reifenpanne")
 
     if typ == DEFEKT:
-        stop = float(rng.uniform(300.0, 1500.0)) * ctx.service_factor
+        stop = float(rng.uniform(300.0, 1500.0)) * ctx.service_factor * _repair_factor(ctx)
         if rng.random() < SEVERE_MECH_P * ctx.service_factor:
             # Schwerer Defekt: entweder kommt der Fahrer auf einem
             # schlechteren Ersatzrad weiter oder gar nicht mehr. Im
@@ -509,6 +543,9 @@ __all__ = [
     "Outcome",
     "PANNE",
     "RideContext",
+    "REPAIR_SKILL_SPAN",
+    "SADDLE_DURATION_S",
+    "SADDLE_ONSET_H",
     "SEVERE_CRASH_P",
     "SEVERE_MECH_P",
     "SPERRUNG",
@@ -518,5 +555,6 @@ __all__ = [
     "give_up_rate",
     "resolve",
     "risk_profile",
+    "saddle_onset_h",
     "schedule_for_rider",
 ]

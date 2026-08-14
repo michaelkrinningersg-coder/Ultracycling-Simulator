@@ -45,7 +45,8 @@ hier umgesetzt.
 | Karriere | Saisons in Folge mit gemeinsamem Fahrerpool. Der Jahreswechsel friert erst die Wertung als Kapitel ein und lässt dann altern — umgekehrt stünde in der ewigen Bestenliste das Feld des Folgejahres. Der Kalender wird ins nächste Jahr übernommen statt neu vorgeschlagen: Dieselben Rennen an denselben Terminen machen die Bestenliste erst lesbar. Dazu ewige Bestenliste (Titel vor Punkten) und Lebenslauf je Fahrer |
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 489 Tests inklusive zweier Golden-Master |
+| Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und Hitze, die auf einer Flachstrecke auch ankommt. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 504 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -55,6 +56,12 @@ zeigt. Ebenso der Abgleich mit realen Ultra-Ergebnissen aus M8: Für die
 großen Rennen liegen die Strecken nicht als GPX vor, und eine
 Kalibrierung gegen nachgebaute Profile misst am Ende den
 Profilgenerator.
+
+**Noch offen**: `oberflaechenkompetenz` ist das letzte Attribut ohne
+Wirkung, und das bleibt es, bis Strecken Oberflächen kennen. Eine
+Mechanik dafür wäre schnell geschrieben — nur läse sie eine Angabe, die
+kein Profil mitbringt, und die Zahl im Bericht käme dann aus einer
+Voreinstellung statt aus der Strecke. Ehrlicher ist die Null.
 
 ### Eine Karriere ist eine Kette eingefrorener Jahre
 
@@ -97,10 +104,11 @@ Rennen neben zweistelligen Megabyte Telemetrie sind dafür ein
 angemessener Preis.
 
 Was gerade wirkt, steht offen in der Oberfläche: Das Fahrerdetail zeigt
-alle 25 Attribute, aber nur die 21, die tatsächlich in die Simulation
+alle 25 Attribute, aber nur die 24, die tatsächlich in die Simulation
 eingreifen, sind hell hervorgehoben. Ein Test hält diese Liste ehrlich —
 er vergleicht sie mit dem, was der Code liest, und schlägt in beide
-Richtungen an.
+Richtungen an. Genau dieser Test hat die fünf Mechaniken unten erzwungen:
+Er wurde rot, als sie dazukamen, weil die Liste noch die alte war.
 
 ### DNF-Korridor
 
@@ -570,6 +578,46 @@ wirken können, läuft die Messung zusätzlich mit **erzwungenem Wetter**
 messbar“ fälschlich „wirkungslos“: An einem 16-Grad-Tag ist
 Hitzetoleranz nichts wert.
 
+### Was der Bericht dann gefunden hat
+
+Sechs Attribute standen mit einer Null in der Matrix — sie kosteten
+Potenzial-Budget, standen im Fahrerdetail und bewirkten nichts. Der
+Bericht hat das nicht vermutet, sondern gemessen, und damit ließ sich der
+Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe:
+
+| Attribut | Warum null | Was daraus wurde | Wirkung heute |
+|---|---|---|---|
+| `sitzkomfort` | kein Abnehmer im Code | Zustand *Sitzbeschwerden* ab 12–23 h im Sattel, −6 % FTP und Abfahrtstempo, heilt im Rennen nicht mehr | **153 s** (38-h-Rennen) |
+| `mechanikerfaehigkeit` | kein Abnehmer | ±30 % auf jede Standzeit nach Panne und Defekt | 29–50 s |
+| `hoehenanpassung` | kein Abnehmer | 7 % Leistungsverlust je 1000 m über 1500 m, ±50 % über das Attribut | 58 s (Hochgebirge), **0 s im Flachen** |
+| `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | 249 s |
+| `hitzetoleranz` | die Wetterläufe liefen auf einer Strecke mit 2200 m Durchschnittshöhe: Von 29 °C kamen dort 20 °C an | Wetterlauf nimmt die *tiefste* Strecke; dazu die Datenreparatur unten | **703 s** (Flachstrecke bei Hitze) |
+| `oberflaechenkompetenz` | kein Abnehmer, und keine Strecke kennt Schotter | offen — ohne Oberflächenkennzeichnung im Streckeneditor gibt es nichts zu lesen | 0 s |
+
+Die Null bei `hoehenanpassung` im Flachen ist dabei kein Rest, sondern
+das Ergebnis: Ein Attribut, das nur über 1500 m greift, *muss* auf einer
+Meeresspiegelstrecke exakt null messen. Ein Wert dort wäre der Fehler.
+
+`risikobereitschaft` bleibt bewusst unmessbar. Sie ist zweischneidig
+angelegt — mehr Tempo in der Abfahrt, mehr Sturzwahrscheinlichkeit — und
+die beiden Seiten heben sich in der Zielzeit ungefähr auf. Wollte man
+dort eine Zahl sehen, müsste man die Waage kippen, und damit wäre das
+Attribut keine Entscheidung mehr, sondern ein Bonus.
+
+**Eine Datenschwäche, die keine Mechanik war.** Beim Nachsehen wegen der
+Hitze fiel auf, dass alle drei mitgelieferten Profile netto durchgehend
+anstiegen: Die „Voralpen-Runde" endete 800 m über ihrem Start. Der
+Generator zieht die Drift jetzt linear ab, die Runden sind wieder
+Runden, und die Nordroute liegt bei 260 statt 2200 m im Mittel. Das ist
+der eigentliche Grund, warum Hitzetoleranz sich vorher nicht messen
+ließ — nicht das Wettermodell.
+
+Sichtbar wird das alles im **Attribut-Tuner** im Fahrerdetail: zwei
+Schieberegler, ein Klick, und beide Versionen des Fahrers starten im
+selben Rennen. Er nutzt dieselbe Paarmessung wie der Bericht, nur für
+einen Fahrer und interaktiv — +25 Fettverbrennung und +25
+Magenverträglichkeit sind auf der Langstrecke 17:23 min wert.
+
 ---
 
 ## Leistung
@@ -592,8 +640,8 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 489 Tests, rund 160 s
-pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 125 s
+pytest -q                    # 504 Tests, rund 180 s
+pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 140 s
 ruff check ultrasim tools tests
 ```
 

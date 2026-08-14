@@ -28,6 +28,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+
 from .. import calibration as cal
 from ..calibration_report import build_report
 from ..core.rider import ATTRIBUTES, generate_pool
@@ -68,13 +70,15 @@ def run(args: argparse.Namespace) -> int:
         )
         effects[route.name] = cal.attribute_sensitivity(route, base, teams, sens_seeds)
 
-    # Die Wetterläufe brauchen nur eine Strecke: Gemessen wird, ob ein
-    # Attribut unter *seiner* Wetterlage anspringt, nicht wie es mit der
-    # Streckenform zusammenspielt. Dafür reicht die mittlere Distanz —
-    # lang genug für einen Tagesgang, kurz genug für vier Läufe.
+    # Die Wetterläufe brauchen nur eine Strecke, aber nicht irgendeine:
+    # Es muss die **tiefste** sein. Die Presets setzen die Temperatur auf
+    # Streckenniveau, und der Höhengradient zieht davon 6,5 K je 1000 m
+    # ab — auf einer Strecke mit 2200 m Durchschnittshöhe kommen von 29 °C
+    # Hitze noch 20 °C an, und Hitzetoleranz misst sich als wirkungslos.
+    # Genau das ist im ersten Bericht passiert.
     weather: tuple[Route, dict[str, list[cal.AttributeEffect]]] | None = None
     if args.weather and len(routes) > 1:
-        wx_route = routes[len(routes) // 2]
+        wx_route = min(routes, key=lambda r: float(np.mean(r.ele_m)))
         wx_effects: dict[str, list[cal.AttributeEffect]] = {}
         base = pool[: args.base_riders]
         for preset in cal.WEATHER_PRESETS:

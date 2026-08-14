@@ -26,7 +26,7 @@ from ultrasim.core.rider import ACTIVE_ATTRIBUTES, ARCHETYPES, ATTRIBUTES, gener
 
 #: Wenige Attribute mit unterschiedlicher Wirkungsart: eines aus der
 #: Physik, eines aus dem Energiehaushalt, eines ohne Anschluss.
-SAMPLE_ATTRS = ["flach", "fettverbrennung", "sitzkomfort"]
+SAMPLE_ATTRS = ["flach", "fettverbrennung", "oberflaechenkompetenz"]
 
 
 @pytest.fixture(scope="module")
@@ -119,11 +119,19 @@ def test_flat_power_makes_riders_faster(effects):
 
 
 def test_an_attribute_without_a_consumer_does_nothing(effects):
-    """`sitzkomfort` wird von keiner Mechanik gelesen – exakt null."""
-    assert "sitzkomfort" not in ACTIVE_ATTRIBUTES
-    comfort = next(e for e in effects if e.attr == "sitzkomfort")
-    assert comfort.seconds == 0.0
-    assert not comfort.measurable
+    """`oberflaechenkompetenz` wird von keiner Mechanik gelesen – exakt null.
+
+    Der Platzhalter dieses Tests war ursprünglich ``sitzkomfort``. Der
+    hat seit den Sitzbeschwerden einen Abnehmer, und damit wanderte die
+    Rolle weiter an das letzte verbliebene tote Attribut: Ohne
+    Schotterabschnitte im Streckeneditor liest niemand die Oberfläche.
+    Wird auch das eingebaut, hat dieser Test keinen Kandidaten mehr —
+    und genau dann darf er ersatzlos verschwinden.
+    """
+    assert "oberflaechenkompetenz" not in ACTIVE_ATTRIBUTES
+    surface = next(e for e in effects if e.attr == "oberflaechenkompetenz")
+    assert surface.seconds == 0.0
+    assert not surface.measurable
 
 
 def test_noise_is_not_reported_as_an_effect():

@@ -87,6 +87,12 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         # Schlaf (M5.3)
         "schlaftoleranz",
         "regeneration",
+        # Höhe und Sattel — die beiden Mechaniken, die aus der
+        # Attributmatrix des Kalibrierungsberichts entstanden sind: Beide
+        # Attribute standen im Fahrerdetail, kosteten Budget und wirkten
+        # messbar nicht.
+        "hoehenanpassung",
+        "sitzkomfort",
         # Wetter (M6.1)
         "hitzetoleranz",
         "kaeltetoleranz",
@@ -94,6 +100,7 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         "seitenwindfestigkeit",
         # Zwischenfälle und Aufgabe (M6.2)
         "materialpflege",
+        "mechanikerfaehigkeit",
         "navigationssicherheit",
         "mentale_widerstandsfaehigkeit",
     }

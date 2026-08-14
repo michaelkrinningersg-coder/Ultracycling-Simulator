@@ -59,6 +59,41 @@ MIN_SPEED = 1.5
 MU_DRY = 0.75
 
 
+#: Ab dieser Höhe kostet die dünne Luft Leistung. Darunter ist der
+#: Effekt kleiner als die Streuung der Tagesform, darüber wird er
+#: schnell deutlich.
+ALTITUDE_THRESHOLD_M = 1500.0
+#: Verlust je 1000 m über der Schwelle, für einen Fahrer mit
+#: durchschnittlicher Höhenanpassung. Die Literatur nennt für
+#: Ausdauerleistung grob 6–8 % je 1000 m über 1500 m; 7 % liegt
+#: dazwischen und trifft auf 2500 m die oft genannten 7 %.
+ALTITUDE_LOSS_PER_KM = 0.07
+#: Wie stark das Attribut Höhenanpassung den Verlust dämpft oder
+#: verschärft. ±50 % zwischen den Enden der Skala.
+ALTITUDE_SKILL_SPAN = 0.50
+#: Tiefer sinkt die Leistung nicht — auf 4000 m fährt niemand mehr
+#: Rennen, aber ein Modell, das ins Bodenlose läuft, ist auch keins.
+ALTITUDE_FLOOR = 0.78
+
+
+def altitude_factor(
+    elevation_m: np.ndarray | float, altitude_norm: np.ndarray | float = 0.0
+) -> np.ndarray:
+    """Leistungsfaktor aus der Höhe (Attribut ``hoehenanpassung``).
+
+    Getrennt von ``air_density``, weil es das Gegenteil bewirkt: Dünne
+    Luft macht *schneller* (weniger Luftwiderstand) und gleichzeitig
+    *schwächer* (weniger Sauerstoff). Bisher stand nur die erste Hälfte
+    im Modell — auf 2500 m war Höhe damit ein reiner Vorteil, und das
+    Attribut Höhenanpassung ohne Wirkung.
+    """
+    over_km = np.maximum(np.asarray(elevation_m, dtype=np.float64) - ALTITUDE_THRESHOLD_M, 0.0)
+    over_km /= 1000.0
+    loss = ALTITUDE_LOSS_PER_KM * over_km
+    loss = loss * (1.0 - ALTITUDE_SKILL_SPAN * np.asarray(altitude_norm, dtype=np.float64))
+    return np.maximum(1.0 - loss, ALTITUDE_FLOOR)
+
+
 def air_density(elevation_m: np.ndarray | float, temperature_c: np.ndarray | float = 15.0) -> np.ndarray:
     """Luftdichte aus Höhe und Temperatur.
 
@@ -145,20 +180,38 @@ def downhill_power_taper(v: np.ndarray) -> np.ndarray:
     )
 
 
+#: Wie viel enger die *engste* Kurve eines Abschnitts ist als der
+#: Durchschnitt. Die Kurvigkeit ist ein Mittelwert über den Abschnitt,
+#: gebremst wird aber für die engste Kehre darin: Ein Abschnitt mit
+#: 250 Grad je Kilometer ist selten ein gleichmäßiger Bogen von 230 m
+#: Radius, sondern meist eine Gerade und eine 180-Grad-Kehre mit 15 m.
+#: Der Faktor 5 ist gegenüber diesem Extremfall noch zurückhaltend.
+#:
+#: Ohne ihn lag das Kurvenlimit auf allen mitgelieferten Strecken über
+#: 150 km/h und hat nie gebunden — Abfahrtstechnik und
+#: Risikobereitschaft waren damit messbar wirkungslos.
+CORNER_TIGHTNESS = 5.0
+
+
+def corner_radius_m(curviness: np.ndarray) -> np.ndarray:
+    """Bremswirksamer Kurvenradius aus der Kurvigkeit in Grad je km.
+
+    Wer sich auf 1000 m um C Grad dreht, fährt im Mittel einen Radius von
+    360/(2π) · 1000/C ≈ 57296/C Metern. Maßgeblich ist aber die engste
+    Kurve, nicht der Mittelwert — daher ``CORNER_TIGHTNESS``.
+    """
+    c = np.maximum(np.asarray(curviness, dtype=np.float64), 1.0)
+    return np.clip(57296.0 / c / CORNER_TIGHTNESS, 8.0, 4000.0)
+
+
 def corner_speed_limit(
     curviness: np.ndarray,
     skill_norm: np.ndarray,
     risk_norm: np.ndarray,
     mu: float = MU_DRY,
 ) -> np.ndarray:
-    """Kurvenlimit v_max = sqrt(µ · g · r).
-
-    Der Radius wird aus der Kurvigkeit (Richtungsänderung in Grad pro km)
-    geschätzt: wer sich auf 1000 m um C Grad dreht, fährt im Mittel einen
-    Radius von 360/(2π) · 1000/C ≈ 57296/C Metern.
-    """
-    c = np.maximum(np.asarray(curviness, dtype=np.float64), 1.0)
-    radius = np.clip(57296.0 / c, 8.0, 4000.0)
+    """Kurvenlimit v_max = sqrt(µ · g · r)."""
+    radius = corner_radius_m(curviness)
     skill = 1.0 + 0.12 * skill_norm + 0.08 * risk_norm
     return np.minimum(np.sqrt(mu * G * radius) * skill, MAX_SPEED)
 

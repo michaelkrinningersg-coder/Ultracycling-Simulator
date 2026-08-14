@@ -100,6 +100,7 @@ def pool_index(request: Request) -> HTMLResponse:
 # ----------------------------------------------------------------------
 @router.get("/pool/rider/{rider_id}", response_class=HTMLResponse)
 def rider_edit(request: Request, rider_id: int) -> HTMLResponse:
+    state = _state(request)
     teams, riders = _load(request)
     rider = next((r for r in riders if r.id == rider_id), None)
     if rider is None:
@@ -120,6 +121,7 @@ def rider_edit(request: Request, rider_id: int) -> HTMLResponse:
             "field_mean": round(field_mean, 1),
             "wkg_range": WKG_RANGE,
             "attr_range": ATTRIBUTE_RANGE,
+            "routes": state.store.list_routes(),
         },
     )
 
@@ -157,6 +159,76 @@ async def rider_save(request: Request, rider_id: int) -> dict[str, Any]:
 
     state.store.save_pool(teams, riders)
     return {"rider_id": rider.id, "potential": round(rider.potential, 2), "wkg": round(rider.wkg, 3)}
+
+
+#: Der Probelauf vergleicht zwei Fassungen desselben Fahrers in *einem*
+#: Rennen. Dass das geht, ist keine Bequemlichkeit, sondern der Kern:
+#: Die Zufallsströme hängen an der Fahrer-ID, also bekommen beide
+#: Fassungen dasselbe Wetter, dieselben Pannenkandidaten und dieselbe
+#: Tagesform. Was an Zeit übrig bleibt, sind die Änderungen und sonst
+#: nichts — dieselbe Bauform wie die Attributmatrix in M8.
+@router.post("/pool/rider/{rider_id}/probe")
+async def rider_probe(request: Request, rider_id: int) -> dict[str, Any]:
+    """Probelauf: Was bringen die Änderungen auf einer Strecke?"""
+    from dataclasses import replace as dc_replace
+
+    from ... import calibration as cal
+    from ...core.engine import simulate_race
+    from ..jobs import Job, race_progress
+
+    state = _state(request)
+    teams, riders = _load(request)
+    original = next((r for r in riders if r.id == rider_id), None)
+    if original is None:
+        raise HTTPException(status_code=404, detail=f"Kein Fahrer mit der ID {rider_id}")
+
+    body = await request.json()
+    route_id = str(body.get("route_id") or "")
+    try:
+        route = state.store.load_route(route_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    tuned = dc_replace(
+        original,
+        ftp_w=float(body.get("ftp_w", original.ftp_w)),
+        weight_kg=float(body.get("weight_kg", original.weight_kg)),
+        height_cm=float(body.get("height_cm", original.height_cm)),
+        age=int(body.get("age", original.age)),
+        attributes={
+            key: round(float(np.clip(float(value), *ATTRIBUTE_RANGE)), 1)
+            for key, value in (body.get("attributes") or original.attributes).items()
+            if key in ATTRIBUTES
+        },
+    )
+    key = f"tuner-{rider_id}"
+
+    def work(job: Job) -> dict[str, Any]:
+        job.detail = route.name
+        result = simulate_race(
+            route,
+            [original, tuned],
+            teams,
+            cal.sensitivity_config(seed=int(body.get("seed", 4200))),
+            progress=race_progress(job),
+        )
+        before, after = result.entries[0], result.entries[1]
+        return {
+            "route": route.name,
+            "distance_km": round(route.distance_km, 1),
+            "before_s": before.finish_time_s,
+            "after_s": after.finish_time_s,
+            "delta_s": (
+                None
+                if before.finish_time_s is None or after.finish_time_s is None
+                else round(after.finish_time_s - before.finish_time_s, 1)
+            ),
+            "before_dnf": before.dnf_reason or None,
+            "after_dnf": after.dnf_reason or None,
+        }
+
+    job = state.jobs.submit(kind="tuner", label=f"Probelauf {route.name}", work=work, season_id=key)
+    return {"job_id": job.id, "poll": f"/api/season/{key}/jobs"}
 
 
 @router.post("/pool/rider/{rider_id}/delete")

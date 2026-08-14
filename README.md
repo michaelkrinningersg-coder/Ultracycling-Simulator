@@ -713,10 +713,22 @@ Die Voralpen-Runde hat dafür 37 % Schotter, rauen Belag und Pflaster
 bekommen. Bewusst nicht die Flachetappe: Die ist als Heimterrain des
 Zeitfahrers dazugekommen, und Schotter untergräbt genau das.
 
-`oberflaechenkompetenz` misst dort jetzt **76 s** bei 31:0 — und auf der
-glatten Flachetappe exakt null. Das ist kein Rest, sondern das Ergebnis:
+`oberflaechenkompetenz` misst dort jetzt **76 s** — und auf allen drei
+glatten Strecken exakt null. Das ist kein Rest, sondern das Ergebnis:
 Auf frischem Asphalt gibt es nichts zu können, und ein Attribut, das
 dort etwas bewirkte, wäre ein verkappter Grundbonus.
+
+Zwei Nebenwirkungen, die der Bericht mitgenommen hat. Der Schotter macht
+die Voralpen-Runde langsamer — 9,4 statt 9,0 h —, aber nicht härter: Der
+DNF-Anteil *fällt* von 2,1 auf 1,7 % und liegt damit erstmals im
+Korridor von 1–2 %, wo er vorher knapp darüber lag. Das klingt
+widersprüchlich und ist es nicht. Der Rennplan kennt die Oberfläche, er
+rechnet die Abschnittszeiten damit und wählt den Reifen danach; die
+Fahrer sind also langsamer *und im Plan*. Aufgegeben wird aber nicht
+nach absoluter Zeit, sondern nach Rückstand auf den eigenen Plan.
+
+Und `sitzkomfort` misst über die Vibrationskopplung jetzt auf zwei
+Strecken statt auf einer: 61 s im Hochgebirge, 84 s auf der Nordroute.
 
 Damit hat **jedes der 25 Attribute** eine Mechanik. Der Test, der
 früher hieß „ein Attribut ohne Abnehmer bewirkt nichts", ist umgedreht

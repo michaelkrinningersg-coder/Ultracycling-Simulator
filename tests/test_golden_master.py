@@ -80,19 +80,29 @@ GOLDEN_ROUTE = {
 #:   die „Runde" endete 800 m über ihrem Start. Seit der Entdriftung ist
 #:   die Teststrecke flacher (457 statt 543 hm) und das Feld entsprechend
 #:   zweieinhalb Minuten schneller.
+#: * Der Anstiegsaufschlag wird bezahlt. Bis hierher hat ``berg`` Watt
+#:   verschenkt: Die Zielintensität kam aus Distanz, Ausdauer und
+#:   Erfahrung, der Aufschlag am Anstieg kam obendrauf, und niemand hat
+#:   ihn abgetragen. Jetzt normiert der Plan die zeitgewichtete mittlere
+#:   Intensität auf den geplanten Wert — wer am Berg zulegt, fährt im
+#:   Flachen darunter. Dazu die Positionsdisziplin aus ``flach``, die
+#:   von ±3 % auf ±8 % CdA aufgezogen wurde, und eine Fehlplanung, die
+#:   früher greift. Auf diesen welligen 60 km verschiebt sich fast das
+#:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
+#:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
-    (6, 5997.48),
-    (8, 6004.64),
-    (12, 6050.98),
-    (11, 6166.06),
-    (5, 6259.57),
-    (3, 6259.59),
-    (9, 6293.92),
-    (2, 6401.40),
-    (10, 6501.66),
-    (4, 6672.42),
-    (1, 7009.87),
-    (7, 7027.00),
+    (6, 5981.66),
+    (12, 6094.34),
+    (8, 6114.41),
+    (11, 6217.09),
+    (3, 6270.05),
+    (5, 6326.14),
+    (9, 6330.72),
+    (2, 6502.57),
+    (10, 6579.09),
+    (4, 6765.28),
+    (1, 7053.53),
+    (7, 7107.49),
 ]
 
 TOLERANCE_S = 0.5
@@ -139,14 +149,20 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Begleitfahrzeug dort). Aus 0 werden 11 Radwechsel, und das Feld
 #:   wird auf dieser welligen Strecke rund 10 Minuten langsamer: Die
 #:   Wechsel kosten Zeit, die sich erst auf steileren Pässen auszahlt.
+#: * Bezahlter Anstiegsaufschlag, weitere Aero-Spanne, frühere
+#:   Fehlplanung. Der Führungswechsel an der Spitze (7 vor 5 statt
+#:   umgekehrt) ist die Aussage dieses Laufs: Auf 1000 km mit 5200 hm
+#:   entscheidet jetzt, wer seinen Aufschlag verkraftet, nicht wer ihn
+#:   geschenkt bekommt. Die acht zusätzlichen PLAN-Ereignisse sind die
+#:   neue Begründungszeile im Rennplan — je Fahrer eine.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (5, 145771.09),
-    (7, 146199.34),
-    (8, 149599.83),
-    (3, 152527.19),
-    (1, 161803.22),
-    (4, 164690.77),
-    (6, 168135.97),
+    (7, 146441.89),
+    (5, 146984.61),
+    (8, 150767.30),
+    (3, 152533.05),
+    (1, 161828.09),
+    (4, 162769.83),
+    (6, 166286.61),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -154,13 +170,13 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
 GOLDEN_LONG_EVENTS: dict[str, int] = {
-    "CONDITION_END": 33,
-    "CONDITION_START": 41,
+    "CONDITION_END": 34,
+    "CONDITION_START": 42,
     "DECISION": 10,
     "DNF": 1,
     "FINISH": 7,
     "INCIDENT": 48,
-    "PLAN": 56,
+    "PLAN": 64,
     "SLEEP": 3,
     "SPLIT_PASSED": 315,
     "START": 8,

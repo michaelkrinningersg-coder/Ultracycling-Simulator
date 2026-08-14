@@ -14,9 +14,9 @@ DNF-Korridor (Abschnitt 6.5).
 
 | Strecke | Klasse | Sieger | Median | Letzter | Feld im Band | DNF+OTL | Ziel | Rangkorrelation |
 |---|---|---|---|---|---|---|---|---|
-| Voralpen-Runde (300 km) | kurz | 8,9 h | 9,3 h | 13,8 h | 100 % | 2,1 % ⚠ | 1–2 % | 0,43 |
-| Hochgebirgs-Marathon (507 km) | mittel | 17,5 h | 18,9 h | 26,0 h | 94 % | 5,0 % | 4–7 % | 0,51 |
-| Nordroute Langstrecke (1230 km) | ultra | 39,1 h | 41,9 h | 62,6 h | 17 % | 9,2 % | 8–12 % | 0,44 |
+| Voralpen-Runde (300 km) | kurz | 9,0 h | 9,4 h | 14,0 h | 100 % | 2,1 % ⚠ | 1–2 % | 0,45 |
+| Hochgebirgs-Marathon (507 km) | mittel | 17,8 h | 19,4 h | 26,8 h | 97 % | 5,0 % | 4–7 % | 0,51 |
+| Nordroute Langstrecke (1230 km) | ultra | 39,3 h | 42,2 h | 64,7 h | 17 % | 9,6 % | 8–12 % | 0,45 |
 
 Die Rangkorrelation zwischen Potenzial und Ergebnis sagt, wie stark
 sich die Attribute durchsetzen. Bei 1,0 wäre das Rennen eine
@@ -33,14 +33,14 @@ Angegeben ist die mittlere Platzierung; in Klammern die Siege.
 
 | Archetyp | Voralpen-Runde | Hochgebirgs-Marathon | Nordroute Langstrecke |
 |---|---|---|---|
-| Zeitfahr-Spezialist | 19,9 (0) | 23,7 (0) | 21,2 (0) |
-| Kletterer | 14,2 (1) | 10,3 (0) | 10,2 (2) |
-| Diesel / Ultra-Maschine | 17,4 (0) | 20,7 (0) | 19,0 (1) |
-| Schlafgeiziger | 16,4 (0) | 17,3 (0) | 14,1 (0) |
-| Fettverbrenner | 15,4 (0) | 15,1 (0) | 14,2 (0) |
-| Draufgänger | 15,5 (5) | 12,4 (5) | 11,4 (3) |
-| Allrounder | 15,1 (0) | 17,4 (0) | 16,0 (0) |
-| Rohdiamant | 14,2 (0) | 13,0 (1) | 12,2 (0) |
+| Zeitfahr-Spezialist | 18,1 (0) | 21,8 (0) | 18,2 (0) |
+| Kletterer | 16,0 (0) | 12,0 (0) | 11,4 (0) |
+| Diesel / Ultra-Maschine | 17,4 (0) | 20,3 (0) | 19,8 (1) |
+| Schlafgeiziger | 17,0 (0) | 16,2 (0) | 14,3 (0) |
+| Fettverbrenner | 15,3 (0) | 15,0 (0) | 14,8 (0) |
+| Draufgänger | 15,3 (4) | 12,5 (4) | 11,8 (4) |
+| Allrounder | 15,5 (0) | 18,4 (0) | 16,8 (0) |
+| Rohdiamant | 13,6 (2) | 12,9 (2) | 11,9 (1) |
 
 Feldgröße je Rennen: 32 Fahrer, 6 Rennen je Strecke.
 
@@ -86,27 +86,27 @@ heißt, das Attribut hält Fahrer im Rennen.
 
 | Attribut | Voralpen-Runde | Hochgebirgs-Marathon | Nordroute Langstrecke | wirkt | Ausfälle |
 |---|---|---|---|---|---|
-| magenvertraeglichkeit | 404 s | 865 s | 886 s | ja | -2 |
-| fettverbrennung | 160 s | 467 s | 394 s | ja | +0 |
-| ausdauer | 85 s | 208 s | 421 s | ja | +0 |
-| berg | 92 s | 312 s | 161 s | ja | +0 |
-| abfahrtstechnik | 33 s | 249 s° | · | ja | +1 |
-| navigationssicherheit | · | · | · | ja | +0 |
+| magenvertraeglichkeit | 412 s | 910 s | 938 s | ja | -2 |
+| fettverbrennung | 167 s | 507 s | 426 s | ja | +0 |
+| ausdauer | 78 s | 240 s | 456 s | ja | +0 |
+| flach | 69 s | 127 s | 322 s | ja | +0 |
+| abfahrtstechnik | 32 s | 237 s° | · | ja | +1 |
 | hitzetoleranz | · | · | · | ja | -1 |
+| navigationssicherheit | · | · | · | ja | +0 |
+| berg | 46 s | 180 s | 108 s | ja | +0 |
 | materialpflege | · | · | · | ja | -1 |
-| flach | 28 s | 41 s | 119 s | ja | +0 |
-| schlaftoleranz | · | · | 109 s | ja | +0 |
-| seitenwindfestigkeit | 22 s | 32 s | 100 s | ja | +0 |
-| erfahrung | · | · | 94 s° | ja | +0 |
-| sitzkomfort | · | · | 87 s | ja | +0 |
-| pacing_disziplin | · | · | -83 s° | ja | +0 |
+| schlaftoleranz | · | · | 115 s | ja | +0 |
+| erfahrung | · | 10 s | 112 s° | ja | +0 |
+| seitenwindfestigkeit | 21 s | 30 s | 102 s | ja | +0 |
+| sitzkomfort | · | · | 88 s | ja | +0 |
 | risikobereitschaft | · | · | · | ja | -1 |
-| hoehenanpassung | · | 58 s | · | ja | +0 |
-| kohlenhydratverbrennung | · | 56 s° | · | ja | +0 |
-| regeneration | 6 s | 26 s | 52 s | ja | +0 |
-| mechanikerfaehigkeit | 19 s | 29 s | 50 s | ja | +0 |
+| pacing_disziplin | · | · | · | ja | +0 |
+| hoehenanpassung | · | 61 s | · | ja | +0 |
+| kohlenhydratverbrennung | 19 s° | 60 s° | · | ja | +0 |
+| mechanikerfaehigkeit | 19 s | 30 s | 55 s | ja | +0 |
+| regeneration | 6 s | 26 s | 51 s | ja | +0 |
 | konstanz | · | · | · | ja | +0 |
-| kaeltetoleranz | · | · | · | ja | +0 |
+| kaeltetoleranz | · | 4 s | · | ja | +0 |
 | mentale_widerstandsfaehigkeit | · | · | · | ja | +0 |
 | naesseresistenz | · | · | · | ja | +0 |
 | spritzigkeit | · | · | · | ja | +0 |
@@ -130,7 +130,7 @@ Wirkung des Attributs. Wer die messen will, braucht ein anderes
 Werkzeug: den Vergleich zweier Verteilungen über viele Rennen
 statt einer Paardifferenz.
 
-**In keinem Lauf messbar, obwohl als aktiv geführt:** `spritzigkeit`, `mentale_widerstandsfaehigkeit`, `risikobereitschaft`, `navigationssicherheit`, `materialpflege`.
+**In keinem Lauf messbar, obwohl als aktiv geführt:** `spritzigkeit`, `mentale_widerstandsfaehigkeit`, `pacing_disziplin`, `risikobereitschaft`, `navigationssicherheit`, `materialpflege`.
 Entweder fehlt die Lage, in der das Attribut greift — dann gehört
 eine Strecke oder ein Wetter in diesen Lauf —, oder es wirkt
 nicht, und dann ist die Selbstauskunft der Oberfläche falsch.
@@ -154,11 +154,11 @@ Chaos verschwindet.
 
 | Attribut | hitze | kalt | regen | sturm |
 |---|---|---|---|---|
-| hitzetoleranz | 175 s | · | · | · |
-| kaeltetoleranz | · | 13 s | · | · |
+| hitzetoleranz | 185 s | · | · | · |
+| kaeltetoleranz | · | 14 s | · | · |
 | naesseresistenz | · | · | 22 s | · |
-| seitenwindfestigkeit | 20 s | 40 s | 51 s | 220 s |
-| abfahrtstechnik | · | 24 s† | 22 s† | · |
+| seitenwindfestigkeit | 20 s | 40 s | 52 s | 195 s |
+| abfahrtstechnik | · | 27 s† | 20 s† | 11 s† |
 | risikobereitschaft | · | · | · | · |
 
 Ein † markiert Zahlen, die nicht über den Standardfehler, sondern
@@ -168,12 +168,12 @@ allen Fahrern in dieselbe Richtung.
 
 In dieser Tabelle ist `abfahrtstechnik` bei „kalt" der Fall, für den
 es die zweite Nachweisform gibt: 38 von 47 Fahrern gewinnen Zeit, im
-Mittel stehen davon 24 Sekunden und im Median 15. Der Standardfehler
+Mittel stehen davon 27 Sekunden und im Median 15. Der Standardfehler
 ist mit 40 Sekunden größer als das Mittel selbst — die Differenz sind
 einzelne Fahrer, denen das Attribut nicht geholfen hat.
 
-`risikobereitschaft` zeigt bei „sturm" ein Mittel von -86 Sekunden und
-einen Median von +10: 33 von 48 Fahrern kommen schneller durch, und
-die übrigen verlieren mehr, als jene gewinnen. Beides ist wahr, und
+`risikobereitschaft` zeigt bei „sturm" ein Mittel von -70 Sekunden und
+einen Median von +6: 33 von 48 Fahrern kommen schneller durch, und die
+übrigen verlieren mehr, als jene gewinnen. Beides ist wahr, und
 deshalb steht keine der beiden Zahlen als „die Wirkung" in der Zeile —
 das Attribut ist eine Entscheidung, kein Bonus.

@@ -220,8 +220,19 @@ def test_misjudgement_probability_grows_with_overreach(route):
         )
         return hits / 400.0
 
-    assert rate(0.01) < rate(0.03) < rate(0.06)
-    assert rate(0.06) <= st.MISJUDGE_MAX_P + 0.05
+    # Stützstellen aus der Rampe ableiten statt eintippen: Sonst prüft
+    # dieser Test nach der nächsten Balancing-Schraube die Sättigung
+    # gegen sich selbst statt den Anstieg. Genau das ist passiert, als
+    # MISJUDGE_FULL von 0,060 auf 0,030 fiel — bei 0,03 und 0,06 stand
+    # dann beide Male der Deckel.
+    span = st.MISJUDGE_FULL - st.MISJUDGE_THRESHOLD
+    low = st.MISJUDGE_THRESHOLD + 0.2 * span
+    mid = st.MISJUDGE_THRESHOLD + 0.6 * span
+
+    assert rate(low) < rate(mid) < rate(st.MISJUDGE_FULL)
+    # Oberhalb der Rampe wächst nichts mehr, und der Deckel hält.
+    assert rate(2.0 * st.MISJUDGE_FULL) == rate(st.MISJUDGE_FULL)
+    assert rate(st.MISJUDGE_FULL) <= st.MISJUDGE_MAX_P + 0.05
 
 
 def test_misjudgement_stays_inside_the_route(route):

@@ -46,7 +46,7 @@ hier umgesetzt.
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 510 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 513 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -587,11 +587,11 @@ Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe:
 
 | Attribut | Warum null | Was daraus wurde | Wirkung heute |
 |---|---|---|---|
-| `sitzkomfort` | kein Abnehmer im Code | Zustand *Sitzbeschwerden* ab 12–23 h im Sattel, −6 % FTP und Abfahrtstempo, heilt im Rennen nicht mehr | **87 s** (1230 km) |
-| `mechanikerfaehigkeit` | kein Abnehmer | ±30 % auf jede Standzeit nach Panne und Defekt | 19–50 s |
-| `hoehenanpassung` | kein Abnehmer | 7 % Leistungsverlust je 1000 m über 1500 m, ±50 % über das Attribut | 58 s (Hochgebirge), **0 s im Flachen** |
-| `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | **249 s** (Hochgebirge) |
-| `hitzetoleranz` | die Wetterläufe maßen 16 Fahrerpaare auf einer 40-Stunden-Strecke — die Wirkung war da, aber sie ging im Chaos unter | Wetterlauf nimmt die *kürzeste* Strecke und 48 statt 16 Grundfahrer | **175 s** (300 km bei Hitze) |
+| `sitzkomfort` | kein Abnehmer im Code | Zustand *Sitzbeschwerden* ab 12–23 h im Sattel, −6 % FTP und Abfahrtstempo, heilt im Rennen nicht mehr | **88 s** (1230 km) |
+| `mechanikerfaehigkeit` | kein Abnehmer | ±30 % auf jede Standzeit nach Panne und Defekt | 19–55 s |
+| `hoehenanpassung` | kein Abnehmer | 7 % Leistungsverlust je 1000 m über 1500 m, ±50 % über das Attribut | 61 s (Hochgebirge), **0 s im Flachen** |
+| `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | **237 s** (Hochgebirge) |
+| `hitzetoleranz` | die Wetterläufe maßen 16 Fahrerpaare auf einer 40-Stunden-Strecke — die Wirkung war da, aber sie ging im Chaos unter | Wetterlauf nimmt die *kürzeste* Strecke und 48 statt 16 Grundfahrer | **185 s** (300 km bei Hitze) |
 | `oberflaechenkompetenz` | kein Abnehmer, und keine Strecke kennt Schotter | offen — ohne Oberflächenkennzeichnung im Streckeneditor gibt es nichts zu lesen | 0 s |
 
 Die Null bei `hoehenanpassung` im Flachen ist dabei kein Rest, sondern
@@ -653,6 +653,59 @@ anstiegen: Die „Voralpen-Runde" endete 800 m über ihrem Start. Der
 Generator zieht die Drift jetzt linear ab, die Runden sind wieder
 Runden, und die Nordroute liegt bei 260 statt 2200 m im Mittel.
 
+### Der Anstiegsaufschlag wird jetzt bezahlt
+
+Der Zeitfahr-Spezialist hat auf keiner Strecke gewonnen, und die
+Sensitivitätsmatrix hat auch gesagt, warum: `berg` und `flach` waren gar
+nicht dieselbe Art von Größe. Über ein realistisches Feld (Attribut 20
+bis 90) bewegte `berg` **12,7 % Leistung** am 10-%-Anstieg, `flach`
+dagegen 1,4 % Tempo über ±3 % Luftwiderstand. Ein Kanal war eine Ansage,
+der andere eine Nachkommastelle.
+
+Und `berg` war geschenkt. `target_intensity()` zieht die Zielintensität
+aus Distanz, Ausdauer und Erfahrung — von `berg` steht dort nichts —,
+und der Anstiegsaufschlag kam *obendrauf*. Ein Kletterer fuhr im Flachen
+genauso hart wie alle anderen und am Anstieg 24 % härter, ohne das
+irgendwo abzutragen.
+
+Drei Änderungen:
+
+1. **Positionsdisziplin von ±3 % auf ±8 % CdA.** Nicht großzügig,
+   sondern realistisch — zwischen einer eingefahrenen Zeitfahrposition
+   und einer schlampigen liegen im Windkanal 10 bis 15 %.
+2. **Der Aufschlag wird finanziert.** Der Plan normiert die
+   zeitgewichtete mittlere Intensität auf den geplanten Wert; wer am
+   Berg zulegt, fährt im Flachen darunter. Der Kletterer verliert seinen
+   Vorteil dadurch nicht — ungleichmäßiges Fahren zahlt sich am Berg
+   weiterhin aus, weil Zeit dort schwerer wiegt. Nur ist der Gewinn
+   jetzt ein physikalischer statt eines zugeteilten.
+3. **Fehlplanung greift früher** (Sättigung bei 3 statt 6 pp Überzug).
+
+Punkt 2 ist dabei nicht nur die strengere Rechnung, sondern die
+richtigere: `target_if` heißt laut eigener Beschreibung „Anteil der FTP
+**über die Distanz**", und das war schlicht nicht wahr. Der
+Energiedeckel rechnet mit genau diesem Mittel und hat den Verbrauch
+deshalb systematisch unterschätzt — am stärksten bei den Fahrern mit dem
+größten Aufschlag.
+
+Was dabei herauskam:
+
+| Attribut | vorher | jetzt |
+|---|---|---|
+| `flach` | 28 / 41 / 119 s | **69 / 127 / 322 s** |
+| `berg` | 92 / 312 / 161 s | **46 / 180 / 108 s** |
+| `pacing_disziplin` | **−83 s** | · |
+
+`flach` schlägt `berg` jetzt auf der kurzen und der flachen Strecke und
+verliert nur im Hochgebirge — genau die Reihenfolge, die man will.
+Dauerbänder und DNF-Korridore blieben stehen (9,0 / 17,8 / 39,3 h;
+2,1 / 5,0 / 9,6 %).
+
+Die Zeile `pacing_disziplin` war vorher **negativ**: Disziplin kostete
+Zeit. Wer schlecht pact, plant heißer, fährt das ganze Rennen über
+schneller — und wurde nur in 19 % der Fälle dafür bezahlt. Zu heiß zu
+planen war profitabel. Das ist jetzt neutral.
+
 Sichtbar wird das alles im **Attribut-Tuner** im Fahrerdetail: zwei
 Schieberegler, ein Klick, und beide Versionen des Fahrers starten im
 selben Rennen. Er nutzt dieselbe Paarmessung wie der Bericht, nur für
@@ -681,7 +734,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 510 Tests, rund 180 s
+pytest -q                    # 513 Tests, rund 190 s
 pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 140 s
 ruff check ultrasim tools tests
 ```

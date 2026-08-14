@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -302,6 +304,46 @@ def test_terrain_factor_adds_power_uphill_only():
     assert factor[0] == 1.0 and factor[1] == 1.0
     assert factor[2] > 1.0
     assert factor[3] == pytest.approx(1.2)
+
+
+def test_the_climb_surcharge_is_paid_for_in_the_flat(route):
+    """Die tragende Zusicherung der Budgetneutralität.
+
+    Nach der Normierung muss die zeitgewichtete mittlere Intensität dem
+    geplanten Wert entsprechen — sonst ist der Aufschlag wieder
+    geschenkt, und ``berg`` schlägt ``flach`` allein deshalb, weil es
+    eine andere Größe bewegt.
+    """
+    rng = np.random.default_rng(0)
+    rider = generate_rider(rng, 0, 0, archetype="kletterer")
+    boost = st.climb_boost(rider)
+    norm = st.boost_normalisation(rider, route, 0.75, boost)
+    assert norm < 1.0, "Auf einer Strecke mit Anstiegen muss etwas abzubezahlen sein"
+
+    grades, dists, mean_ele = st._grade_histogram(route, 0.0, route.distance_m, n_bins=65)
+    factor = norm * st.terrain_power_factor(grades, np.full_like(grades, boost))
+    # Grob mit der Distanz gewichtet liegt das Mittel nahe eins; exakt
+    # trifft es die Zeitgewichtung, die die Funktion selbst benutzt.
+    assert 0.9 < float(np.average(factor, weights=dists)) < 1.1
+    assert factor.max() > 1.0, "Am Anstieg wird weiterhin zugelegt"
+    assert factor.min() < 1.0, "…und im Flachen weiterhin gespart"
+
+
+def test_a_flat_route_has_nothing_to_pay_back(route_long):
+    """Ohne Anstiege gibt es keinen Aufschlag und damit keine Rechnung."""
+    rng = np.random.default_rng(0)
+    rider = generate_rider(rng, 0, 0, archetype="allrounder")
+    flat = replace(route_long, ele_dm=np.zeros_like(route_long.ele_dm))
+    assert st.boost_normalisation(rider, flat, 0.75, st.climb_boost(rider)) == pytest.approx(1.0)
+
+
+def test_the_stronger_climber_pays_the_larger_bill(route):
+    """Wer mehr zulegt, muss mehr abtragen — sonst wäre es kein Budget."""
+    rng = np.random.default_rng(0)
+    rider = generate_rider(rng, 0, 0, archetype="allrounder")
+    strong = st.boost_normalisation(rider, route, 0.75, 0.30)
+    weak = st.boost_normalisation(rider, route, 0.75, 0.05)
+    assert strong < weak < 1.0
 
 
 def test_bike_plan_rejects_uneconomic_changes(route):

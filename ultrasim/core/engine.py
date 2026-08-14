@@ -448,6 +448,7 @@ def simulate_race(
     frontal = np.array([r.frontal_area_m2 for r in field_riders])
     flat_norm = np.array([r.attr_norm("flach") for r in field_riders])
     boost = np.array([p.climb_boost for p in plans])
+    boost_norm = np.array([p.boost_norm for p in plans])
     target_if = np.array([p.target_if for p in plans])
     skill_norm = np.array([r.attr_norm("abfahrtstechnik") for r in field_riders])
     risk_norm = np.array([r.attr_norm("risikobereitschaft") for r in field_riders])
@@ -1226,7 +1227,9 @@ def simulate_race(
                     if quitting.any():
                         running = state == STATE_RIDING
 
-            p_target = ftp_eff_if * (1.0 + ramp_pt[idx] * boost)
+            # ``boost_norm`` bezahlt den Anstiegsaufschlag im Flachen ab,
+            # damit die mittlere Intensität die geplante bleibt.
+            p_target = ftp_eff_if * boost_norm * (1.0 + ramp_pt[idx] * boost)
             p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
 
             # W'-Wächter: bei leerem Tank wird an Rampen nicht mehr

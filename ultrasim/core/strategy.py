@@ -84,6 +84,10 @@ class RacePlan:
     stops: list[StopPlan] = field(default_factory=list)
     #: Geschätzte Fahrzeit ohne Stopps, in Sekunden.
     est_ride_time_s: float = 0.0
+    #: Macht den Anstiegsaufschlag budgetneutral — siehe
+    #: ``boost_normalisation``. Auf einer flachen Strecke steht hier
+    #: praktisch 1,0, im Hochgebirge deutlich darunter.
+    boost_norm: float = 1.0
 
 
 def base_target_if(distance_km: float) -> float:
@@ -125,7 +129,22 @@ def target_intensity(
 #: Ab diesem Planungsfehler wird eine Fehlplanung überhaupt möglich …
 MISJUDGE_THRESHOLD = 0.005
 #: … und bei diesem Überschuss ist sie so gut wie sicher.
-MISJUDGE_FULL = 0.060
+#:
+#: Stand bei 0,060 und war damit zu milde: Der typische Draufgänger
+#: plant mit rund 1,5 pp über dem Haltbaren, und daraus wurden ganze
+#: 19 % Wahrscheinlichkeit. Vier von fünf kamen ungestraft davon,
+#: während der Aufschlag auf die Zielintensität über das gesamte Rennen
+#: wirkte — zu heiß zu planen war schlicht profitabel. Der Archetyp lag
+#: auf der Flachstrecke bei mittlerer Platzierung 15,8 von 32 und holte
+#: trotzdem fünf von sechs Siegen: Nicht der Schnitt gewinnt, sondern
+#: der obere Rand, und der bestand genau aus denen, die den Würfel
+#: überstanden hatten. Bei 0,030 sind es 42 %, und der Rand dünnt aus.
+#:
+#: Bewusst an dieser Schraube und nicht an Dauer oder Stärke: Die stehen
+#: als 100–300 km und −5 bis −12 % FTP im Ereigniskatalog des
+#: Design-Dokuments. Die Wahrscheinlichkeit steht dort nicht — sie ist
+#: unsere Balancing-Größe.
+MISJUDGE_FULL = 0.030
 MISJUDGE_MAX_P = 0.85
 #: Der Einbruch kommt spät — vorher merkt niemand etwas.
 MISJUDGE_ONSET = (0.45, 0.70)
@@ -191,9 +210,73 @@ def terrain_power_factor(grade: np.ndarray, boost: np.ndarray) -> np.ndarray:
 
     Anstiege bekommen einen Aufschlag, Flachpassagen bleiben auf Ziel,
     Abfahrten regelt die Trittfrequenzgrenze in der Physik.
+
+    Der Aufschlag ist **nicht** gratis — was er am Anstieg draufpackt,
+    zieht ``boost_normalisation`` im Flachen wieder ab.
     """
     ramp = np.clip(grade, 0.0, CLIMB_BOOST_REF_GRADE) / CLIMB_BOOST_REF_GRADE
     return 1.0 + ramp * boost
+
+
+def boost_normalisation(rider: Rider, route: Route, target_if: float, boost: float) -> float:
+    """Der Faktor, der den Anstiegsaufschlag zu einer Umverteilung macht.
+
+    Bis hierher war ``berg`` geschenkte Leistung. ``target_intensity``
+    zieht die Zielintensität aus Distanz, Ausdauer und Erfahrung — von
+    ``berg`` steht dort nichts —, und der Anstiegsaufschlag kam
+    *obendrauf*. Ein Kletterer fuhr im Flachen genauso hart wie alle
+    anderen und am Anstieg 24 % härter, ohne das irgendwo abzubezahlen.
+    Über ein realistisches Feld waren das 12,7 % Leistung am 10-%-Anstieg
+    gegen 1,4 % Tempo, die das Gegenstück *Flach* über die
+    Positionsdisziplin bewegte.
+
+    Jetzt wird der Aufschlag finanziert: Dieser Faktor normiert das
+    Leistungsprofil so, dass die **zeitgewichtete** mittlere Intensität
+    wieder ``target_if`` ergibt. Wer am Berg zulegt, fährt im Flachen
+    entsprechend darunter.
+
+    Zwei Gründe, warum das die richtigere Rechnung ist und nicht nur die
+    strengere. Erstens sagt ``target_if`` laut eigener Beschreibung „Ziel-
+    Intensität als Anteil der FTP **über die Distanz**" — das war bisher
+    schlicht nicht wahr, die tatsächliche mittlere Intensität lag
+    darüber. Zweitens rechnet der Energiedeckel oben mit genau diesem
+    Mittel; solange der Aufschlag daneben stand, hat er den Verbrauch
+    systematisch unterschätzt, und zwar am stärksten bei den Fahrern mit
+    dem größten Aufschlag.
+
+    Der Kletterer verliert dadurch nicht seinen Vorteil. Ungleichmäßiges
+    Fahren zahlt sich am Berg weiterhin aus, weil Zeit dort schwerer
+    wiegt: Eine Minute Mehrleistung am Anstieg spart mehr, als dieselbe
+    Minute Minderleistung im Flachen kostet. Nur ist der Gewinn jetzt ein
+    physikalischer statt eines zugeteilten.
+
+    Gewichtet wird mit den Zeitanteilen des *unnormierten* Plans. Das ist
+    ein Durchgang statt einer Iteration, und der Fehler daraus liegt
+    unter einem Promille — die Gewichte verschieben sich kaum, wenn sich
+    die Leistung um wenige Prozent ändert.
+    """
+    grades, dists, mean_ele = _grade_histogram(route, 0.0, route.distance_m, n_bins=65)
+    if dists.sum() <= 0:
+        return 1.0
+    factor = terrain_power_factor(grades, np.full_like(grades, boost))
+    spec = ph.BIKES[ph.BIKE_NAMES[ph.BIKE_ROAD]]
+    mass = rider.weight_kg + spec["mass_kg"] + ph.SUPPORTED_LUGGAGE_KG
+    cda = ph.cda_for(
+        np.full_like(grades, rider.frontal_area_m2),
+        ph.position_k(grades, np.full_like(grades, rider.attr_norm("flach"))),
+        np.full_like(grades, spec["cda_factor"]),
+    )
+    v = ph.steady_state_speed(
+        rider.ftp_w * target_if * factor,
+        grades,
+        np.full_like(grades, mass),
+        cda,
+        np.full_like(grades, ph.CRR["asphalt_good"]),
+        ph.air_density(mean_ele),
+    )
+    time = dists / np.clip(v, 1.0, ph.DOWNHILL_NO_POWER)
+    mean_factor = float(np.sum(time * factor) / np.sum(time))
+    return 1.0 / mean_factor if mean_factor > 0.0 else 1.0
 
 
 # ----------------------------------------------------------------------
@@ -228,6 +311,7 @@ def estimate_section_time(
     dists: np.ndarray,
     mean_ele: float,
     bike: int,
+    boost_norm: float = 1.0,
 ) -> float:
     """Geschätzte Fahrzeit eines Abschnitts mit einem bestimmten Rad."""
     spec = ph.BIKES[ph.BIKE_NAMES[bike]]
@@ -239,7 +323,7 @@ def estimate_section_time(
         np.full_like(grades, spec["cda_factor"]),
     )
     rho = ph.air_density(mean_ele)
-    power = power_w * terrain_power_factor(grades, np.full_like(grades, boost))
+    power = power_w * boost_norm * terrain_power_factor(grades, np.full_like(grades, boost))
     # Zeitfahrrad: Wirkungsgradverlust an steilen Rampen (Abschnitt 6.4).
     power = power * (1.0 - spec["steep_penalty"] * (grades > 0.06))
     v = ph.steady_state_speed(
@@ -296,6 +380,7 @@ def build_bike_plan(
     boost: float,
     change_cost_s: float,
     allow_tt: bool = True,
+    boost_norm: float = 1.0,
 ) -> tuple[list[SectionPlan], list[tuple[float, str]]]:
     """Radwahl je Abschnitt zwischen zwei Servicepunkten (Abschnitt 6.4).
 
@@ -327,9 +412,13 @@ def build_bike_plan(
         grades, dists, mean_ele = _grade_histogram(route, lo, hi)
         if dists.sum() <= 0:
             continue
-        t_road = estimate_section_time(rider, power, boost, grades, dists, mean_ele, ph.BIKE_ROAD)
+        t_road = estimate_section_time(
+            rider, power, boost, grades, dists, mean_ele, ph.BIKE_ROAD, boost_norm
+        )
         t_tt = (
-            estimate_section_time(rider, power, boost, grades, dists, mean_ele, ph.BIKE_TT)
+            estimate_section_time(
+                rider, power, boost, grades, dists, mean_ele, ph.BIKE_TT, boost_norm
+            )
             if allow_tt
             else float("inf")
         )
@@ -387,8 +476,11 @@ def build_plan(
     """
     wish_if, overreach, note = target_intensity(rider, route.distance_km, rng)
     boost = climb_boost(rider)
+    boost_norm = boost_normalisation(rider, route, wish_if, boost)
     change_cost = BIKE_CHANGE_BASE_S * service_factor
-    sections, notes = build_bike_plan(rider, route, wish_if, boost, change_cost, allow_tt)
+    sections, notes = build_bike_plan(
+        rider, route, wish_if, boost, change_cost, allow_tt, boost_norm
+    )
 
     # --- Energiedeckel (Abschnitt 6.1) -------------------------------
     # Zwei Durchgänge: Die tragbare Intensität hängt an der Dauer, die
@@ -457,9 +549,19 @@ def build_plan(
         intake_ceiling_g_h=intake,
         stops=stops,
         est_ride_time_s=ride_time,
+        boost_norm=boost_norm,
     )
     plan.notes.append((0.0, note))
     plan.notes.append((0.0, limit_note))
+    if boost_norm < 0.999:
+        plan.notes.append(
+            (
+                0.0,
+                f"Anstiegsaufschlag +{boost * 100:.0f} % am 10-%-Stück wird im Flachen "
+                f"finanziert: {(1.0 - boost_norm) * 100:.1f} % unter Ziel, damit das "
+                f"Mittel bei {target_if * 100:.0f} % FTP bleibt",
+            )
+        )
     if stops:
         full = sum(1 for s in stops if s.kind == "voll")
         naps = sum(1 for s in stops if s.kind == "schlaf")

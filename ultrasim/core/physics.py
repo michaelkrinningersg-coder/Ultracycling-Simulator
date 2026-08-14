@@ -117,18 +117,39 @@ def cda_for(
     return frontal_area * position_k * bike_cda_factor + luggage_cda
 
 
+#: Spannweite der Positionsdisziplin auf den aerodynamischen Anteil.
+#:
+#: Stand lange bei 0,03 und war damit der Grund, warum der
+#: Zeitfahr-Spezialist auf keiner Strecke gewonnen hat. Über ein
+#: realistisches Feld (Attribut 20 bis 90) sind ±3 % gerade 4,3 %
+#: Unterschied im Luftwiderstand und damit 1,4 % Tempo — während das
+#: Attribut *Berg* über den Anstiegsaufschlag 12,7 % Leistung bewegt.
+#: Ein Kanal war eine Nachkommastelle, der andere eine Ansage.
+#:
+#: 0,08 ist dabei nicht großzügig, sondern realistisch: Zwischen einer
+#: eingefahrenen Zeitfahrposition und einer schlampigen liegen in
+#: Windkanalmessungen 10 bis 15 % CdA. Die alten 4,3 % über das ganze
+#: Feld waren die zu zaghafte Zahl, nicht die neuen 11,5 %.
+AERO_DISCIPLINE_SPAN = 0.08
+
+
 def position_k(grade: np.ndarray, flat_attr_norm: np.ndarray) -> np.ndarray:
     """Sitzposition als weiche Funktion der Steigung.
 
     Im Flachen und bergab wird aerodynamisch gefahren, am Anstieg
     aufrecht. Der Übergang ist gleitend, sonst springt der CdA an jeder
-    Segmentgrenze. Das Attribut *Flach* wirkt als Positionsdisziplin:
-    ±3 % auf den aerodynamischen Anteil.
+    Segmentgrenze. Das Attribut *Flach* wirkt als Positionsdisziplin
+    (siehe ``AERO_DISCIPLINE_SPAN``).
+
+    Dass der Bonus auch am Anstieg anliegt, ist kein Versehen: Er wirkt
+    dort von selbst kaum, weil bei 15 km/h der Luftwiderstand klein ist.
+    Ihn künstlich auszublenden hieße, eine Fallunterscheidung zu
+    schreiben, die die Physik ohnehin erledigt.
     """
     # 0 bei <= 1 % Steigung, 1 ab 6 %.
     blend = np.clip((grade - 0.01) / 0.05, 0.0, 1.0)
     k = K_POSITION["drops"] + blend * (K_POSITION["climbing"] - K_POSITION["drops"])
-    return k * (1.0 - 0.03 * flat_attr_norm)
+    return k * (1.0 - AERO_DISCIPLINE_SPAN * flat_attr_norm)
 
 
 def slope_trig(grade: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

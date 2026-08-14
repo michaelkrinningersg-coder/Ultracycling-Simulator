@@ -29,13 +29,31 @@ from .names import (
 #: Alle Attribute aus Abschnitt 5.2, mit Gewicht im Potenzial-Budget.
 #: Das Gewicht sagt, wie teuer eine Stärke im Budget ist – nicht, wie
 #: stark sie wirkt.
+#:
+#: Genau dieser Satz war lange ein Schlupfloch. Wenn Preis und Wirkung
+#: auseinanderlaufen, gewinnt der Archetyp, der billig einkauft und
+#: teuer verkauft — und das war messbar der Fall:
+#:
+#:     fettverbrennung   Preis 0,8   Wirkung 166–506 s
+#:     konstanz          Preis 0,9   Wirkung   nicht messbar
+#:
+#: Der Fettverbrenner kaufte 24 Punkte des einen und verkaufte 16 Punkte
+#: eines wirkungslosen Attributs; er landete damit auf Platz 47 von 160,
+#: wo 80,5 neutral wäre. Der Diesel machte das Gegenteil: 20 Punkte
+#: ``konstanz`` für 18 Budget-Einheiten, die messbar nichts einbringen —
+#: und landete auf 102,5.
+#:
+#: Die beiden Preise sind deshalb nachgezogen. Nicht alle: Ein Preis, der
+#: exakt der gemessenen Wirkung folgt, macht jede Verteilung gleich gut
+#: und die Archetypen damit bedeutungslos. Es geht darum, die beiden
+#: Ausreißer zu schließen, nicht darum, Entscheidungen abzuschaffen.
 ATTRIBUTES: dict[str, float] = {
     # Grundattribute
     "flach": 1.0,
     "berg": 1.0,
     "ausdauer": 1.2,
     "spritzigkeit": 0.7,
-    "fettverbrennung": 0.8,
+    "fettverbrennung": 1.3,
     "kohlenhydratverbrennung": 0.8,
     "schlaftoleranz": 0.9,
     # Ultra-spezifisch (im Dokument mit *** priorisiert)
@@ -45,7 +63,7 @@ ATTRIBUTES: dict[str, float] = {
     "hitzetoleranz": 0.7,
     "regeneration": 0.9,
     "abfahrtstechnik": 0.7,
-    "konstanz": 0.9,
+    "konstanz": 0.4,
     # zweite Reihe
     "kaeltetoleranz": 0.5,
     "naesseresistenz": 0.5,
@@ -185,13 +203,28 @@ ARCHETYPES: dict[str, Archetype] = {
         height_bias_cm=-6.0,
         wkg_bias=0.20,
     ),
+    # Der Diesel war mit Abstand der schwächste Archetyp — 102,5 von 160,
+    # wo 80,5 neutral wäre. Die Ursache stand nicht in seinen Attributen
+    # (die messen sich positiv), sondern in ``wkg_bias=-0.20``: Das sind
+    # 4,6 % weniger Leistung je Kilogramm, und zwar **außerhalb** des
+    # Potenzial-Budgets. Er war der einzige Archetyp mit negativem
+    # Vorzeichen und bekam dafür nichts zurück.
+    #
+    # Die Idee dahinter ist richtig und bleibt: Der Diesel ist der große,
+    # schwere Fahrer, der nicht klettert, aber ewig durchhält. Nur muss
+    # das ein *Tausch* sein und keine Strafe. Über den Körperbau wird er
+    # jetzt größer (+4 cm), und weil die FTP aus W/kg × Gewicht folgt,
+    # bringt ihm das absolute Watt zurück, die er im Flachen ausspielen
+    # kann — bezahlt mit mehr Frontfläche und weiterhin schlechterem
+    # W/kg am Berg.
     "diesel": Archetype(
         "diesel",
         "Diesel / Ultra-Maschine",
         {"ausdauer": 24, "konstanz": 20, "pacing_disziplin": 20, "spritzigkeit": -18,
          "fettverbrennung": 12, "sitzkomfort": 10, "risikobereitschaft": -8},
         spread=8.5,
-        wkg_bias=-0.20,
+        height_bias_cm=4.0,
+        wkg_bias=-0.08,
     ),
     "schlafgeiziger": Archetype(
         "schlafgeiziger",
@@ -199,11 +232,25 @@ ARCHETYPES: dict[str, Archetype] = {
         {"schlaftoleranz": 26, "mentale_widerstandsfaehigkeit": 14, "regeneration": -16,
          "navigationssicherheit": -6, "ausdauer": 6},
     ),
+    # Der Fettverbrenner war mit 46,7 und 44,0 von 160 der stärkste
+    # Archetyp, und zwar ohne körperbaulichen Vorteil — rein über die
+    # Attribute. Er gewann **beide Seiten der Energiebilanz**: weniger
+    # Kohlenhydratverbrauch über ``fettverbrennung`` und gleichzeitig
+    # mehr Nachschub über ``magenvertraeglichkeit``.
+    #
+    # Das zweite war das eigentliche Problem. Die Zufuhr ist das Minimum
+    # aus Magen und Verwertung, und der Magen bindet bei 80 % des Feldes
+    # — er ist damit der Hauptschalter der ganzen Verpflegung und mit
+    # 413–969 s der größte Einzelwert der Sensitivitätsmatrix. Dass er
+    # so groß ist, ist gewollt (Abschnitt 6.5 nennt Magenprobleme "den
+    # eigentlichen Killer"); dass ausgerechnet der Archetyp mit dem
+    # Fettstoffwechsel als Einziger auch dort investierte, war es nicht.
+    # Der Bonus fällt weg, das Erkennungsmerkmal bleibt.
     "fettverbrenner": Archetype(
         "fettverbrenner",
         "Fettverbrenner",
-        {"fettverbrennung": 26, "kohlenhydratverbrennung": -10, "spritzigkeit": -16,
-         "magenvertraeglichkeit": 10, "ausdauer": 10},
+        {"fettverbrennung": 24, "kohlenhydratverbrennung": -10, "spritzigkeit": -16,
+         "ausdauer": 8},
     ),
     "draufgaenger": Archetype(
         "draufgaenger",

@@ -91,18 +91,18 @@ GOLDEN_ROUTE = {
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
-    (6, 6003.60),
-    (12, 6110.69),
-    (8, 6133.09),
-    (11, 6236.76),
-    (3, 6291.22),
-    (5, 6345.74),
-    (9, 6351.09),
-    (2, 6520.98),
-    (10, 6596.06),
-    (4, 6781.87),
-    (1, 7074.52),
-    (7, 7126.75),
+    (6, 6002.87),
+    (12, 6017.78),
+    (8, 6134.84),
+    (11, 6235.80),
+    (9, 6241.73),
+    (3, 6290.08),
+    (5, 6345.32),
+    (2, 6523.86),
+    (10, 6596.00),
+    (4, 6661.59),
+    (7, 7015.86),
+    (1, 7077.46),
 ]
 
 TOLERANCE_S = 0.5
@@ -175,14 +175,26 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Feld wird rund 20 Sekunden langsamer, die Reihenfolge bleibt. Die
 #:   acht zusätzlichen PLAN-Ereignisse sind die Begründung der
 #:   Reifenwahl, je Fahrer eine.
+#: * Fettverbrenner und Diesel ausbalanciert. Der eine gewann beide
+#:   Seiten der Energiebilanz — weniger Verbrauch *und* mehr Nachschub —,
+#:   der andere trug mit ``wkg_bias=-0.20`` eine Leistungsstrafe
+#:   außerhalb des Potenzial-Budgets. Beides sind Eingriffe am Generator,
+#:   also ändert sich jeder erzeugte Fahrer und damit das ganze Feld.
+#:   Dazu die gemeinsame Ursache der beiden: Der **Preis** eines
+#:   Attributs im Potenzial-Budget hatte nichts mit seiner gemessenen
+#:   Wirkung zu tun. ``fettverbrennung`` kostete 0,8 und wirkt bis zu
+#:   506 s, ``konstanz`` kostete 0,9 und wirkt nichts — der eine kaufte
+#:   billig ein, der andere zahlte für nichts. Beide Preise sind
+#:   nachgezogen, und weil das Budget alle Attribute gegeneinander
+#:   normiert, verschiebt sich jeder Fahrer ein Stück.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 147214.06),
-    (5, 147541.34),
-    (8, 151092.00),
-    (3, 153326.56),
-    (4, 161814.53),
-    (1, 162028.53),
-    (6, 165144.61),
+    (7, 147407.67),
+    (8, 151069.51),
+    (5, 151129.00),
+    (3, 153680.17),
+    (4, 162378.01),
+    (1, 163182.08),
+    (6, 167036.86),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -190,17 +202,17 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
 GOLDEN_LONG_EVENTS: dict[str, int] = {
-    "CONDITION_END": 34,
-    "CONDITION_START": 42,
-    "DECISION": 10,
+    "CONDITION_END": 36,
+    "CONDITION_START": 44,
+    "DECISION": 11,
     "DNF": 1,
     "FINISH": 7,
-    "INCIDENT": 49,
+    "INCIDENT": 53,
     "PLAN": 72,
     "SLEEP": 3,
     "SPLIT_PASSED": 315,
     "START": 8,
-    "STOP_END": 130,
+    "STOP_END": 134,
     "STOP_START": 82,
 }
 

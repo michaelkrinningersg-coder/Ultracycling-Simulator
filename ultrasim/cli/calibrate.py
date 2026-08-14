@@ -28,8 +28,6 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import numpy as np
-
 from .. import calibration as cal
 from ..calibration_report import build_report
 from ..core.rider import ATTRIBUTES, generate_pool
@@ -71,22 +69,37 @@ def run(args: argparse.Namespace) -> int:
         effects[route.name] = cal.attribute_sensitivity(route, base, teams, sens_seeds)
 
     # Die Wetterläufe brauchen nur eine Strecke, aber nicht irgendeine:
-    # Es muss die **tiefste** sein. Die Presets setzen die Temperatur auf
+    # Es muss die **kürzeste** sein, und das war ein Lehrgeld.
+    #
+    # Naheliegend war die tiefste — die Presets setzen die Temperatur auf
     # Streckenniveau, und der Höhengradient zieht davon 6,5 K je 1000 m
-    # ab — auf einer Strecke mit 2200 m Durchschnittshöhe kommen von 29 °C
-    # Hitze noch 20 °C an, und Hitzetoleranz misst sich als wirkungslos.
-    # Genau das ist im ersten Bericht passiert.
+    # ab, auf 2200 m Durchschnittshöhe kommen von 29 °C Hitze noch 20 °C
+    # an. Der Gedanke stimmt, nur ist die tiefste Strecke hier zufällig
+    # die längste: 1230 km, 40 Stunden. Und über 40 Stunden misst diese
+    # Paarung Hitze nicht mehr sauber. Nicht weil das Wetter zu schwach
+    # wäre, im Gegenteil — die Wirkung war mit knapp acht Minuten die
+    # größte im ganzen Lauf. Sondern weil ein Fahrer, der zwei Minuten
+    # anders unterwegs ist, andere Pannen annimmt und in einer anderen
+    # Nacht schläft. Zwölf von 42 Paaren gingen deshalb in die falsche
+    # Richtung, und kein Test der Welt kann das noch von Rauschen
+    # trennen.
+    #
+    # Auf 300 km bleibt die Paarung dagegen dicht beieinander: 46 von 47
+    # Paaren in dieselbe Richtung, Standardfehler 22 Sekunden. Dass diese
+    # Strecke im Mittel auf 765 m liegt und damit 5 K kühler ist, kostet
+    # Wirkung — aber Wirkung, die man messen kann, ist mehr wert als
+    # Wirkung, die im Chaos verschwindet.
     weather: tuple[Route, dict[str, list[cal.AttributeEffect]]] | None = None
     if args.weather and len(routes) > 1:
-        wx_route = min(routes, key=lambda r: float(np.mean(r.ele_m)))
+        wx_route = min(routes, key=lambda r: r.distance_m)
         wx_effects: dict[str, list[cal.AttributeEffect]] = {}
-        base = pool[: args.base_riders]
+        wx_teams, wx_base = generate_pool(args.weather_riders, seed=args.pool_seed + 7)
         for preset in cal.WEATHER_PRESETS:
             print(f"{wx_route.name}: Sensitivität bei Wetter '{preset}' …", flush=True)
             wx_effects[preset] = cal.attribute_sensitivity(
                 wx_route,
-                base,
-                teams,
+                wx_base,
+                wx_teams,
                 sens_seeds[:1],
                 attributes=cal.WEATHER_ATTRIBUTES,
                 preset=preset,
@@ -125,6 +138,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--per-archetype", type=int, default=4)
     parser.add_argument("--base-riders", type=int, default=16, help="Grundfahrer der Sensitivität")
     parser.add_argument("--sensitivity-runs", type=int, default=2)
+    parser.add_argument(
+        "--weather-riders",
+        type=int,
+        default=48,
+        help="Grundfahrer der Wetterläufe (mehr als oben: ein Rennen, nicht mehrere)",
+    )
     parser.add_argument("--seed", type=int, default=3000)
     parser.add_argument("--pool-seed", type=int, default=11)
     parser.add_argument("--stamp", default=None, help="Datumszeile im Bericht")

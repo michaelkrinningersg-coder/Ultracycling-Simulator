@@ -45,8 +45,8 @@ hier umgesetzt.
 | Karriere | Saisons in Folge mit gemeinsamem Fahrerpool. Der Jahreswechsel friert erst die Wertung als Kapitel ein und lässt dann altern — umgekehrt stünde in der ewigen Bestenliste das Feld des Folgejahres. Der Kalender wird ins nächste Jahr übernommen statt neu vorgeschlagen: Dieselben Rennen an denselben Terminen machen die Bestenliste erst lesbar. Dazu ewige Bestenliste (Titel vor Punkten) und Lebenslauf je Fahrer |
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
-| Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und Hitze, die auf einer Flachstrecke auch ankommt. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 504 Tests inklusive zweier Golden-Master |
+| Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 510 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -587,11 +587,11 @@ Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe:
 
 | Attribut | Warum null | Was daraus wurde | Wirkung heute |
 |---|---|---|---|
-| `sitzkomfort` | kein Abnehmer im Code | Zustand *Sitzbeschwerden* ab 12–23 h im Sattel, −6 % FTP und Abfahrtstempo, heilt im Rennen nicht mehr | **153 s** (38-h-Rennen) |
-| `mechanikerfaehigkeit` | kein Abnehmer | ±30 % auf jede Standzeit nach Panne und Defekt | 29–50 s |
+| `sitzkomfort` | kein Abnehmer im Code | Zustand *Sitzbeschwerden* ab 12–23 h im Sattel, −6 % FTP und Abfahrtstempo, heilt im Rennen nicht mehr | **87 s** (1230 km) |
+| `mechanikerfaehigkeit` | kein Abnehmer | ±30 % auf jede Standzeit nach Panne und Defekt | 19–50 s |
 | `hoehenanpassung` | kein Abnehmer | 7 % Leistungsverlust je 1000 m über 1500 m, ±50 % über das Attribut | 58 s (Hochgebirge), **0 s im Flachen** |
-| `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | 249 s |
-| `hitzetoleranz` | die Wetterläufe liefen auf einer Strecke mit 2200 m Durchschnittshöhe: Von 29 °C kamen dort 20 °C an | Wetterlauf nimmt die *tiefste* Strecke; dazu die Datenreparatur unten | **703 s** (Flachstrecke bei Hitze) |
+| `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | **249 s** (Hochgebirge) |
+| `hitzetoleranz` | die Wetterläufe maßen 16 Fahrerpaare auf einer 40-Stunden-Strecke — die Wirkung war da, aber sie ging im Chaos unter | Wetterlauf nimmt die *kürzeste* Strecke und 48 statt 16 Grundfahrer | **175 s** (300 km bei Hitze) |
 | `oberflaechenkompetenz` | kein Abnehmer, und keine Strecke kennt Schotter | offen — ohne Oberflächenkennzeichnung im Streckeneditor gibt es nichts zu lesen | 0 s |
 
 Die Null bei `hoehenanpassung` im Flachen ist dabei kein Rest, sondern
@@ -602,15 +602,56 @@ Meeresspiegelstrecke exakt null messen. Ein Wert dort wäre der Fehler.
 angelegt — mehr Tempo in der Abfahrt, mehr Sturzwahrscheinlichkeit — und
 die beiden Seiten heben sich in der Zielzeit ungefähr auf. Wollte man
 dort eine Zahl sehen, müsste man die Waage kippen, und damit wäre das
-Attribut keine Entscheidung mehr, sondern ein Bonus.
+Attribut keine Entscheidung mehr, sondern ein Bonus. Der Bericht sagt
+das inzwischen mit Zahlen statt mit einem Punkt — siehe unten.
+
+**Bei der Hitze lag der Fehler im Messgerät, nicht im Modell.** Der
+erste Verdacht war der Höhengradient: Die Presets setzen die Temperatur
+auf Streckenniveau, davon gehen 6,5 K je 1000 m ab, und die Wetterläufe
+liefen auf einer Strecke mit 2200 m Durchschnittshöhe — von 29 °C kamen
+dort 20 an. Also die *tiefste* Strecke nehmen. Der Gedanke stimmt, nur
+ist die tiefste hier zufällig die längste: 1230 km, 40 Stunden. Dort
+misst die Hitze mit knapp acht Minuten die größte Wirkung des ganzen
+Laufs — und trotzdem gehen zwölf von 42 Paaren in die *falsche*
+Richtung, weil ein Fahrer, der zwei Minuten anders unterwegs ist, andere
+Pannen annimmt und in einer anderen Nacht schläft. Über 40 Stunden
+zerlegt die Chaosempfindlichkeit die Paarung, auf die diese ganze
+Messung baut.
+
+Auf 300 km bleibt sie dicht beieinander: 46 von 47 Paaren in dieselbe
+Richtung, Standardfehler 22 statt 161 Sekunden. Der Wetterlauf nimmt seitdem die
+kürzeste Strecke und 48 statt 16 Grundfahrer — mehr Paare kosten fast
+nichts, weil sie im selben Rennen starten. Dass die Strecke im Mittel
+auf 765 m liegt und damit 5 K kühler ist, kostet Wirkung; Wirkung, die
+man messen kann, ist trotzdem mehr wert als Wirkung, die im Chaos
+verschwindet.
+
+**Der Vorzeichentest.** Dabei kam eine zweite Nachweisform dazu. Die
+Hürde „mindestens drei Standardfehler" nimmt stillschweigend an, dass
+die Paardifferenzen einigermaßen symmetrisch streuen. Für die meisten
+Attribute stimmt das — Seitenwindfestigkeit misst sich mit einem
+Standardfehler von 1,3 Sekunden. Für Abfahrtstechnik in der Kälte nicht:
+38 von 47 Fahrern gewinnen Zeit, aber ein paar stürzen trotz besserer
+Technik und ziehen das Mittel auf gut die Hälfte seines eigenen
+Standardfehlers. Der Vorzeichentest fragt deshalb nicht nach der Größe,
+sondern nach der Richtung, und ein Ausreißer um drei Stunden zählt
+darin genau wie einer um zwei Sekunden. Er ist streng — bei 40 Paaren
+braucht er rund 32 gleichgerichtete, ein Promille statt der üblichen
+fünf Prozent — und er zählt nur, wenn auch der Median über der
+Rauschgrenze liegt und in dieselbe Richtung zeigt wie das Mittel.
+
+Genau diese letzte Bedingung hält Risikobereitschaft weiter draußen:
+Bei Sturm ist das Mittel −86 Sekunden und der Median +10, und 33 von
+48 Fahrern kommen schneller durch. Die Mehrheit
+fährt schneller, die Minderheit stürzt und verliert mehr, als die
+Mehrheit gewinnt. Beides ist wahr, und deshalb darf keine der beiden
+Zahlen als „die Wirkung" in der Tabelle stehen.
 
 **Eine Datenschwäche, die keine Mechanik war.** Beim Nachsehen wegen der
 Hitze fiel auf, dass alle drei mitgelieferten Profile netto durchgehend
 anstiegen: Die „Voralpen-Runde" endete 800 m über ihrem Start. Der
 Generator zieht die Drift jetzt linear ab, die Runden sind wieder
-Runden, und die Nordroute liegt bei 260 statt 2200 m im Mittel. Das ist
-der eigentliche Grund, warum Hitzetoleranz sich vorher nicht messen
-ließ — nicht das Wettermodell.
+Runden, und die Nordroute liegt bei 260 statt 2200 m im Mittel.
 
 Sichtbar wird das alles im **Attribut-Tuner** im Fahrerdetail: zwei
 Schieberegler, ein Klick, und beide Versionen des Fahrers starten im
@@ -640,7 +681,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 504 Tests, rund 180 s
+pytest -q                    # 510 Tests, rund 180 s
 pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 140 s
 ruff check ultrasim tools tests
 ```

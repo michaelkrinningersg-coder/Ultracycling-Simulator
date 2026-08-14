@@ -15,6 +15,7 @@ und in ``ultrasim.cli.calibrate`` nur noch der Ablauf.
 from __future__ import annotations
 
 import math
+import textwrap
 
 from . import calibration as cal
 from .core.rider import ACTIVE_ATTRIBUTES, ATTRIBUTES
@@ -218,6 +219,15 @@ def section_weather(
         "wert und Nässeresistenz auf trockener Straße auch nicht — „nicht",
         "messbar\" hieße dann fälschlich „wirkungslos\".",
         "",
+        "Warum die **kürzeste** Strecke und nicht die tiefste, obwohl der",
+        "Höhengradient 6,5 K je 1000 m abzieht: Über 40 Stunden nimmt ein",
+        "Fahrer, der zwei Minuten anders unterwegs ist, andere Pannen an und",
+        "schläft in einer anderen Nacht. Die Hitzewirkung war dort mit knapp",
+        "acht Minuten die größte im ganzen Lauf — und trotzdem gingen zwölf",
+        "von 42 Paaren in die falsche Richtung. Auf 300 km sind es eins von",
+        "47. Wirkung, die man messen kann, ist mehr wert als Wirkung, die im",
+        "Chaos verschwindet.",
+        "",
         "| Attribut | " + " | ".join(cal.WEATHER_PRESETS) + " |",
         "|---" * (len(cal.WEATHER_PRESETS) + 1) + "|",
     ]
@@ -225,10 +235,76 @@ def section_weather(
         cells = []
         for preset in cal.WEATHER_PRESETS:
             e = _effect(effects, preset, attr)
-            cells.append(f"{_fmt(e.seconds, 0, ' s')}" if e.measurable else "·")
+            mark = "†" if e.measurable and abs(e.seconds) < cal.SIGMA * e.stderr else ""
+            cells.append(f"{_fmt(e.seconds, 0, ' s')}{mark}" if e.measurable else "·")
         out.append(f"| {attr} | " + " | ".join(cells) + " |")
-    out.append("")
+    out += [
+        "",
+        "Ein † markiert Zahlen, die nicht über den Standardfehler, sondern",
+        "über den **Vorzeichentest** nachgewiesen sind: Das Mittel ist klein",
+        "oder von Ausreißern verzogen, aber die Paardifferenz zeigt bei fast",
+        "allen Fahrern in dieselbe Richtung.",
+        "",
+    ]
+    out += _sign_test_example(effects)
+    out += _two_edged_note(effects)
     return out
+
+
+def _sign_test_example(effects: dict[str, list[cal.AttributeEffect]]) -> list[str]:
+    """Ein konkreter Fall für das †, mit den Zahlen dieses Laufs.
+
+    Ohne Beispiel bleibt die Fußnote eine Behauptung. Ausgesucht wird
+    die Zelle mit den meisten Paaren, damit die Zahlen tragen.
+    """
+    candidates = [
+        (preset, e)
+        for preset in cal.WEATHER_PRESETS
+        for e in [_effect(effects, preset, attr) for attr in cal.WEATHER_ATTRIBUTES]
+        if e.measurable and abs(e.seconds) < cal.SIGMA * e.stderr
+    ]
+    if not candidates:
+        return []
+    preset, e = max(candidates, key=lambda c: c[1].wins + c[1].losses)
+    return _para(
+        f"In dieser Tabelle ist `{e.attr}` bei „{preset}\" der Fall, für den es "
+        f"die zweite Nachweisform gibt: {e.wins} von {e.wins + e.losses} Fahrern "
+        f"gewinnen Zeit, im Mittel stehen davon {e.seconds:.0f} Sekunden und im "
+        f"Median {e.seconds_median:.0f}. Der Standardfehler ist mit "
+        f"{e.stderr:.0f} Sekunden größer als das Mittel selbst — die Differenz "
+        "sind einzelne Fahrer, denen das Attribut nicht geholfen hat."
+    )
+
+
+def _two_edged_note(effects: dict[str, list[cal.AttributeEffect]]) -> list[str]:
+    """Warum ein gerichtetes Ergebnis trotzdem nicht in der Tabelle steht.
+
+    Der Vorzeichentest allein würde Risikobereitschaft durchwinken. Der
+    Richtungsabgleich zwischen Mittel und Median hält sie draußen, und
+    das ist keine Willkür, sondern die Aussage des Attributs.
+    """
+    worst = None
+    for preset in cal.WEATHER_PRESETS:
+        e = _effect(effects, preset, "risikobereitschaft")
+        if e.pairs and e.seconds * e.seconds_median < 0.0:
+            if worst is None or abs(e.seconds) > abs(worst[1].seconds):
+                worst = (preset, e)
+    if worst is None:
+        return []
+    preset, e = worst
+    return _para(
+        f"`risikobereitschaft` zeigt bei „{preset}\" ein Mittel von "
+        f"{e.seconds:.0f} Sekunden und einen Median von {e.seconds_median:+.0f}: "
+        f"{e.wins} von {e.wins + e.losses} Fahrern kommen schneller durch, und die "
+        "übrigen verlieren mehr, als jene gewinnen. Beides ist wahr, und deshalb "
+        "steht keine der beiden Zahlen als „die Wirkung\" in der Zeile — das "
+        "Attribut ist eine Entscheidung, kein Bonus."
+    )
+
+
+def _para(text: str) -> list[str]:
+    """Absatz auf Berichtsbreite umbrechen, mit Leerzeile dahinter."""
+    return textwrap.fill(" ".join(text.split()), width=70).splitlines() + [""]
 
 
 def _effect(

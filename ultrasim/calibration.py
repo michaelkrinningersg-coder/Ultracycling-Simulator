@@ -84,6 +84,13 @@ NOISE_FLOOR_S = 3.0
 #: jemand anfängt, ein Attribut zu „reparieren", das nie kaputt war.
 SIGMA = 3.0
 
+#: Höchste zulässige Irrtumswahrscheinlichkeit des Vorzeichentests, der
+#: zweiten Nachweisform (siehe ``AttributeEffect.measurable``). Ein
+#: Promille statt der üblichen fünf Prozent, aus demselben Grund wie die
+#: drei Standardfehler oben: 75 Felder in der Tabelle. Bei 40 Paaren
+#: verlangt diese Schwelle rund 32 gleichgerichtete Differenzen.
+SIGN_P = 0.001
+
 #: Attribute, deren Wirkung dieser Aufbau **grundsätzlich** nicht messen
 #: kann. ``konstanz`` steuert allein die Streuung der Tagesform, und die
 #: Tagesform ist ``1 + sd·z`` mit einem z, das beide Kopien eines Fahrers
@@ -213,21 +220,74 @@ class AttributeEffect:
     #: Ausfälle in der starken minus Ausfälle in der schwachen Variante.
     #: Negativ heißt: Das Attribut verhindert Ausfälle.
     dnf_delta: int
+    #: Paare, in denen die starke Variante schneller war.
+    wins: int = 0
+    #: Paare, in denen die schwache Variante schneller war. ``wins +
+    #: losses`` ist kleiner als ``pairs``, wenn Paare exakt gleich
+    #: schnell waren — genau die trägt ein Vorzeichentest nicht.
+    losses: int = 0
+
+    @property
+    def sign_p(self) -> float:
+        """Zweiseitiger Vorzeichentest über die Paardifferenzen.
+
+        Die Frage lautet nicht „wie viel", sondern „immer in dieselbe
+        Richtung?". Unter der Annahme, das Attribut bewirke nichts, ist
+        jedes Paar ein Münzwurf; die Wahrscheinlichkeit, dass 36 von 42
+        Würfen auf dieselbe Seite fallen, lässt sich exakt ausrechnen.
+        """
+        n = self.wins + self.losses
+        if n == 0:
+            return 1.0
+        k = max(self.wins, self.losses)
+        tail = sum(math.comb(n, i) for i in range(k, n + 1)) / 2.0**n
+        return min(1.0, 2.0 * tail)
 
     @property
     def measurable(self) -> bool:
         """Hebt sich die Wirkung vom Rauschen ab?
 
-        Drei Hürden: Das Attribut muss von diesem Aufbau überhaupt
-        messbar sein, die Wirkung muss groß genug sein, um zu zählen,
-        und sie muss ein Vielfaches ihres eigenen Standardfehlers
-        betragen. Die letzte ist die wichtigste — ohne sie liest man aus
-        20 Fahrern, von denen einer eine Panne hatte, eine
-        Attributwirkung von sieben Minuten heraus.
+        Zuerst zwei Hürden, die immer gelten: Das Attribut muss von
+        diesem Aufbau überhaupt messbar sein, und die Wirkung muss groß
+        genug sein, um zu zählen.
+
+        Dann eine von zwei Nachweisformen. Die erste ist die übliche:
+        Die Wirkung beträgt ein Vielfaches ihres eigenen
+        Standardfehlers. Ohne sie liest man aus 20 Fahrern, von denen
+        einer eine Panne hatte, eine Attributwirkung von sieben Minuten
+        heraus.
+
+        Die zweite gibt es, weil die erste eine stillschweigende
+        Annahme macht: dass die Paardifferenzen einigermaßen symmetrisch
+        streuen. Für die meisten Attribute stimmt das —
+        Seitenwindfestigkeit misst sich auf derselben Strecke mit einem
+        Standardfehler von 1,3 Sekunden. Für Hitzetoleranz nicht: Hitze
+        wirkt über Einbrüche und Aufgaben, ein paar Paare reißen um
+        Stunden aus, und der Standardfehler wächst schneller als die
+        Wirkung. Dort stand dann „nicht messbar" über einem Attribut,
+        das dem *typischen* Fahrer neun Minuten wert war — eine
+        Falschaussage in die andere Richtung.
+
+        Der Vorzeichentest fragt deshalb nicht nach der Größe, sondern
+        nach der Richtung, und ist gegen Ausreißer unempfindlich: Ein
+        Paar, das um drei Stunden ausreißt, zählt genau wie eines, das
+        um zwei Sekunden ausreißt. Er ist streng — bei 40 Paaren
+        braucht er rund 32 gleichgerichtete —, und er zählt nur, wenn
+        auch der Median über der Rauschgrenze liegt und in dieselbe
+        Richtung zeigt wie das Mittel. Reines Rauschen fällt auf 50:50
+        und kommt nicht durch.
         """
         if self.attr in VARIANCE_ATTRIBUTES:
             return False
-        return abs(self.seconds) >= NOISE_FLOOR_S and abs(self.seconds) >= SIGMA * self.stderr
+        if abs(self.seconds) < NOISE_FLOOR_S:
+            return False
+        if abs(self.seconds) >= SIGMA * self.stderr:
+            return True
+        return (
+            abs(self.seconds_median) >= NOISE_FLOOR_S
+            and self.seconds * self.seconds_median > 0.0
+            and self.sign_p <= SIGN_P
+        )
 
     @property
     def rare_event_driven(self) -> bool:
@@ -344,6 +404,8 @@ def attribute_sensitivity(
                 stderr=float(g.std(ddof=1) / math.sqrt(g.size)) if g.size > 1 else math.inf,
                 pairs=int(g.size),
                 dnf_delta=dnf_delta[a],
+                wins=int(np.count_nonzero(g > 0.0)),
+                losses=int(np.count_nonzero(g < 0.0)),
             )
         )
     effects.sort(key=lambda e: -abs(e.seconds))

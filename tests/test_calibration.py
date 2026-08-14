@@ -142,6 +142,68 @@ def test_noise_is_not_reported_as_an_effect():
     assert quiet.measurable
 
 
+# ----------------------------------------------------------------------
+# Die zweite Nachweisform: der Vorzeichentest
+# ----------------------------------------------------------------------
+def _effect(**kw) -> cal.AttributeEffect:
+    base = dict(attr="x", seconds=10.0, seconds_median=10.0, percent=0.1, stderr=100.0, dnf_delta=0)
+    base.update(kw)
+    base.setdefault("pairs", int(base.get("wins", 0)) + int(base.get("losses", 0)))
+    return cal.AttributeEffect(**base)  # type: ignore[arg-type]
+
+
+def test_a_coin_toss_is_never_significant():
+    assert _effect(wins=24, losses=24).sign_p == pytest.approx(1.0)
+    assert not _effect(wins=24, losses=24).measurable
+
+
+def test_a_one_sided_result_gets_very_small_very_fast():
+    assert _effect(wins=48, losses=0).sign_p == pytest.approx(2 * 0.5**48)
+    assert _effect(wins=40, losses=8).sign_p < 1e-5
+
+
+def test_the_sign_test_admits_what_the_standard_error_cannot():
+    """Der Fall, für den es die zweite Nachweisform überhaupt gibt.
+
+    Abfahrtstechnik bei Nässe: 40 von 48 Fahrern gewinnen Zeit, aber ein
+    paar stürzen trotz besserer Technik und ziehen das Mittel auf ein
+    Achtel seines Standardfehlers. Nach der ersten Hürde allein stünde
+    dort „nicht messbar" über einem Attribut, das dem typischen Fahrer
+    eine halbe Minute wert ist.
+    """
+    skewed = _effect(seconds=13.9, seconds_median=26.7, stderr=46.7, wins=40, losses=8)
+    assert abs(skewed.seconds) < cal.SIGMA * skewed.stderr, "die erste Hürde reißt er"
+    assert skewed.measurable
+
+
+def test_the_sign_test_does_not_rescue_a_two_edged_attribute():
+    """Risikobereitschaft bei Sturm: Mittel negativ, Median positiv.
+
+    Die Mehrheit fährt schneller, die Minderheit stürzt und verliert
+    mehr, als die Mehrheit gewinnt. Beides ist wahr, und genau deshalb
+    darf keine der beiden Zahlen als „die Wirkung" in der Tabelle
+    stehen — der Richtungsabgleich hält sie draußen.
+    """
+    two_edged = _effect(seconds=-77.8, seconds_median=8.3, stderr=85.0, wins=32, losses=15)
+    assert two_edged.sign_p < 0.05
+    assert not two_edged.measurable
+
+
+def test_a_consistent_direction_below_the_noise_floor_still_does_not_count():
+    """Drei Sekunden bleiben drei Sekunden, auch wenn alle 48 sie gewinnen."""
+    tiny = _effect(seconds=1.8, seconds_median=1.9, stderr=0.1, wins=48, losses=0)
+    assert tiny.sign_p < 1e-10
+    assert not tiny.measurable
+
+
+def test_the_measurement_counts_the_directions_it_saw(effects):
+    flat = next(e for e in effects if e.attr == "flach")
+    assert flat.wins + flat.losses <= flat.pairs
+    assert flat.wins > flat.losses, "Mehr Flachleistung muss bei den meisten Zeit bringen"
+    dead = next(e for e in effects if e.attr == "oberflaechenkompetenz")
+    assert dead.wins == dead.losses == 0, "Exakt gleiche Zeiten sind keine Richtung"
+
+
 def test_a_variance_attribute_is_never_reported():
     """`konstanz` ist mit diesem Aufbau grundsätzlich nicht messbar.
 

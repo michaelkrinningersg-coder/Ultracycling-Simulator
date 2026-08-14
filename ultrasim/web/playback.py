@@ -24,12 +24,12 @@ from typing import Any
 
 import numpy as np
 
-from ..core.engine import STATE_DNF, RaceResult, Telemetry
+from ..core.engine import STATE_DNF, STATE_FINISHED, RaceResult, Telemetry
 from ..core.events import BEST_TIME, DECISION, DNF, MAJOR_EVENTS, RaceEvent
 from ..geo.route import Route
 
 #: Angebotene Zeitrafferstufen.
-SPEEDS = (1, 10, 60, 300, 1000)
+SPEEDS = (1, 5, 10, 30, 60, 300, 1000)
 
 #: Ab dieser Stufe werden nur noch die wichtigen Ereignisse gestreamt –
 #: sonst erstickt der Client am Ereignisstrom (Abschnitt 8.2).
@@ -529,6 +529,7 @@ class RaceView:
                 "state": int(snap["state"][i]),
                 "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
                 "conditions": self.condition_labels(i, t_wall),
+                **self.to_next_split(float(snap["dist"][i]), int(snap["state"][i])),
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
                 rows.append(
@@ -588,6 +589,28 @@ class RaceView:
             "leader": next((r for r in ordered if not r["provisional"]), None),
             "n_reached": sum(1 for r in ordered if not r["provisional"]),
             "n_total": len(ordered),
+        }
+
+    def to_next_split(self, dist_m: float, state: int) -> dict[str, Any]:
+        """Meter bis zur nächsten Zeitmessung und wie sie heißt.
+
+        Gemeint ist die nächste Marke **vor dem Fahrer**, nicht die des
+        gerade angezeigten Boards: Wer bei km 210 fährt, während das
+        Board Split 3 bei km 180 zeigt, will wissen, wie weit es noch bis
+        Split 4 ist — nicht, wie weit er an Split 3 vorbei ist.
+
+        Nach dem Ziel und nach einer Aufgabe steht dort nichts. Eine 0
+        wäre in beiden Fällen eine Behauptung: Der eine ist fertig, der
+        andere kommt nirgends mehr an.
+        """
+        if state in (STATE_FINISHED, STATE_DNF) or not len(self.split_dist):
+            return {"to_next_m": None, "next_split": None}
+        idx = int(np.searchsorted(self.split_dist, dist_m, side="right"))
+        if idx >= len(self.split_dist):
+            return {"to_next_m": None, "next_split": None}
+        return {
+            "to_next_m": int(round(self.split_dist[idx] - dist_m)),
+            "next_split": self.route.splits[idx].name,
         }
 
     def virtual_rows(self, t_wall: float, focus: int) -> dict[str, Any]:

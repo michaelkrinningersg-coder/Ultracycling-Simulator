@@ -93,6 +93,13 @@ ACTIVE_ATTRIBUTES: frozenset[str] = frozenset(
         # messbar nicht.
         "hoehenanpassung",
         "sitzkomfort",
+        # Oberfläche und Reifen. Das letzte Attribut, das der
+        # Kalibrierungsbericht mit einer Null ausgewiesen hat — es hatte
+        # keinen Abnehmer, *und* keine Strecke kannte etwas anderes als
+        # Asphalt. Beides ist jetzt behoben: Der Rollwiderstand hängt an
+        # Oberfläche, Reifen, Tempo und Last, und die Flachetappe hat
+        # Schotter und rauen Belag.
+        "oberflaechenkompetenz",
         # Wetter (M6.1)
         "hitzetoleranz",
         "kaeltetoleranz",

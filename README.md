@@ -22,11 +22,11 @@ hier umgesetzt.
 | Bereich | Was drinsteckt |
 |---|---|
 | GPX-Import (M1) | Namespace-tolerantes Parsen, Duplikatentfernung, Höheninterpolation, Resampling auf 10 m, Savitzky-Golay-Glättung, Segmentierung, Anstiegserkennung mit Kategorien, Splits und Servicepunkte, gzip-JSON |
-| Physik (M2) | Roll-, Steigungs-, Luft- und Beschleunigungswiderstand, Euler-Integration mit 1 s Tick, höhenabhängige Luftdichte, Abfahrtslogik mit Trittfrequenzgrenze und Kurvenlimit, CdA aus Körpermaßen |
+| Physik (M2) | Roll-, Steigungs-, Luft- und Beschleunigungswiderstand, Euler-Integration mit 1 s Tick, höhenabhängige Luftdichte, Abfahrtslogik mit Trittfrequenzgrenze und Kurvenlimit, CdA aus Körpermaßen. Der Rollwiderstand hängt an Oberfläche, Reifen, Tempo und Systemmasse — inklusive Impedanz, also dem Anteil, der als Schwingung verlorengeht |
 | Fahrer (M3) | Generator mit acht Archetypen und Potenzial-Budget, 25 Attribute, Saison-/Tages-/Abschnittsform (OU-Prozess), W′ und Langzeitermüdung, Team-Attribut Servicedisziplin |
 | Strategie | Rennplan je Fahrer: Ziel-Intensität aus der Distanz, Anstiegs-Aufschlag, Radwahl je Abschnitt zwischen Servicepunkten und Anstiegen, mit Wirtschaftlichkeitsprüfung — jede Entscheidung mit Begründung protokolliert |
 | Rennen (M3) | Vektorisiert über das ganze Feld, Einzelstart, Splitzeiten mit Sub-Tick-Interpolation, Ereignis-Strom, quantisierte Telemetrie |
-| Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit Zeitraffer 1×–1000×, Ergebnisliste, Fahrerdetail mit Verlaufskurven |
+| Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit sieben Zeitrafferstufen (1×, 5×, 10×, 30×, 60×, 300×, 1000×), Ergebnisliste, Fahrerdetail mit Verlaufskurven. Uhr *und* Rückstand zählen zwischen zwei Frames mit, statt im Takt der Frames zu springen; eine eigene Spalte zeigt die Meter bis zur nächsten Zeitmessung |
 | Zustände (M5.1) | Zustandssystem aus Abschnitt 6.5: multiplikative Modifikatoren auf FTP, Abfahrtstempo, Rollwiderstand und Energieaufnahme, verankert wahlweise in Zeit oder Distanz, mit linearem oder hartem Abklingen. Erster Erzeuger ist die Fehlplanung — der zu ambitionierte Plan schlägt spät zurück. Sichtbar als Balken über dem Profil, Chip in der Board-Zeile und Eintrag im Ticker |
 | Energie (M5.2) | Glykogenspeicher, Substratverteilung nach Intensität, Zufuhr gedeckelt durch KH-Verbrennung *und* Magenverträglichkeit, Hungerast unter 15 % Füllstand. Der Rennplan rechnet vorab aus, welche Intensität die Zufuhr über die Distanz trägt, und nimmt das Minimum aus Distanz- und Energiegrenze |
 | Servicestopps (M5.2) | Halt an jedem Servicepunkt, Kurz- oder Vollservice je nach Zeit seit dem letzten großen Halt, Dauer × Servicedisziplin des Teams. Radwechsel läuft parallel statt zusätzlich |
@@ -57,11 +57,8 @@ großen Rennen liegen die Strecken nicht als GPX vor, und eine
 Kalibrierung gegen nachgebaute Profile misst am Ende den
 Profilgenerator.
 
-**Noch offen**: `oberflaechenkompetenz` ist das letzte Attribut ohne
-Wirkung, und das bleibt es, bis Strecken Oberflächen kennen. Eine
-Mechanik dafür wäre schnell geschrieben — nur läse sie eine Angabe, die
-kein Profil mitbringt, und die Zahl im Bericht käme dann aus einer
-Voreinstellung statt aus der Strecke. Ehrlicher ist die Null.
+**Erledigt**: `oberflaechenkompetenz` war lange das letzte Attribut ohne
+Wirkung — siehe „Der Rollwiderstand war eine Konstante" weiter unten.
 
 ### Eine Karriere ist eine Kette eingefrorener Jahre
 
@@ -592,7 +589,8 @@ Hitzetoleranz nichts wert.
 Sechs Attribute standen mit einer Null in der Matrix — sie kosteten
 Potenzial-Budget, standen im Fahrerdetail und bewirkten nichts. Der
 Bericht hat das nicht vermutet, sondern gemessen, und damit ließ sich der
-Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe:
+Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe, und
+inzwischen sind alle sechs beantwortet:
 
 | Attribut | Warum null | Was daraus wurde | Wirkung heute |
 |---|---|---|---|
@@ -601,7 +599,7 @@ Reihe nach nachsehen, *warum*. Die Antworten waren nicht dieselbe:
 | `hoehenanpassung` | kein Abnehmer | 7 % Leistungsverlust je 1000 m über 1500 m, ±50 % über das Attribut | 61 s (Hochgebirge), **0 s im Flachen** |
 | `abfahrtstechnik` | gelesen, aber das Kurvenlimit lag bei 313–530 km/h und hat nie gebunden | engerer Bremsradius plus Kehren im Streckengenerator — Limit jetzt 57–64 km/h in steilen Abfahrten | **237 s** (Hochgebirge) |
 | `hitzetoleranz` | die Wetterläufe maßen 16 Fahrerpaare auf einer 40-Stunden-Strecke — die Wirkung war da, aber sie ging im Chaos unter | Wetterlauf nimmt die *kürzeste* Strecke und 48 statt 16 Grundfahrer | **185 s** (300 km bei Hitze) |
-| `oberflaechenkompetenz` | kein Abnehmer, und keine Strecke kennt Schotter | offen — ohne Oberflächenkennzeichnung im Streckeneditor gibt es nichts zu lesen | 0 s |
+| `oberflaechenkompetenz` | kein Abnehmer, und keine Strecke kennt Schotter | Rollwiderstand aus Oberfläche, Reifen, Tempo und Last; die Voralpen-Runde bekommt 37 % Schotter und Pflaster | **76 s** (Voralpen), 0 s auf Asphalt |
 
 Die Null bei `hoehenanpassung` im Flachen ist dabei kein Rest, sondern
 das Ergebnis: Ein Attribut, das nur über 1500 m greift, *muss* auf einer
@@ -661,6 +659,75 @@ Hitze fiel auf, dass alle drei mitgelieferten Profile netto durchgehend
 anstiegen: Die „Voralpen-Runde" endete 800 m über ihrem Start. Der
 Generator zieht die Drift jetzt linear ab, die Runden sind wieder
 Runden, und die Nordroute liegt bei 260 statt 2200 m im Mittel.
+
+### Der Rollwiderstand war eine Konstante
+
+`CRR` kennt seit M2 vier Oberflächen von gutem Asphalt bis
+Kopfsteinpflaster, die Engine liest sie, und der Ereigniskatalog weiß,
+welche davon rau sind. Trotzdem stand `oberflaechenkompetenz` im Bericht
+bei null — aus einem banalen Grund: **keine Strecke hatte je etwas
+anderes als Asphalt**. Die Tabelle war da, der Abnehmer war da, die
+Daten fehlten.
+
+Der Rollwiderstand hängt jetzt an vier Größen statt an einer:
+
+1. **Oberfläche.** Über `--surface 34-61:gravel` beim Import oder später
+   im Editor. GPX kennt keine Oberflächen — kein Format aus Navigator
+   oder Aufzeichnung trägt sie mit —, also muss die Angabe von außen
+   dazu.
+2. **Reifen.** Schmal und hart gegen breit und weich, einmal je Strecke
+   entschieden und mit Begründung protokolliert.
+3. **Tempo.** Die Walkarbeit im Reifen wächst, weil dieselbe Verformung
+   öfter je Sekunde durchlaufen wird: rund 0,0005 je 10 m/s.
+4. **Last.** Mehr Systemmasse heißt mehr Schwingungsenergie bei
+   gleichem Schlag.
+
+**Der interessante Teil ist Punkt 2, und er ist echte Reifenphysik.**
+Neben dem Abrollwiderstand gibt es die *Impedanz*: Der Reifen schlägt
+gegen Kanten, Rad und Fahrer werden beschleunigt, und diese Energie
+kommt nicht zurück. Sie wächst mit der Rauheit und mit der Steifigkeit
+des Reifens. Daraus folgt der Umschlagpunkt, den jeder kennt, der schon
+einmal auf schlechtem Belag Druck abgelassen hat:
+
+| Oberfläche | schmal | breit | Sieger |
+|---|---|---|---|
+| guter Asphalt | 0,00422 | 0,00455 | **schmal** um 7,6 % |
+| rauer Asphalt | 0,00790 | 0,00688 | **breit** um 14,9 % |
+| Schotter | 0,01347 | 0,01127 | **breit** um 19,6 % |
+| Kopfsteinpflaster | 0,01763 | 0,01412 | **breit** um 24,8 % |
+
+Die Zahlen sind an Reifenmessungen angelehnt und nicht daran, eine
+schöne Entscheidung zu erzwingen. Ein erster Ansatz hatte den
+Schmalreifen auf Asphalt mit 14 % zu gut und auf Pflaster mit nur 10 %
+zu wenig schlecht — die Wahl kippte damit erst bei rund 50 % Schotter,
+also praktisch nie. Mit den korrigierten Werten fällt sie so:
+
+| Strecke | rauer Anteil | Reifen |
+|---|---|---|
+| Voralpen-Runde | 36,9 % | **breit** |
+| Hochgebirgs-Marathon | 0 % | schmal |
+| Flachetappe Nordsee | 0 % | schmal |
+| Nordroute Langstrecke | 0 % | schmal |
+
+Die Voralpen-Runde hat dafür 37 % Schotter, rauen Belag und Pflaster
+bekommen. Bewusst nicht die Flachetappe: Die ist als Heimterrain des
+Zeitfahrers dazugekommen, und Schotter untergräbt genau das.
+
+`oberflaechenkompetenz` misst dort jetzt **76 s** bei 31:0 — und auf der
+glatten Flachetappe exakt null. Das ist kein Rest, sondern das Ergebnis:
+Auf frischem Asphalt gibt es nichts zu können, und ein Attribut, das
+dort etwas bewirkte, wäre ein verkappter Grundbonus.
+
+Damit hat **jedes der 25 Attribute** eine Mechanik. Der Test, der
+früher hieß „ein Attribut ohne Abnehmer bewirkt nichts", ist umgedreht
+worden und prüft heute das Gegenteil.
+
+**Und der Sattel hängt mit dran.** Was den Reifen an Impedanz kostet,
+kommt beim Fahrer als Vibration an: Der breite Reifen schiebt die
+Sattelbeschwerden nach hinten, rauer Untergrund zieht sie nach vorn.
+`sitzkomfort` hat damit neben dem passiven Zeitzähler auch eine
+Entscheidung hinter sich — wer empfindlich ist, nimmt den breiten
+Reifen und zahlt dafür auf glatter Straße.
 
 ### Der Anstiegsaufschlag wird jetzt bezahlt
 

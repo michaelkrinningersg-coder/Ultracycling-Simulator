@@ -24,6 +24,109 @@ CRR: dict[str, float] = {
     "cobbles": 0.0110,
 }
 
+#: Rauheit je Oberfläche — nicht dasselbe wie der Rollwiderstand oben.
+#:
+#: Der Beiwert sagt, wie viel Energie der Reifen beim Abrollen frisst.
+#: Die Rauheit sagt, wie viel Energie in **Schwingung** geht: Der Reifen
+#: schlägt gegen Kanten, Rad und Fahrer werden beschleunigt, und diese
+#: Energie kommt nicht zurück. In der Reifenmessung heißt das Impedanz,
+#: und sie ist der Grund, warum ein steinhart aufgepumpter Schmalreifen
+#: auf Kopfsteinpflaster *langsamer* ist als ein weicher Breitreifen,
+#: obwohl er auf glattem Asphalt gewinnt.
+SURFACE_ROUGHNESS: dict[str, float] = {
+    "asphalt_good": 0.0,
+    "asphalt_rough": 0.5,
+    "gravel": 1.0,
+    "cobbles": 1.5,
+}
+
+#: Oberflächen, auf denen die Reifenwahl überhaupt eine Frage ist.
+ROUGH_SURFACES = frozenset(k for k, v in SURFACE_ROUGHNESS.items() if v > 0.0)
+
+#: Reifen als zweite Materialentscheidung neben dem Rad (Abschnitt 6.4).
+#:
+#: ``crr_factor`` wirkt auf den glatten Anteil, ``stiffness`` auf die
+#: Impedanz. Der Schmalreifen gewinnt das eine und verliert das andere —
+#: genau darin liegt die Entscheidung. ``comfort`` verschiebt, ab wann
+#: der Sattel wehtut: Was den Reifen schont, schont auch den Fahrer.
+#: Die Zahlen sind an Reifenmessungen angelehnt und nicht daran, eine
+#: schöne Entscheidung zu erzwingen. Auf glattem Asphalt liegen zwischen
+#: 25 mm hart und 32 mm weich rund 5 bis 10 % Rollwiderstand — nicht
+#: mehr. Auf Kopfsteinpflaster kehrt sich das um, und zwar deutlich
+#: stärker: Dort ist der Breitreifen um 30 bis 50 % besser, weil die
+#: Impedanz alles andere überdeckt. Ein erster Ansatz hatte den
+#: Schmalreifen auf Asphalt mit 14 % zu gut und auf Pflaster mit 10 % zu
+#: wenig schlecht — die Wahl kippte damit erst bei rund 50 % Schotter,
+#: also praktisch nie.
+TYRES: dict[str, dict[str, float]] = {
+    "schmal": {"crr_factor": 0.95, "stiffness": 1.00, "mass_kg": 0.00, "cda": 0.000, "comfort": 0.85},
+    "breit": {"crr_factor": 1.03, "stiffness": 0.35, "mass_kg": 0.25, "cda": 0.002, "comfort": 1.20},
+}
+TYRE_NARROW = 0
+TYRE_WIDE = 1
+TYRE_NAMES = ("schmal", "breit")
+
+#: Impedanzverlust je Einheit Rauheit bei steifem Reifen, als Aufschlag
+#: auf den Rollwiderstandsbeiwert. Auf Kopfsteinpflaster (Rauheit 1,5)
+#: sind das 0,0068 — deutlich mehr als der Grundwiderstand auf gutem
+#: Asphalt, und genau das ist der Punkt: Auf schlechtem Untergrund
+#: entscheidet nicht mehr das Abrollen, sondern das Durchgeschüttelt-
+#: werden.
+IMPEDANCE_CRR = 0.0045
+
+#: Der Beiwert steigt mit dem Tempo: Die Walkarbeit im Reifen wächst,
+#: weil dieselbe Verformung öfter je Sekunde durchlaufen wird. Grob
+#: 0,0005 je 10 m/s, also bei 36 km/h rund ein Achtel Aufschlag auf
+#: gutem Asphalt. Bis hierher war der Beiwert eine reine Konstante.
+CRR_SPEED_PER_MS = 0.00005
+
+#: Systemmasse, auf die sich die Impedanz bezieht, und wie stark sie
+#: damit skaliert. Mehr Masse heißt mehr Schwingungsenergie bei
+#: gleichem Schlag — ein schwerer Fahrer zahlt auf Schotter doppelt,
+#: einmal über ``Crr · m · g`` und einmal hierüber.
+CRR_LOAD_REF_KG = 80.0
+CRR_LOAD_SPAN = 0.60
+
+#: Wie stark ``oberflaechenkompetenz`` den Nachteil rauer Oberflächen
+#: dämpft: ±30 %. Sie wirkt bewusst **nur** auf den Aufschlag gegenüber
+#: gutem Asphalt — auf glatter Straße gibt es nichts zu können, und ein
+#: Attribut, das dort etwas bewirkte, wäre ein verkappter Grundbonus.
+SURFACE_SKILL_SPAN = 0.30
+
+
+def rolling_crr(
+    base_crr: np.ndarray,
+    roughness: np.ndarray,
+    tyre_crr_factor: np.ndarray,
+    tyre_stiffness: np.ndarray,
+    v: np.ndarray,
+    mass: np.ndarray,
+    surface_norm: np.ndarray | float = 0.0,
+) -> np.ndarray:
+    """Rollwiderstandsbeiwert aus Oberfläche, Reifen, Tempo und Last.
+
+    Vier Beiträge, in dieser Reihenfolge:
+
+    1. der glatte Grundwiderstand, mit dem Reifenfaktor skaliert,
+    2. der Aufschlag der Oberfläche gegenüber gutem Asphalt,
+    3. die Impedanz aus Rauheit × Reifensteifigkeit × Last,
+    4. der Tempoterm.
+
+    ``oberflaechenkompetenz`` greift an 2 und 3 an, also genau an dem,
+    was die Oberfläche kostet. Der Tempoterm steht außerhalb: Walkarbeit
+    ist Physik des Reifens, keine Frage des Könnens.
+    """
+    base = np.asarray(base_crr, dtype=np.float64)
+    smooth = CRR["asphalt_good"] * tyre_crr_factor
+    surface_excess = np.maximum(base - CRR["asphalt_good"], 0.0) * tyre_crr_factor
+
+    load = 1.0 + CRR_LOAD_SPAN * (np.asarray(mass, dtype=np.float64) - CRR_LOAD_REF_KG) / CRR_LOAD_REF_KG
+    impedance = IMPEDANCE_CRR * np.asarray(roughness) * tyre_stiffness * np.maximum(load, 0.1)
+
+    skill = 1.0 - SURFACE_SKILL_SPAN * np.clip(np.asarray(surface_norm, dtype=np.float64), -1.0, 1.0)
+    return smooth + (surface_excess + impedance) * skill + CRR_SPEED_PER_MS * np.maximum(v, 0.0)
+
+
 #: Positionsfaktoren auf die Frontalfläche. CdA = k · A_frontal.
 #: Kalibriert an den Richtwerten aus Abschnitt 4.4: mit A ≈ 0,257 m²
 #: (180 cm / 70 kg) ergibt k=0,90 -> 0,23 (Zeitfahrposition),

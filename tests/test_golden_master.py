@@ -91,18 +91,18 @@ GOLDEN_ROUTE = {
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
-    (6, 5981.66),
-    (12, 6094.34),
-    (8, 6114.41),
-    (11, 6215.77),
-    (3, 6270.05),
-    (5, 6326.14),
-    (9, 6330.72),
-    (2, 6502.57),
-    (10, 6575.79),
-    (4, 6765.28),
-    (1, 7053.53),
-    (7, 7107.49),
+    (6, 6003.60),
+    (12, 6110.69),
+    (8, 6133.09),
+    (11, 6236.76),
+    (3, 6291.22),
+    (5, 6345.74),
+    (9, 6351.09),
+    (2, 6520.98),
+    (10, 6596.06),
+    (4, 6781.87),
+    (1, 7074.52),
+    (7, 7126.75),
 ]
 
 TOLERANCE_S = 0.5
@@ -168,14 +168,21 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   kostet ungleichmäßiges Fahren echtes Substrat), und das wirkt
 #:   *innerhalb* des Deckels. Auf 40 Stunden ist das viel: Startnummer 6
 #:   gewinnt eine halbe Stunde, 4 gut 25 Minuten.
+#: * Rollwiderstand aus Oberfläche, Reifen, Tempo und Last. Der Beiwert
+#:   war bis hierher eine Konstante je Segment; jetzt steigt er mit dem
+#:   Tempo (Walkarbeit im Reifen) und mit der Systemmasse. Auf der
+#:   Teststrecke ohne Schotter ist das der einzige wirksame Teil — das
+#:   Feld wird rund 20 Sekunden langsamer, die Reihenfolge bleibt. Die
+#:   acht zusätzlichen PLAN-Ereignisse sind die Begründung der
+#:   Reifenwahl, je Fahrer eine.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 146443.12),
-    (5, 146767.18),
-    (8, 150420.18),
-    (3, 152541.20),
-    (1, 161056.92),
-    (4, 161259.14),
-    (6, 164483.32),
+    (7, 147214.06),
+    (5, 147541.34),
+    (8, 151092.00),
+    (3, 153326.56),
+    (4, 161814.53),
+    (1, 162028.53),
+    (6, 165144.61),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -188,12 +195,12 @@ GOLDEN_LONG_EVENTS: dict[str, int] = {
     "DECISION": 10,
     "DNF": 1,
     "FINISH": 7,
-    "INCIDENT": 48,
-    "PLAN": 64,
+    "INCIDENT": 49,
+    "PLAN": 72,
     "SLEEP": 3,
     "SPLIT_PASSED": 315,
     "START": 8,
-    "STOP_END": 129,
+    "STOP_END": 130,
     "STOP_START": 82,
 }
 

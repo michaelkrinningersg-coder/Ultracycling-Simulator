@@ -147,10 +147,33 @@ SADDLE_DURATION_S = 400.0 * 3600.0
 REPAIR_SKILL_SPAN = 0.30
 
 
-def saddle_onset_h(sitzkomfort: np.ndarray) -> np.ndarray:
-    """Nach wie vielen Stunden im Sattel es wehtut."""
+#: Wie stark die Strecke die Sattelbeschwerden vorzieht. Bei mittlerer
+#: Rauheit auf Schotterniveau kommt der Schmerz rund 25 % früher.
+SADDLE_ROUGHNESS_SPAN = 0.25
+
+
+def saddle_onset_h(
+    sitzkomfort: np.ndarray,
+    tyre_comfort: np.ndarray | float = 1.0,
+    roughness: np.ndarray | float = 0.0,
+) -> np.ndarray:
+    """Nach wie vielen Stunden im Sattel es wehtut.
+
+    Drei Größen, und die beiden neuen sind dieselbe Physik wie beim
+    Rollwiderstand von der anderen Seite: Was den Reifen an Impedanz
+    kostet, kommt beim Fahrer als Vibration an. Ein harter Schmalreifen
+    ist schnell auf glattem Asphalt und quälend auf Schotter — und ein
+    Fahrer, der auf Schotter unterwegs ist, sitzt eher wund als einer
+    auf frischem Belag.
+
+    Damit hat ``sitzkomfort`` neben dem passiven Zeitzähler auch eine
+    Entscheidung hinter sich: Wer empfindlich ist, nimmt den breiten
+    Reifen und zahlt dafür auf glatter Straße.
+    """
     norm = (np.asarray(sitzkomfort, dtype=np.float64) - 50.0) / 50.0
-    return SADDLE_ONSET_H + SADDLE_SCALE_H * (1.0 + norm)
+    base = SADDLE_ONSET_H + SADDLE_SCALE_H * (1.0 + norm)
+    rough = 1.0 - SADDLE_ROUGHNESS_SPAN * np.clip(np.asarray(roughness, dtype=np.float64), 0.0, 1.5)
+    return base * np.asarray(tyre_comfort, dtype=np.float64) * np.maximum(rough, 0.3)
 
 
 #: Kalorienrückstand gegenüber dem Plan, ab dem ein Fahrer als

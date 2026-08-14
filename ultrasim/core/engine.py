@@ -449,13 +449,35 @@ def simulate_race(
     flat_norm = np.array([r.attr_norm("flach") for r in field_riders])
     boost = np.array([p.climb_boost for p in plans])
     boost_norm = np.array([p.boost_norm for p in plans])
+    tyre = np.array([p.tyre for p in plans], dtype=np.int64)
+    tyre_crr_f = np.array([ph.TYRES[n]["crr_factor"] for n in ph.TYRE_NAMES])[tyre]
+    tyre_stiff = np.array([ph.TYRES[n]["stiffness"] for n in ph.TYRE_NAMES])[tyre]
+    tyre_mass = np.array([ph.TYRES[n]["mass_kg"] for n in ph.TYRE_NAMES])[tyre]
+    tyre_cda = np.array([ph.TYRES[n]["cda"] for n in ph.TYRE_NAMES])[tyre]
+    surface_norm = np.array([r.attr_norm("oberflaechenkompetenz") for r in field_riders])
     target_if = np.array([p.target_if for p in plans])
     skill_norm = np.array([r.attr_norm("abfahrtstechnik") for r in field_riders])
     risk_norm = np.array([r.attr_norm("risikobereitschaft") for r in field_riders])
     altitude_norm = np.array([r.attr_norm("hoehenanpassung") for r in field_riders])
     mechanic_norm = np.array([r.attr_norm("mechanikerfaehigkeit") for r in field_riders])
+    tyre_comfort = np.array([ph.TYRES[n]["comfort"] for n in ph.TYRE_NAMES])[tyre]
+    # Mittlere Rauheit der ganzen Strecke: Wundsein ist eine Frage der
+    # Stunden, nicht des Meters, also zählt hier der Schnitt und nicht
+    # das Segment unter dem Rad.
+    route_roughness = (
+        float(
+            np.average(
+                [ph.SURFACE_ROUGHNESS.get(sg.surface, 0.0) for sg in route.segments],
+                weights=[sg.length_m for sg in route.segments],
+            )
+        )
+        if route.segments
+        else 0.0
+    )
     saddle_onset_s = inc.saddle_onset_h(
-        np.array([r.attr("sitzkomfort") for r in field_riders])
+        np.array([r.attr("sitzkomfort") for r in field_riders]),
+        tyre_comfort,
+        route_roughness,
     ) * 3600.0
     service_factor = np.array(
         [
@@ -521,8 +543,10 @@ def simulate_race(
     grade_pt = route.grade
     seg_idx_pt = route.segment_index_array()
     crr_seg = np.array([ph.CRR.get(s.surface, ph.CRR["asphalt_good"]) for s in route.segments])
+    rough_seg = np.array([ph.SURFACE_ROUGHNESS.get(s.surface, 0.0) for s in route.segments])
     curv_seg = np.array([max(s.curviness, 1.0) for s in route.segments])
     crr_pt = crr_seg[seg_idx_pt] if len(crr_seg) else np.full(route.n_points, ph.CRR["asphalt_good"])
+    rough_pt = rough_seg[seg_idx_pt] if len(rough_seg) else np.zeros(route.n_points)
     curv_pt = curv_seg[seg_idx_pt] if len(curv_seg) else np.full(route.n_points, 1.0)
     # Kurvenlimit ohne Fahreranteil vorrechnen: sqrt(µ·g·r) hängt nur an
     # der Strecke, der Fahreranteil ist ein Faktor.
@@ -1248,8 +1272,25 @@ def simulate_race(
             p_eff = p_target * ph.downhill_power_taper(v)
 
             # --- Physik ----------------------------------------------
-            mass = weight + bike_mass[bike] + ph.SUPPORTED_LUGGAGE_KG
-            cda = ph.cda_for(frontal, ph.position_k(grade, flat_norm), bike_cda_f[bike]) * cross_cda
+            mass = weight + bike_mass[bike] + tyre_mass + ph.SUPPORTED_LUGGAGE_KG
+            cda = (
+                ph.cda_for(frontal, ph.position_k(grade, flat_norm), bike_cda_f[bike]) + tyre_cda
+            ) * cross_cda
+            # Der Rollwiderstand haengt jetzt am Tick statt an der
+            # Strecke: Er braucht Tempo und Systemmasse, und die kennt
+            # erst diese Zeile.
+            crr_now = (
+                ph.rolling_crr(
+                    crr_pt[idx],
+                    rough_pt[idx],
+                    tyre_crr_f,
+                    tyre_stiff,
+                    v,
+                    mass,
+                    surface_norm,
+                )
+                * crr_mod
+            )
             # Der Faktor greift auf Kurvenlimit *und* Sicherheitsdeckel.
             # Nur auf das Kurvenlimit angewandt bliebe er auf gerader
             # Strecke wirkungslos – nachts bombt trotzdem niemand mit
@@ -1262,7 +1303,7 @@ def simulate_race(
                 grade,
                 mass,
                 cda,
-                crr_pt[idx] * crr_mod,
+                crr_now,
                 rho_pt[idx],
                 dt,
                 v_limit=v_limit,

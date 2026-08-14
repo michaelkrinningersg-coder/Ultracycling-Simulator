@@ -118,19 +118,28 @@ def test_flat_power_makes_riders_faster(effects):
     assert flat.pairs == 8
 
 
-def test_an_attribute_without_a_consumer_does_nothing(effects):
-    """`oberflaechenkompetenz` wird von keiner Mechanik gelesen – exakt null.
+def test_no_attribute_is_without_a_consumer_any_more(effects):
+    """Hier stand einmal das Gegenteil.
 
-    Der Platzhalter dieses Tests war ursprünglich ``sitzkomfort``. Der
-    hat seit den Sitzbeschwerden einen Abnehmer, und damit wanderte die
-    Rolle weiter an das letzte verbliebene tote Attribut: Ohne
-    Schotterabschnitte im Streckeneditor liest niemand die Oberfläche.
-    Wird auch das eingebaut, hat dieser Test keinen Kandidaten mehr —
-    und genau dann darf er ersatzlos verschwinden.
+    Der Test hieß „ein Attribut ohne Abnehmer bewirkt nichts" und hatte
+    nacheinander drei Kandidaten: erst ``sitzkomfort``, dann — als der
+    einen Abnehmer bekam — ``oberflaechenkompetenz``. Mit dem
+    Rollwiderstandsmodell aus Oberfläche, Reifen, Tempo und Last ist auch
+    der letzte vergeben, und damit hat der alte Test keinen Kandidaten
+    mehr. Statt ihn zu löschen, dreht er sich um: Jedes Attribut, das im
+    Fahrerdetail steht, wird auch von irgendeiner Mechanik gelesen.
+
+    Dass ein Attribut *gelesen* wird, heißt nicht, dass es auf jeder
+    Strecke wirkt — ``oberflaechenkompetenz`` misst auf glattem Asphalt
+    weiterhin exakt null, und das ist richtig so. Diese Zusicherung
+    steht eine Zeile tiefer.
     """
-    assert "oberflaechenkompetenz" not in ACTIVE_ATTRIBUTES
+    assert set(ACTIVE_ATTRIBUTES) == set(ATTRIBUTES), (
+        "Alle 25 Attribute haben eine Mechanik — wer eines hinzufügt, "
+        "muss ihm auch einen Abnehmer geben"
+    )
     surface = next(e for e in effects if e.attr == "oberflaechenkompetenz")
-    assert surface.seconds == 0.0
+    assert surface.seconds == 0.0, "auf einer reinen Asphaltstrecke gibt es nichts zu können"
     assert not surface.measurable
 
 

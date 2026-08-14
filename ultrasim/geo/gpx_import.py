@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..core import physics as ph
 from .route import Route, accumulate_ascent, classify_distance, compute_grade, haversine_m
 from .segmentation import build_climbs, build_segments
 from .smoothing import moving_median, savgol_filter
@@ -345,6 +346,16 @@ def main(argv: list[str] | None = None) -> int:
         metavar="KM",
         help="zusätzlicher Kontrollpunkt-Split (mehrfach angebbar)",
     )
+    parser.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="VON-BIS:ART",
+        help=(
+            "Oberfläche eines Abschnitts, z. B. 120-138:gravel (mehrfach angebbar). "
+            f"Möglich: {', '.join(sorted(ph.CRR))}. Ohne Angabe gilt überall guter Asphalt."
+        ),
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -360,12 +371,56 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Import fehlgeschlagen: {exc}", file=sys.stderr)
         return 2
 
+    try:
+        applied = apply_surfaces(route, args.surface or [])
+    except ValueError as exc:
+        print(f"Import fehlgeschlagen: {exc}", file=sys.stderr)
+        return 2
+
     out = args.out or Path("data/routes") / f"{_slug(route.name)}.json.gz"
     route.save(out)
     size_kb = out.stat().st_size / 1024.0
     print(report.as_text())
+    for line in applied:
+        print(f"Oberfläche:         {line}")
     print(f"Geschrieben:        {out} ({size_kb:.0f} kB)")
     return 0
+
+
+def apply_surfaces(route: Route, specs: list[str]) -> list[str]:
+    """Oberflächen aus ``VON-BIS:ART``-Angaben auf die Segmente legen.
+
+    GPX kennt keine Oberflächen — kein Format, das aus einem Navigator
+    oder einer Aufzeichnung kommt, trägt diese Information mit. Sie muss
+    also von außen dazu, und dafür gibt es zwei Wege: hier auf der
+    Kommandozeile beim Import und später im Streckeneditor. Beide
+    schreiben dasselbe Feld.
+
+    Ein Segment bekommt die Oberfläche, wenn sein **Mittelpunkt** im
+    angegebenen Bereich liegt. Das vermeidet die Frage, was mit einem
+    Segment passiert, das halb auf Schotter und halb auf Asphalt liegt —
+    bei 300 m Segmentlänge ist die Antwort ohnehin beliebig.
+    """
+    out: list[str] = []
+    for spec in specs:
+        try:
+            span, kind = spec.rsplit(":", 1)
+            lo_km, hi_km = (float(x) for x in span.split("-", 1))
+        except ValueError as exc:
+            raise ValueError(f"Oberflächenangabe '{spec}' erwartet VON-BIS:ART, z. B. 12-30:gravel") from exc
+        if kind not in ph.CRR:
+            raise ValueError(f"Oberfläche '{kind}' unbekannt. Möglich: {', '.join(sorted(ph.CRR))}")
+        if hi_km <= lo_km:
+            raise ValueError(f"Oberflächenangabe '{spec}': BIS muss größer als VON sein")
+        lo_m, hi_m = lo_km * 1000.0, hi_km * 1000.0
+        hit = 0
+        for seg in route.segments:
+            mid = seg.dist_start_m + seg.length_m / 2.0
+            if lo_m <= mid < hi_m:
+                seg.surface = kind
+                hit += 1
+        out.append(f"km {lo_km:.1f}–{hi_km:.1f} als {kind} ({hit} Segmente)")
+    return out
 
 
 def _slug(name: str) -> str:

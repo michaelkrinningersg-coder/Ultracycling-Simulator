@@ -95,6 +95,8 @@ class RacePlan:
     #: ``boost_normalisation``. Auf einer flachen Strecke steht hier
     #: praktisch 1,0, im Hochgebirge deutlich darunter.
     boost_norm: float = 1.0
+    #: Reifenwahl für die ganze Strecke (``ph.TYRE_NARROW``/``TYRE_WIDE``).
+    tyre: int = 0
 
 
 def base_target_if(distance_km: float) -> float:
@@ -334,6 +336,33 @@ def _grade_histogram(route: Route, lo_m: float, hi_m: float, n_bins: int = 33) -
     return centres[keep], dist_per_bin[keep], mean_ele
 
 
+def surface_mix(route: Route, lo_m: float = 0.0, hi_m: float | None = None) -> tuple[float, float]:
+    """Distanzgewichtetes Mittel aus Rollwiderstand und Rauheit.
+
+    Der Rennplan trifft die Reifenwahl einmal für die ganze Strecke, und
+    dafür genügen zwei Zahlen: wie viel Widerstand die Oberfläche im
+    Mittel kostet und wie rau sie im Mittel ist. Wo keine Segmente
+    liegen, gilt guter Asphalt — das ist der Zustand jeder Strecke, die
+    aus einer GPX-Datei ohne Oberflächenangabe kommt.
+    """
+    hi_m = route.distance_m if hi_m is None else hi_m
+    total = 0.0
+    crr_sum = 0.0
+    rough_sum = 0.0
+    for seg in route.segments:
+        lo = max(seg.dist_start_m, lo_m)
+        hi = min(seg.dist_end_m, hi_m)
+        if hi <= lo:
+            continue
+        length = hi - lo
+        total += length
+        crr_sum += length * ph.CRR.get(seg.surface, ph.CRR["asphalt_good"])
+        rough_sum += length * ph.SURFACE_ROUGHNESS.get(seg.surface, 0.0)
+    if total <= 0.0:
+        return ph.CRR["asphalt_good"], 0.0
+    return crr_sum / total, rough_sum / total
+
+
 def estimate_section_time(
     rider: Rider,
     power_w: float,
@@ -343,25 +372,75 @@ def estimate_section_time(
     mean_ele: float,
     bike: int,
     boost_norm: float = 1.0,
+    tyre: int = ph.TYRE_NARROW,
+    base_crr: float = ph.CRR["asphalt_good"],
+    roughness: float = 0.0,
 ) -> float:
     """Geschätzte Fahrzeit eines Abschnitts mit einem bestimmten Rad."""
     spec = ph.BIKES[ph.BIKE_NAMES[bike]]
-    mass = rider.weight_kg + spec["mass_kg"] + ph.SUPPORTED_LUGGAGE_KG
+    tspec = ph.TYRES[ph.TYRE_NAMES[tyre]]
+    mass = rider.weight_kg + spec["mass_kg"] + tspec["mass_kg"] + ph.SUPPORTED_LUGGAGE_KG
     k = ph.position_k(grades, np.full_like(grades, rider.attr_norm("flach")))
     cda = ph.cda_for(
         np.full_like(grades, rider.frontal_area_m2),
         k,
         np.full_like(grades, spec["cda_factor"]),
-    )
+    ) + tspec["cda"]
     rho = ph.air_density(mean_ele)
     power = power_w * boost_norm * terrain_power_factor(grades, np.full_like(grades, boost))
     # Zeitfahrrad: Wirkungsgradverlust an steilen Rampen (Abschnitt 6.4).
     power = power * (1.0 - spec["steep_penalty"] * (grades > 0.06))
-    v = ph.steady_state_speed(
-        power, grades, np.full_like(grades, mass), cda, np.full_like(grades, ph.CRR["asphalt_good"]), rho
-    )
-    v = np.clip(v, 1.0, ph.DOWNHILL_NO_POWER)
+    # Zwei Durchgänge, weil der Rollwiderstand jetzt vom Tempo abhängt
+    # und das Tempo vom Rollwiderstand. Der Zusammenhang ist flach — der
+    # Tempoterm bewegt den Beiwert um wenige Prozent —, also reicht ein
+    # Nachschlag, genau wie beim Energiedeckel eine Ebene höher.
+    v = np.full_like(grades, 8.5)
+    for _ in range(2):
+        crr = ph.rolling_crr(
+            np.full_like(grades, base_crr),
+            np.full_like(grades, roughness),
+            tspec["crr_factor"],
+            tspec["stiffness"],
+            v,
+            np.full_like(grades, mass),
+            rider.attr_norm("oberflaechenkompetenz"),
+        )
+        v = ph.steady_state_speed(power, grades, np.full_like(grades, mass), cda, crr, rho)
+        v = np.clip(v, 1.0, ph.DOWNHILL_NO_POWER)
     return float(np.sum(dists / v))
+
+
+def choose_tyre(rider: Rider, route: Route, power_w: float, boost: float) -> tuple[int, str]:
+    """Reifenwahl für die ganze Strecke.
+
+    Anders als das Rad wird der Reifen **einmal** entschieden und nicht
+    je Abschnitt: Ein Reifenwechsel ist ein Radwechsel, und den bildet
+    schon die Radwahl ab. Real entscheidet man das am Morgen vor dem
+    Start, nach dem Streckenprofil — genau das tut diese Funktion.
+
+    Auf jeder Strecke ohne Oberflächenangabe fällt die Wahl auf schmal,
+    und zwar nicht als Vorgabe, sondern als Ergebnis: Auf glattem
+    Asphalt gewinnt der harte Schmalreifen um gut 13 % Rollwiderstand.
+    """
+    base_crr, roughness = surface_mix(route)
+    grades, dists, mean_ele = _grade_histogram(route, 0.0, route.distance_m, n_bins=65)
+    if dists.sum() <= 0:
+        return ph.TYRE_NARROW, ""
+    times = [
+        estimate_section_time(
+            rider, power_w, boost, grades, dists, mean_ele, ph.BIKE_ROAD,
+            tyre=t, base_crr=base_crr, roughness=roughness,
+        )
+        for t in (ph.TYRE_NARROW, ph.TYRE_WIDE)
+    ]
+    best = ph.TYRE_NARROW if times[ph.TYRE_NARROW] <= times[ph.TYRE_WIDE] else ph.TYRE_WIDE
+    gain = abs(times[0] - times[1])
+    share = 100.0 * roughness / max(ph.SURFACE_ROUGHNESS["gravel"], 1e-9)
+    note = (
+        f"Reifenwahl {ph.TYRE_NAMES[best]}: mittlere Rauheit {share:.0f} % Schotterniveau, "
+        f"geschätzter Vorsprung {gain / 60.0:.1f} min über {route.distance_km:.0f} km"
+    )
+    return best, note
 
 
 #: Kürzester Abschnitt, für den sich eine eigene Radwahl lohnt. Darunter
@@ -412,6 +491,7 @@ def build_bike_plan(
     change_cost_s: float,
     allow_tt: bool = True,
     boost_norm: float = 1.0,
+    tyre: int = ph.TYRE_NARROW,
 ) -> tuple[list[SectionPlan], list[tuple[float, str]]]:
     """Radwahl je Abschnitt zwischen zwei Servicepunkten (Abschnitt 6.4).
 
@@ -443,12 +523,15 @@ def build_bike_plan(
         grades, dists, mean_ele = _grade_histogram(route, lo, hi)
         if dists.sum() <= 0:
             continue
+        base_crr, roughness = surface_mix(route, lo, hi)
         t_road = estimate_section_time(
-            rider, power, boost, grades, dists, mean_ele, ph.BIKE_ROAD, boost_norm
+            rider, power, boost, grades, dists, mean_ele, ph.BIKE_ROAD, boost_norm,
+            tyre, base_crr, roughness,
         )
         t_tt = (
             estimate_section_time(
-                rider, power, boost, grades, dists, mean_ele, ph.BIKE_TT, boost_norm
+                rider, power, boost, grades, dists, mean_ele, ph.BIKE_TT, boost_norm,
+                tyre, base_crr, roughness,
             )
             if allow_tt
             else float("inf")
@@ -508,9 +591,10 @@ def build_plan(
     wish_if, overreach, note = target_intensity(rider, route.distance_km, rng)
     boost = climb_boost(rider)
     boost_norm = boost_normalisation(rider, route, wish_if, boost)
+    tyre, tyre_note = choose_tyre(rider, route, rider.ftp_w * wish_if * boost_norm, boost)
     change_cost = BIKE_CHANGE_BASE_S * service_factor
     sections, notes = build_bike_plan(
-        rider, route, wish_if, boost, change_cost, allow_tt, boost_norm
+        rider, route, wish_if, boost, change_cost, allow_tt, boost_norm, tyre
     )
 
     # --- Energiedeckel (Abschnitt 6.1) -------------------------------
@@ -582,9 +666,12 @@ def build_plan(
         stops=stops,
         est_ride_time_s=ride_time,
         boost_norm=boost_norm,
+        tyre=tyre,
     )
     plan.notes.append((0.0, note))
     plan.notes.append((0.0, limit_note))
+    if tyre_note:
+        plan.notes.append((0.0, tyre_note))
     if boost_norm < 0.999:
         plan.notes.append(
             (

@@ -16,7 +16,7 @@
 
 import { ProfileView } from './profile.js';
 
-const SPEEDS = [1, 10, 60, 300, 1000];
+const SPEEDS = [1, 5, 10, 30, 60, 300, 1000];
 
 function hms(seconds) {
   if (seconds === null || seconds === undefined) return '—';
@@ -114,6 +114,34 @@ function raceLive(raceId) {
     //: Splitzeiten stehen fest.
     rowTime(row) {
       return row.running ? row.t_s + this.liveDelta : row.t_s;
+    },
+
+    //: Meter bis zur nächsten Zeitmessung.
+    //:
+    //: Unter 10 km in Metern, darüber in Kilometern — 47 000 m liest
+    //: niemand, 800 m dagegen genau dann, wenn es darauf ankommt. Wer
+    //: im Ziel oder ausgeschieden ist, bekommt einen Strich: Eine 0
+    //: wäre in beiden Fällen falsch.
+    toNext(row) {
+      const m = row && row.to_next_m;
+      if (m === null || m === undefined) return '–';
+      // Ohne Tausenderpunkt: "1.386 m" ist nach deutscher Schreibweise
+      // zwar richtig, liest sich in einer Zahlenspalte neben "25.0 km"
+      // aber wie 1,386 Meter. "1386 m" kann man nicht falsch verstehen.
+      return m < 10000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+    },
+
+    //: Der Rückstand muss mitzählen wie die Uhr, sonst springt er.
+    //:
+    //: Er kommt als ``t_s − Bestzeit`` vom Server, und die Bestzeit ist
+    //: eine gemessene Splitzeit — sie steht zwischen zwei Frames fest.
+    //: Also wächst der Rückstand eines noch fahrenden Verfolgers genau
+    //: um dieselbe Sekundenzahl wie seine Uhr, und die steht hier schon
+    //: als ``liveDelta``. Ohne das sprang die Spalte im Takt der Frames:
+    //: bei 60× einmal je halbe Sekunde um eine halbe Minute.
+    rowGap(row) {
+      if (row.gap_s === null || row.gap_s === undefined) return null;
+      return row.running ? row.gap_s + this.liveDelta : row.gap_s;
     },
 
     async init() {

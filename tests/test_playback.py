@@ -515,3 +515,42 @@ def test_a_race_without_recorded_factors_says_so(view):
 
     old = RaceView(replace(view.result, telemetry=replace(view.telemetry, factors=None)), view.route)
     assert old.factors_at(0, 1800.0) is None
+
+
+# ----------------------------------------------------------------------
+# Meter bis zur nächsten Zeitmessung
+# ----------------------------------------------------------------------
+def test_the_distance_to_the_next_checkpoint_counts_down(view):
+    """Gemeint ist die Marke vor dem Fahrer, nicht die des Boards."""
+    dists = view.split_dist
+    assert len(dists) > 1
+    mid = float(dists[0]) + (float(dists[1]) - float(dists[0])) / 2.0
+    out = view.to_next_split(mid, 0)
+    assert out["to_next_m"] == pytest.approx(float(dists[1]) - mid, abs=1.0)
+    assert out["next_split"]
+
+    # Kurz vor derselben Marke ist es weniger, nicht mehr.
+    closer = view.to_next_split(float(dists[1]) - 100.0, 0)
+    assert closer["to_next_m"] < out["to_next_m"]
+
+
+def test_a_finished_or_retired_rider_has_no_next_checkpoint(view):
+    """Eine 0 wäre in beiden Fällen eine Behauptung."""
+    from ultrasim.core.engine import STATE_DNF, STATE_FINISHED
+
+    for state in (STATE_FINISHED, STATE_DNF):
+        assert view.to_next_split(1000.0, state) == {"to_next_m": None, "next_split": None}
+
+
+def test_past_the_last_checkpoint_there_is_none(view):
+    beyond = float(view.split_dist[-1]) + 500.0
+    assert view.to_next_split(beyond, 0)["to_next_m"] is None
+
+
+def test_every_board_row_carries_the_distance_to_the_next_checkpoint(view):
+    board = view.board_rows(t_wall=1800.0, split_idx=1, focus=0)
+    assert board["rows"]
+    for row in board["rows"]:
+        assert "to_next_m" in row and "next_split" in row
+        if row["to_next_m"] is not None:
+            assert row["to_next_m"] >= 0

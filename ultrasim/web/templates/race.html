@@ -242,7 +242,11 @@
         <thead>
           <tr>
             <th>Rg</th><th>Nr</th><th>Fahrer</th><th>Team</th>
-            <th class="right">Zeit</th><th class="right">Rückstand</th><th class="right">km</th><th></th>
+            <th class="right">Zeit</th><th class="right">Rückstand</th><th class="right">km</th>
+            <!-- Meter statt Kilometer: Auf den letzten 800 m vor einer
+                 Zeitmessung ist "0,8" nichtssagend und "800 m" die Zahl,
+                 auf die man wartet. -->
+            <th class="right" title="Meter bis zur nächsten Zeitmessung">bis CP</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -258,6 +262,7 @@
               <td class="time" x-text="hms(board.leader.t_s)"></td>
               <td class="gap faint">Führender</td>
               <td class="right mono faint" x-text="board.leader.dist_km.toFixed(1)"></td>
+              <td class="right mono faint" x-text="toNext(board.leader)"></td>
               <td></td>
             </tr>
           </template>
@@ -274,8 +279,9 @@
               <td class="dim" x-text="row.team"></td>
               <td class="time" x-text="row.t_s === null ? '—' : hms(rowTime(row))"></td>
               <td class="gap" :class="row.gap_s > 0 ? 'pos' : (row.gap_s < 0 ? 'neg' : '')"
-                  x-text="row.gap_s === null || row.gap_s === 0 ? '' : gap(row.gap_s)"></td>
+                  x-text="row.gap_s === null || row.gap_s === 0 ? '' : gap(rowGap(row))"></td>
               <td class="right mono faint" x-text="row.dist_km.toFixed(1)"></td>
+              <td class="right mono" :title="row.next_split || ''" x-text="toNext(row)"></td>
               <td>
                 <span class="chip tt" x-show="row.bike === 1">TT</span>
                 <span class="chip stop" x-show="row.state === 1">Stopp</span>

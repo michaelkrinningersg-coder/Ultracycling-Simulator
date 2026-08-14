@@ -70,8 +70,10 @@ def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
     """Beim ersten Start ein Rennen rechnen, damit es etwas zu sehen gibt.
 
     Ohne das stünde der Nutzer nach dem Doppelklick vor einer leeren
-    Übersicht – und der Zweck von v0.1.0 ist ausschließlich: einmal
-    zuschauen können.
+    Übersicht. Alles andere – eigene Strecken, Fahrerpool, Saison,
+    Karriere – setzt eine Entscheidung voraus; dieses eine Rennen setzt
+    keine voraus und beantwortet die erste Frage von selbst: Wie sieht
+    das eigentlich aus?
     """
     from .core.engine import RaceConfig, simulate_race
     from .core.rider import generate_pool

@@ -828,6 +828,9 @@ Jeder Tag `v*` löst über GitHub Actions einen Windows-Build aus, der eine
 `UltracyclingSimulator.exe` als Release-Asset veröffentlicht. Details und
 Fallstricke: [`BUILD_UND_RELEASE.md`](BUILD_UND_RELEASE.md).
 
+Was in welcher Version steckt — samt der gemessenen offenen Punkte —
+steht in [`CHANGELOG.md`](CHANGELOG.md).
+
 ---
 
 ## Lizenz

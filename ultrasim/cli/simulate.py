@@ -22,6 +22,7 @@ from ..core.engine import RaceConfig, simulate_race
 from ..core.events import format_event
 from ..core.rider import generate_pool
 from ..data.store import Store
+from . import use_safe_console
 
 
 def hms(seconds: float | None) -> str:
@@ -47,7 +48,7 @@ def cmd_pool(args: argparse.Namespace) -> int:
     store.save_pool(teams, riders)
     pot = np.array([r.potential for r in riders])
     print(f"{len(riders)} Fahrer in {len(teams)} Teams erzeugt -> {store.pool_path}")
-    print(f"Potenzial: Ø {pot.mean():.1f} · σ {pot.std():.1f} · {pot.min():.1f}–{pot.max():.1f}")
+    print(f"Potenzial: Ø {pot.mean():.1f} · Streuung {pot.std():.1f} · {pot.min():.1f}–{pot.max():.1f}")
     print(
         f"FTP: Ø {np.mean([r.ftp_w for r in riders]):.0f} W · W/kg Ø {np.mean([r.wkg for r in riders]):.2f}"
     )
@@ -277,6 +278,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    use_safe_console()
     args = build_parser().parse_args(argv)
     try:
         return int(args.func(args))

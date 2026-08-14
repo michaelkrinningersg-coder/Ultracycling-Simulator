@@ -26,6 +26,7 @@ from ..core.engine import RaceConfig, simulate_race
 from ..core.events import INCIDENT
 from ..core.rider import generate_pool
 from ..data.store import Store
+from . import use_safe_console
 
 #: Die Zielkorridore stehen in ``ultrasim.calibration`` – dort misst der
 #: Kalibrierungsbericht dagegen, hier die Konsolenausgabe. Zwei Kopien
@@ -130,7 +131,7 @@ def run(args: argparse.Namespace) -> int:
             print(
                 f"  {inc.CATALOG[typ].label:22s} {count / max(starters, 1):5.2f}/Fahrer  "
                 f"Ø {incident_lost_s[typ] / max(count, 1) / 60.0:5.1f} min  "
-                f"(Basis 1 pro {inc.CATALOG[typ].km_per_event:.0f} km ⇒ "
+                f"(Basis 1 pro {inc.CATALOG[typ].km_per_event:.0f} km => "
                 f"{route.distance_km / inc.CATALOG[typ].km_per_event:.2f})"
             )
         print()
@@ -186,6 +187,7 @@ def _rankdata(values: np.ndarray) -> np.ndarray:
 
 
 def main(argv: list[str] | None = None) -> int:
+    use_safe_console()
     parser = argparse.ArgumentParser(prog="python -m ultrasim.cli.balance", description=__doc__)
     parser.add_argument("--data", type=Path, default=Path("data"))
     parser.add_argument("--route", default="voralpen-runde")

@@ -27,7 +27,7 @@ from ultrasim.core.rider import generate_pool
 
 #: Streckenkennzahlen der Testroute (siehe conftest).
 GOLDEN_ROUTE = {
-    "distance_m": 60_070.0,
+    "distance_m": 60_100.0,
     "ascent_m": 543.1,
     "n_splits": 6,
     "n_segments": 187,
@@ -55,19 +55,29 @@ GOLDEN_ROUTE = {
 #:   in die Aufholjagd geht, und holt davon 71 Sekunden zurück. Die elf
 #:   anderen erleben keine Lage, in der eine Regel greift — auf einer
 #:   Strecke von anderthalb Stunden ist das der Normalfall.
+#: * M8 – **keine** Balancing-Änderung, sondern eine Reparatur am
+#:   Streckengenerator. Er hat die Punktzahl mit ``int()`` abgeschnitten,
+#:   und die Profillängen summieren sich exakt auf eine Ganzzahlgrenze:
+#:   Seit Python 3.12 summiert ``sum()`` für Fließkommazahlen kompensiert
+#:   und trifft 60,1 statt 60,099999999999994. Damit hatte die Teststrecke
+#:   unter 3.11 einen Punkt weniger als unter 3.12 — dieser Test war auf
+#:   der einen Version grün und auf der anderen rot, und niemand hat es
+#:   gemerkt, weil der Entwicklungsrechner 3.11 fährt. Der Generator
+#:   rundet jetzt; die Strecke ist auf allen Versionen 60 100 m lang und
+#:   das Feld entsprechend 2,5 s langsamer.
 GOLDEN_RESULT = [
-    (8, 6151.26),
-    (12, 6206.73),
-    (6, 6213.62),
-    (11, 6328.11),
-    (5, 6429.78),
-    (9, 6464.33),
-    (10, 6502.05),
-    (3, 6506.74),
-    (2, 6586.24),
-    (4, 6874.38),
-    (7, 7195.52),
-    (1, 7235.42),
+    (8, 6153.77),
+    (12, 6209.28),
+    (6, 6216.18),
+    (11, 6330.70),
+    (5, 6432.69),
+    (9, 6466.89),
+    (10, 6504.72),
+    (3, 6509.30),
+    (2, 6589.41),
+    (4, 6877.14),
+    (7, 7198.12),
+    (1, 7238.15),
 ]
 
 TOLERANCE_S = 0.5

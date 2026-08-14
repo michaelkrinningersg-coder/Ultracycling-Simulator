@@ -17,7 +17,8 @@ import numpy as np
 import pytest
 
 from ultrasim import calibration as cal
-from ultrasim.cli import balance, calibrate
+from ultrasim import calibration_report as report
+from ultrasim.cli import balance
 from ultrasim.core import weather as wx
 from ultrasim.core.engine import simulate_race
 from ultrasim.core.form import day_form_sd
@@ -219,7 +220,7 @@ def test_the_report_contains_all_three_sections(route, small_pool, effects):
     summary = cal.route_summary(route, riders, teams, (21,))
     arch_teams, arch_riders = cal.balanced_field(1, seed=5)
     stats = cal.archetype_stats(route, arch_riders, arch_teams, (11,))
-    text = calibrate.build_report(
+    text = report.build_report(
         [summary], [(summary, stats)], [route], {route.name: effects}, "2026-01-01", "Testlauf"
     )
     assert "# Kalibrierung" in text
@@ -243,7 +244,7 @@ def test_the_weather_section_lists_every_weather_attribute(route, small_pool):
     hot = cal.attribute_sensitivity(
         route, riders, teams, (17,), attributes=cal.WEATHER_ATTRIBUTES, preset="hitze"
     )
-    text = "\n".join(calibrate.section_weather(route, dict.fromkeys(cal.WEATHER_PRESETS, hot)))
+    text = "\n".join(report.section_weather(route, dict.fromkeys(cal.WEATHER_PRESETS, hot)))
     for attr in cal.WEATHER_ATTRIBUTES:
         assert f"| {attr} |" in text
     for preset in cal.WEATHER_PRESETS:
@@ -253,9 +254,9 @@ def test_the_weather_section_lists_every_weather_attribute(route, small_pool):
 def test_an_attribute_that_only_works_in_bad_weather_is_not_called_dead(route, effects):
     """Was nur im Wetterlauf anspringt, darf nicht als tot gelten."""
     strong = cal.AttributeEffect("naesseresistenz", 200.0, 190.0, 0.5, 5.0, 40, 0)
-    without = "\n".join(calibrate.section_sensitivity([route], {route.name: effects}))
+    without = "\n".join(report.section_sensitivity([route], {route.name: effects}))
     with_rain = "\n".join(
-        calibrate.section_sensitivity([route], {route.name: effects}, {"regen": [strong]})
+        report.section_sensitivity([route], {route.name: effects}, {"regen": [strong]})
     )
     assert "`naesseresistenz`" in without
     assert "`naesseresistenz`" not in with_rain
@@ -266,4 +267,4 @@ def test_the_report_marks_a_missed_dnf_corridor(route, small_pool):
     summary = cal.route_summary(route, riders, teams, (21,))
     outside = replace(summary, dnf_pct=42.0, otl_pct=0.0)
     assert not outside.dnf_in_target
-    assert "⚠" in "\n".join(calibrate.section_routes([outside]))
+    assert "⚠" in "\n".join(report.section_routes([outside]))

@@ -20,6 +20,7 @@ from pathlib import Path
 from .. import season_runner as runner
 from ..core.season import Season
 from ..data.store import Store
+from . import use_safe_console
 
 
 def _hms(seconds: float | None) -> str:
@@ -119,7 +120,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     for calendar_race in targets:
-        print(f"→ {calendar_race.day.isoformat()} {calendar_race.name} … ", end="", flush=True)
+        print(f"-> {calendar_race.day.isoformat()} {calendar_race.name} … ", end="", flush=True)
         outcome = runner.run_calendar_race(store, season, calendar_race.id)
         print(
             f"{outcome.n_entries} Starter, Sieger {_hms(outcome.winner_time_s)}, "
@@ -150,6 +151,7 @@ def cmd_close(args: argparse.Namespace) -> int:
 
 # ----------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
+    use_safe_console()
     parser = argparse.ArgumentParser(prog="python -m ultrasim.cli.season", description=__doc__)
     parser.add_argument("--data", type=Path, default=Path("data"))
     sub = parser.add_subparsers(dest="cmd", required=True)

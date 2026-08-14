@@ -42,7 +42,7 @@ hier umgesetzt.
 | Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
 | Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
 | Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: Dauerbänder und DNF-Korridor je Strecke, Siegverteilung nach Archetyp bei identischem Potenzial-Budget, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 410 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 424 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -517,8 +517,8 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 410 Tests, rund 265 s
-pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 230 s
+pytest -q                    # 424 Tests, rund 155 s
+pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 125 s
 ruff check ultrasim tools tests
 ```
 
@@ -527,6 +527,32 @@ andere ruht: dass die Glättung wirkt, dass gleicher Seed gleiches
 Ergebnis liefert, dass sich das Rennen eines Fahrers nicht ändert, nur
 weil jemand anderes gemeldet hat, und dass der Client nichts aus der
 Zukunft sieht.
+
+### Zwei Fehler, die nur das CI sehen konnte
+
+Die Testmatrix fährt Linux und Windows, Python 3.11 und 3.12. Beides hat
+sich gelohnt — auf dem Entwicklungsrechner (Linux, 3.11) war alles grün,
+während zwei echte Fehler unbemerkt im Repository lagen:
+
+**Der Golden Master war versionsabhängig.** Der Streckengenerator hat die
+Punktzahl mit `int(total_m / spacing)` abgeschnitten, und die
+Profillängen summieren sich exakt auf eine Ganzzahlgrenze. Seit Python
+3.12 summiert `sum()` für Fließkommazahlen kompensiert und trifft 60,1
+statt 60,099999999999994 — damit hatte dieselbe Teststrecke unter 3.12
+einen Rasterpunkt mehr, war 30 m länger, und das Feld war 2,5 s
+langsamer. Der Test war auf der einen Version rot und auf der anderen
+grün. Der Generator rundet jetzt, statt abzuschneiden.
+
+**Ein Pfeil hat das Windows-Programm abgestürzt.** Die Konsole einer
+deutschen Windows-Installation ist cp1252 kodiert, und ein `⇒` in einer
+Tabellenzeile des Balancing-Werkzeugs beendet den Prozess mit einem
+`UnicodeEncodeError` — mitten in einer sonst fehlerfreien Ausgabe. Die
+Anwendung wird als Windows-Programm ausgeliefert, das war also kein
+Schönheitsfehler. Zwei Maßnahmen: Die Kommandozeilenwerkzeuge kommen
+ohne solche Zeichen aus (ein Test prüft die Zeichenketten über den
+Syntaxbaum, damit es nicht wieder passiert), und `use_safe_console`
+schaltet die Ausgabe zusätzlich auf `errors="replace"` — dann wird aus
+einem künftigen Ausrutscher ein Fragezeichen statt eines Absturzes.
 
 ---
 

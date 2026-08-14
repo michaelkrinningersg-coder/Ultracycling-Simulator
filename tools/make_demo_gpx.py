@@ -98,7 +98,14 @@ def build_track(
 
     total_km = sum(length for length, _ in profile)
     total_m = total_km * 1000.0
-    n = int(total_m / point_spacing_m) + 1
+    # Runden statt abschneiden. Die Profillängen summieren sich je nach
+    # Python-Version auf 60,1 oder auf 60,099999999999994 – seit 3.12
+    # summiert ``sum()`` für Fließkommazahlen kompensiert und trifft den
+    # Wert genauer. Mit ``int()`` kippt genau dort die Punktzahl um eins,
+    # die Strecke wird 30 m länger, und der Golden Master ist auf der
+    # einen Python-Version rot und auf der anderen grün. Das Runden nimmt
+    # der Ganzzahlgrenze ihre Schärfe.
+    n = round(total_m / point_spacing_m) + 1
     dist = np.arange(n, dtype=np.float64) * point_spacing_m
 
     # --- Höhe: Gerüst integrieren, Wellen und DEM-Rauschen darüberlegen

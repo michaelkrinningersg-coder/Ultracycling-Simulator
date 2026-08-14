@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M8 samt Editoren (M5b)
+## Stand: Meilensteine M1–M8, Editoren (M5b) und Karrieremodus
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -24,7 +24,7 @@ hier umgesetzt.
 | GPX-Import (M1) | Namespace-tolerantes Parsen, Duplikatentfernung, Höheninterpolation, Resampling auf 10 m, Savitzky-Golay-Glättung, Segmentierung, Anstiegserkennung mit Kategorien, Splits und Servicepunkte, gzip-JSON |
 | Physik (M2) | Roll-, Steigungs-, Luft- und Beschleunigungswiderstand, Euler-Integration mit 1 s Tick, höhenabhängige Luftdichte, Abfahrtslogik mit Trittfrequenzgrenze und Kurvenlimit, CdA aus Körpermaßen |
 | Fahrer (M3) | Generator mit acht Archetypen und Potenzial-Budget, 25 Attribute, Saison-/Tages-/Abschnittsform (OU-Prozess), W′ und Langzeitermüdung, Team-Attribut Servicedisziplin |
-| Strategie | Rennplan je Fahrer: Ziel-Intensität aus der Distanz, Anstiegs-Aufschlag, Radwahl je Servicepunkt-Abschnitt mit Wirtschaftlichkeitsprüfung — jede Entscheidung mit Begründung protokolliert |
+| Strategie | Rennplan je Fahrer: Ziel-Intensität aus der Distanz, Anstiegs-Aufschlag, Radwahl je Abschnitt zwischen Servicepunkten und Anstiegen, mit Wirtschaftlichkeitsprüfung — jede Entscheidung mit Begründung protokolliert |
 | Rennen (M3) | Vektorisiert über das ganze Feld, Einzelstart, Splitzeiten mit Sub-Tick-Interpolation, Ereignis-Strom, quantisierte Telemetrie |
 | Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit Zeitraffer 1×–1000×, Ergebnisliste, Fahrerdetail mit Verlaufskurven |
 | Zustände (M5.1) | Zustandssystem aus Abschnitt 6.5: multiplikative Modifikatoren auf FTP, Abfahrtstempo, Rollwiderstand und Energieaufnahme, verankert wahlweise in Zeit oder Distanz, mit linearem oder hartem Abklingen. Erster Erzeuger ist die Fehlplanung — der zu ambitionierte Plan schlägt spät zurück. Sichtbar als Balken über dem Profil, Chip in der Board-Zeile und Eintrag im Ticker |
@@ -42,7 +42,9 @@ hier umgesetzt.
 | Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
 | Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
 | Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: Dauerbänder und DNF-Korridor je Strecke, Siegverteilung nach Archetyp bei identischem Potenzial-Budget, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 424 Tests inklusive zweier Golden-Master |
+| Karriere | Saisons in Folge mit gemeinsamem Fahrerpool. Der Jahreswechsel friert erst die Wertung als Kapitel ein und lässt dann altern — umgekehrt stünde in der ewigen Bestenliste das Feld des Folgejahres. Der Kalender wird ins nächste Jahr übernommen statt neu vorgeschlagen: Dieselben Rennen an denselben Terminen machen die Bestenliste erst lesbar. Dazu ewige Bestenliste (Titel vor Punkten) und Lebenslauf je Fahrer |
+| Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 450 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -52,6 +54,34 @@ zeigt. Ebenso der Abgleich mit realen Ultra-Ergebnissen aus M8: Für die
 großen Rennen liegen die Strecken nicht als GPX vor, und eine
 Kalibrierung gegen nachgebaute Profile misst am Ende den
 Profilgenerator.
+
+### Eine Karriere ist eine Kette eingefrorener Jahre
+
+Der Jahreswechsel ist die einzige Aktion im ganzen Programm, die
+bestehende Daten überschreibt: Danach ist jeder Fahrer ein Jahr älter,
+einige sind zurückgetreten, Nachwuchs ist nachgerückt. Deshalb friert er
+**vorher** die Wertung als Kapitel ein.
+
+Das klingt nach Redundanz — die Rennergebnisse liegen doch unverändert
+auf der Platte — ist aber keine. Die Wertung von 2031 wird aus den
+Rennen *und dem Feld* gebildet, und das Feld von 2035 ist ein anderes:
+Wer 2032 zurückgetreten ist, steht nicht mehr darin, und aus dem
+Rohdiamanten ist inzwischen jemand anderes geworden. Ohne die
+Momentaufnahme wäre die Tabelle von 2031 nach dem dritten Jahreswechsel
+nicht mehr rekonstruierbar. Umgekehrt speichert die *laufende* Saison
+hier gar nichts: Ihre Wertung entsteht bei jedem Aufruf neu aus den
+gerechneten Rennen, und die sind unveränderlich.
+
+Die ewige Bestenliste sortiert nach **Titeln vor Punkten**. Punkte
+allein wären ungerecht gegenüber kurzen Karrieren: Wer zehn Jahre im
+Mittelfeld fährt, sammelt mehr als der Fahrer mit zwei Titeln und einem
+frühen Rücktritt. In einer Bestenliste zählt, was man gewonnen hat.
+
+Der Kalender wandert ins nächste Jahr, statt neu vorgeschlagen zu
+werden — dieselben Rennen an denselben Terminen, nur mit anderem Seed
+und damit anderem Wetter. Genau das macht die Bestenliste lesbar: Wer
+den Hochgebirgs-Marathon dreimal gewonnen hat, hat dreimal dasselbe
+gewonnen.
 
 ### Ein gerechnetes Rennen ist unveränderlich
 
@@ -239,11 +269,33 @@ trotzdem nur die Gegenwart. Ohne das würde ein Bug die Endzeiten
 verraten und die ganze Dramaturgie zerstören — `tests/test_playback.py`
 prüft es deshalb ausdrücklich.
 
-Auf dem Board bekommen Fahrer, die den gewählten Split noch nicht
-erreicht haben, eine Prognosezeit aus aktuellem Tempo und Reststrecke —
-und stehen damit **an der Position, die diese Prognose ergibt**, kursiv
-und ohne Platzziffer. Genau daraus entsteht die Frage „kommt er noch
-vorbei?“.
+Auf dem Board steht ein Fahrer, der den gewählten Split noch nicht
+erreicht hat, mit seiner **laufenden Uhr** — der Zeit seit seinem Start
+— und rankt sich damit zwischen die gemessenen Zeiten, kursiv und ohne
+Platzziffer. Mit jeder Sekunde, die seine Uhr über eine bestehende Zeit
+hinauswandert, rutscht er einen Platz nach hinten. Das ist die
+Zeitnahme aus dem Wintersport, und sie ist der Grund, warum das Board
+sich lohnt: Vorher stand dort eine Hochrechnung aus Tempo und
+Reststrecke — treffsicherer, aber sie behauptete etwas über die
+Zukunft. Die laufende Uhr behauptet nichts, und die Spannung entsteht
+aus dem Zusehen statt aus der Rechnung.
+
+Ein Aufgeber behält seine stehende Uhr, statt langsam durch das ganze
+Board nach unten zu wandern.
+
+Bei hohem Zeitraffer schickt der Server nur einen Frame je Sekunde — die
+gefahrene Zeit sprang damit in Blöcken von bis zu tausend Sekunden.
+Zwischen zwei Frames zählt der Client sie deshalb selbst weiter,
+gedeckelt auf den nächsten erwarteten Frame, damit sich die Anzeige nie
+sichtbar rückwärts korrigiert. Gerechnet wird im Client trotzdem nichts:
+Positionen, Rangfolge und Ereignisse kommen unverändert vom Server.
+
+Über allem läuft ein **Ereignis-Laufband** mit den letzten zehn
+Meldungen — Splits, Bestzeiten, Defekte, Schlafstopps, Aufgaben.
+Bestzeiten sind dabei kein Vorgang auf der Straße, sondern einer in der
+Zeitnahme: Sie entstehen erst dadurch, dass die Zeiten in der
+Reihenfolge eintreffen, in der gestartet wurde. Erzeugt werden sie
+deshalb in der Playback-Schicht, nicht in der Simulation.
 
 Wer gerade eine taktische Entscheidung getroffen hat, trägt sie als
 Chip neben seinem Namen — „Aufholjagd“, „Sparmodus“, „Hitzemodus“ —
@@ -262,27 +314,31 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 ultrasim/
   core/     physics · rider · form · fatigue · nutrition · sleep · conditions
             weather · incidents · strategy · tactics · season · development
-            events · engine
+            career · events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
   calibration.py           Messungen *an* der Simulation: Dauerband, DNF,
                            Archetypen, Attribut-Sensitivität
   season_runner.py         Dienstschicht: Kalender rechnen, werten, altern
+  career_runner.py         Jahre verketten: Wertung einfrieren, altern,
+                           Folgejahr eröffnen
   web/      main · playback · jobs · routers/ · templates/ · static/
             routers: pages · routes (Streckeneditor) · pool (Fahrer, Teams)
-                     seasons (Kalender) · api (Board, SSE)
+                     seasons (Kalender) · careers (Karriere) · api (Board, SSE)
   cli/      simulate · balance · calibrate · season
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
 docs/       GAME_DESIGN.md · KALIBRIERUNG.md (erzeugt, eingecheckt)
 tests/      geo · core · engine · conditions · nutrition · sleep · weather
             incidents · season · season_web · editors · tactics
-            calibration · playback · golden_master
+            calibration · career · career_web · cli_console
+            playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
   races/    gerechnete Rennen (erzeugt, nicht eingecheckt)
   seasons/  Kalender und Wertung (erzeugt, nicht eingecheckt)
+  careers/  Karriereakten mit den Kapiteln abgeschlossener Jahre
   gpx/      hochgeladene Quelldateien (erzeugt, nicht eingecheckt)
 ```
 
@@ -313,10 +369,28 @@ Browser wie Kommandozeile rufen dieselben Funktionen auf.
 
 2. **Der Radplan kam vorgezogen.** Er stand in der Roadmap erst bei M6,
    ist aber Teil des Rennplans aus Abschnitt 7.1 und mit der
-   Wirtschaftlichkeitsprüfung aus 6.4 in wenigen Zeilen zu haben. Der
-   Effekt ist sichtbar: Auf der flachen Voralpen-Runde fährt das ganze
-   Feld Zeitfahrrad, im Hochgebirge wechseln die Kletterer am
-   Servicepunkt vor den Pässen aufs Straßenrad und danach zurück.
+   Wirtschaftlichkeitsprüfung aus 6.4 in wenigen Zeilen zu haben.
+
+   Wo ein Abschnitt endet, war dabei die eigentliche Frage. Zuerst waren
+   das nur die Servicepunkte — und damit fuhr das Feld auch über die
+   Pässe im Zeitfahrrad. Nicht weil die Physik falsch war: Über 10 km
+   bei 8 % ist das Straßenrad 161 Sekunden schneller. Sondern weil auf
+   507 km fünf Servicepunkte liegen, ein Abschnitt also 90 km lang ist
+   und darin 80 % Flachland stecken. Über die Summe gewann das
+   Zeitfahrrad um zwei Minuten, und der Fahrer quälte sich damit über
+   jeden Berg.
+
+   Jetzt sind auch **Fuß und Kuppe jedes Anstiegs über 4 km mit
+   mindestens 3 %** Abschnittsgrenzen — im unterstützten Rennen fährt
+   das Begleitfahrzeug mit, und genau dort steht es. Ein Servicepunkt
+   entsteht daraus ausdrücklich *nicht*: Der zöge einen Halt nach sich,
+   und dann hielte das Feld an jedem Berg an, auch wenn es nichts zu
+   wechseln gibt. Ob gewechselt wird, entscheidet weiter die Rechnung,
+   und die muss den Wechsel selbst tragen — ein Abschnitt mit 50 %
+   Steilanteil, auf dem das Straßenrad 53 Sekunden gutmacht, ist bei
+   60 Sekunden Wechselkosten kein Grund abzusteigen. Das Ergebnis auf
+   allen drei Strecken: jedes Steilstück auf dem Straßenrad, jeder
+   Flachabschnitt im Zeitfahrrad.
 
 ---
 
@@ -517,7 +591,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 424 Tests, rund 155 s
+pytest -q                    # 450 Tests, rund 155 s
 pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 125 s
 ruff check ultrasim tools tests
 ```

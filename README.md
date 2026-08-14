@@ -43,8 +43,12 @@ hier umgesetzt.
 | Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
 | Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 393 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten**: die Highlight-Automatik (zweite Hälfte von M7b)
-und M8 — die Kalibrierung an realen Ultra-Ergebnissen.
+**Noch nicht enthalten**: M8 — die Kalibrierung gegen einen Anker
+außerhalb des Design-Dokuments. Die Highlight-Automatik aus M7b ist
+bewusst gestrichen: Der Ticker meldet ohnehin jedes größere Ereignis,
+und eine automatische Auswahl „sehenswerter“ Momente würde in einem
+Einzelzeitfahren ohne Kameraführung nichts hinzufügen, was die
+Ereignisliste nicht schon zeigt.
 
 ### Ein gerechnetes Rennen ist unveränderlich
 

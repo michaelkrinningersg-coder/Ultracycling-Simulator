@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 
 from ..core.engine import STATE_DNF, RaceResult, Telemetry
-from ..core.events import MAJOR_EVENTS, RaceEvent
+from ..core.events import DECISION, DNF, MAJOR_EVENTS, RaceEvent
 from ..geo.route import Route
 
 #: Angebotene Zeitrafferstufen.
@@ -173,8 +173,33 @@ class RaceView:
         self._conditions: dict[int, list] = {}
         for record in result.conditions:
             self._conditions.setdefault(record.entry_id, []).append(record)
+        # Entscheidungen je Fahrer, in Eigenzeit sortiert.
+        self._decisions: dict[int, list[RaceEvent]] = {}
+        for event in result.events:
+            if event.type == DECISION:
+                self._decisions.setdefault(event.entry_id, []).append(event)
+        for records in self._decisions.values():
+            records.sort(key=lambda e: e.t_s)
+        # Wann für einen Fahrer Schluss war – Ziel oder Aufgabe. Danach
+        # laufen weder Zustände noch Taktiken weiter: Ein Aufgeber, der
+        # in der Anzeige immer noch "Aufholjagd" trägt, sagt das
+        # Gegenteil dessen, was passiert ist.
+        self._end_t: dict[int, float] = {
+            i: e.finish_time_s
+            for i, e in enumerate(result.entries)
+            if e.finish_time_s is not None
+        }
+        for event in result.events:
+            if event.type == DNF:
+                self._end_t.setdefault(event.entry_id, event.t_s)
 
     # ------------------------------------------------------------------
+    def _elapsed(self, entry_id: int, t_wall: float) -> float:
+        """Eigenzeit eines Fahrers, abgeschnitten an seinem Rennende."""
+        elapsed = t_wall - self.offsets[entry_id]
+        end = self._end_t.get(entry_id)
+        return min(elapsed, end) if end is not None else elapsed
+
     def conditions_at(self, entry_id: int, t_wall: float, only_active: bool = False) -> list[dict[str, Any]]:
         """Zustände eines Fahrers, abgeschnitten an der Wanduhr.
 
@@ -183,14 +208,10 @@ class RaceView:
         an seinem späteren echten Ende. Sonst verriete der Balken über dem
         Profil, wie lange der Einbruch noch dauert.
         """
-        offset = self.offsets[entry_id]
-        elapsed = t_wall - offset
-        # Wer im Ziel ist, hat keine laufenden Zustände mehr: Sonst trüge
-        # ein Fahrer seine Magenprobleme noch stundenlang als Chip durch
-        # die Ergebnisliste, obwohl er längst abgestiegen ist.
-        end = self.result.entries[entry_id].finish_time_s
-        if end is not None:
-            elapsed = min(elapsed, end)
+        # Wer im Ziel ist oder aufgegeben hat, trägt keine laufenden
+        # Zustände mehr: Sonst schleppte ein Fahrer seine Magenprobleme
+        # noch stundenlang als Chip durch die Ergebnisliste.
+        elapsed = self._elapsed(entry_id, t_wall)
         out: list[dict[str, Any]] = []
         for record in self._conditions.get(entry_id, ()):
             if record.start_t_s > elapsed:
@@ -217,6 +238,27 @@ class RaceView:
                 }
             )
         return out
+
+    def tactics_at(self, entry_id: int, t_wall: float) -> list[str]:
+        """Regeln des Strategiemoduls, die gerade greifen (Abschnitt 7.2).
+
+        Abgeleitet aus dem Entscheidungsstrom statt aus einem eigenen
+        Telemetriekanal: Entscheidungen sind selten — ein Dutzend je
+        Rennen und Fahrer — und ein Kanal über 400.000 Ticks für ein
+        Dutzend Umschaltungen wäre die falsche Rechnung. Der Strom ist
+        ohnehin schon an der Wanduhr abgeschnitten.
+        """
+        elapsed = self._elapsed(entry_id, t_wall)
+        active: dict[str, str] = {}
+        for record in self._decisions.get(entry_id, ()):
+            if record.t_s > elapsed:
+                break
+            key = record.payload.get("rule", "")
+            if record.payload.get("on"):
+                active[key] = record.payload.get("label", key)
+            else:
+                active.pop(key, None)
+        return list(active.values())
 
     def condition_labels(self, entry_id: int, t_wall: float) -> list[str]:
         """Chips für die Board-Zeile: aktive Zustände, ohne Dopplung.

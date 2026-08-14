@@ -77,6 +77,9 @@ class RacePlan:
     misjudgement: Misjudgement | None = None
     #: Zielwert der Zufuhr in Gramm Kohlenhydrate je Stunde.
     intake_g_h: float = 0.0
+    #: Was der Magen maximal durchließe. Der Regelkreis darf im
+    #: Sparmodus bis hierher hochgehen (Abschnitt 7.2).
+    intake_ceiling_g_h: float = 0.0
     #: Geplante Halte am Servicepunkt.
     stops: list[StopPlan] = field(default_factory=list)
     #: Geschätzte Fahrzeit ohne Stopps, in Sekunden.
@@ -370,6 +373,16 @@ def build_plan(
             f"{energy_if * 100:.0f} % FTP, geplant sind {wish_if * 100:.0f} %"
         )
 
+    # --- Geplante Zufuhr, mit Luft nach oben (Abschnitt 7.2) ---------
+    # Der Plan isst nicht am Anschlag, sondern so viel, wie die
+    # Zielintensität braucht. Zwei Gründe: Wer den Magen von Anfang an
+    # ausreizt, riskiert ihn (der Ereigniskatalog rechnet die Zufuhrrate
+    # in die Magenwahrscheinlichkeit ein), und der Regelkreis hätte sonst
+    # gar keinen Spielraum, wenn er "Zufuhr erhöhen" beschließt.
+    planned_intake = planned_intake_g_h(
+        rider.ftp_w, target_if, glycogen, ride_time / 3600.0, fat_norm, intake
+    )
+
     misjudgement = plan_misjudgement(route, overreach, rng_misjudge or rng)
     horizon_h = float(slp.wake_horizon_h(rider.attr("schlaftoleranz")))
     # Wer viel Schlaf verträgt und schlecht regeneriert, nimmt lieber
@@ -389,7 +402,8 @@ def build_plan(
         climb_boost=boost,
         sections=sections,
         misjudgement=misjudgement,
-        intake_g_h=intake,
+        intake_g_h=planned_intake,
+        intake_ceiling_g_h=intake,
         stops=stops,
         est_ride_time_s=ride_time,
     )
@@ -444,6 +458,42 @@ def _section_times(
 
 def _estimate_ride_time(sections: list[SectionPlan], target_if: float, ref_if: float) -> float:
     return float(sum(_section_times(sections, target_if, ref_if)))
+
+
+#: Sicherheitsaufschlag auf die rechnerisch nötige Zufuhr. Ein Plan, der
+#: auf das Gramm genau aufgeht, geht nie auf.
+INTAKE_HEADROOM = 1.06
+#: Und so viel wird mindestens gegessen, auch wenn die Rechnung weniger
+#: verlangt – unter zwei Dritteln des Möglichen isst kein Ultrafahrer.
+INTAKE_FLOOR_FRACTION = 0.66
+
+
+def planned_intake_g_h(
+    ftp_w: float,
+    target_if: float,
+    glycogen_kcal: float,
+    duration_h: float,
+    fat_norm: float,
+    ceiling_g_h: float,
+) -> float:
+    """Wie viel ein Fahrer bei seiner Zielintensität einplant.
+
+    Der Verbrauch bei Zielintensität minus dem, was er sich aus dem
+    Speicher zu nehmen traut — mit Aufschlag, gedeckelt durch den Magen.
+
+    Auf langen Distanzen kommt dabei fast immer der Magendeckel heraus,
+    und das ist kein Fehler: Dort *ist* die Zufuhr der Engpass, deshalb
+    wählt der Energiedeckel die Intensität ja gerade so, dass beides
+    aufgeht. Spielraum bleibt auf kurzen und leichten Strecken — und dort
+    ist er auch der einzige Ort, an dem "Zufuhr erhöhen" überhaupt etwas
+    bewirken kann. Wo er fehlt, bleibt dem Regelkreis nur das Tempo.
+    """
+    burn = float(nut.carb_burn_g_h(ftp_w * target_if, target_if, fat_norm))
+    drawdown = (
+        nut.PLANNED_DRAWDOWN * glycogen_kcal / nut.CARB_KCAL_PER_G / max(duration_h, 0.1)
+    )
+    needed = max(burn - drawdown, 0.0) * INTAKE_HEADROOM
+    return float(np.clip(needed, INTAKE_FLOOR_FRACTION * ceiling_g_h, ceiling_g_h))
 
 
 # ----------------------------------------------------------------------

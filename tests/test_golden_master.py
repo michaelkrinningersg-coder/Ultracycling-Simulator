@@ -48,6 +48,11 @@ GOLDEN_ROUTE = {
 #:   auf die Hundertstelsekunde gleich. Dass nur die Betroffenen sich
 #:   bewegen, ist die eigentliche Aussage dieses Laufs: Der Ereignisstrom
 #:   ist von allen anderen Zufallsströmen getrennt.
+#: * M7b – Regelkreis des Strategiemoduls. Genau ein Fahrer bewegt sich:
+#:   Startnummer 7 hatte auf diesen 60 km so viel Zeit verloren, dass er
+#:   in die Aufholjagd geht, und holt davon 71 Sekunden zurück. Die elf
+#:   anderen erleben keine Lage, in der eine Regel greift — auf einer
+#:   Strecke von anderthalb Stunden ist das der Normalfall.
 GOLDEN_RESULT = [
     (8, 6151.26),
     (12, 6206.73),
@@ -59,8 +64,8 @@ GOLDEN_RESULT = [
     (3, 6506.74),
     (2, 6586.24),
     (4, 6874.38),
+    (7, 7195.52),
     (1, 7235.42),
-    (7, 7266.72),
 ]
 
 TOLERANCE_S = 0.5

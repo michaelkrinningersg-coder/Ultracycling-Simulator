@@ -29,6 +29,9 @@ MECHANICAL = "MECHANICAL"
 BONK = "BONK"
 CONDITION_START = "CONDITION_START"
 CONDITION_END = "CONDITION_END"
+#: Entscheidung des Regelkreises aus Abschnitt 7.2 – mit Begründung, wie
+#: es die Debug-Anforderung in Abschnitt 7.3 verlangt.
+DECISION = "DECISION"
 #: Zwischenfall aus dem Katalog in Abschnitt 6.5. Bewusst *ein* Typ mit
 #: der Art im Payload statt acht Konstanten: Die UI behandelt sie alle
 #: gleich, und ein neuer Katalogeintrag soll keine Codeänderung sein.
@@ -43,6 +46,7 @@ MAJOR_EVENTS = frozenset(
         BIKE_CHANGE,
         MECHANICAL,
         INCIDENT,
+        DECISION,
         BONK,
         SLEEP,
         CONDITION_START,
@@ -104,6 +108,9 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
             f"{who}Hungerast bei km {p.get('dist_km', 0):.0f} "
             f"(Glykogen {p.get('glyco_pct', 0):.0f} %)"
         )
+    if event.type == DECISION:
+        mark = "▸" if p.get("on") else "◂"
+        return f"{who}{mark} {p.get('reason', p.get('label', 'Entscheidung'))}"
     if event.type == INCIDENT:
         stop = p.get("stop_s", 0.0)
         tail = f" – {stop / 60:.0f} min verloren" if stop >= 30 else ""

@@ -314,3 +314,8 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .attr .k { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
 .attr .row { display: flex; align-items: center; gap: .4rem; }
 .attr input.val { width: 4rem; text-align: right; padding: .12rem .3rem; font-size: .78rem; }
+
+/* Laufende Regel des Strategiemoduls (Abschnitt 7.2): eigene Farbe, weil
+   eine Entscheidung etwas anderes ist als ein Zustand, der einem
+   widerfährt. */
+.chip.tactic { border-color: var(--accent-2); color: var(--accent-2); }

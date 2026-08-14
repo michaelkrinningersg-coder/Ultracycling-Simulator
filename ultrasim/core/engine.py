@@ -39,12 +39,14 @@ from . import physics as ph
 from . import season as sn
 from . import sleep as slp
 from . import strategy as st
+from . import tactics as tac
 from . import weather as wx
 from .events import (
     BIKE_CHANGE,
     BONK,
     CONDITION_END,
     CONDITION_START,
+    DECISION,
     DNF,
     FINISH,
     INCIDENT,
@@ -437,7 +439,11 @@ def simulate_race(
     glyco_cap = nut.glycogen_capacity_kcal(
         weight, np.array([r.attr("ausdauer") for r in field_riders])
     )
-    intake_g_h = np.array([p.intake_g_h for p in plans])
+    intake_plan_g_h = np.array([p.intake_g_h for p in plans])
+    intake_ceiling = np.array(
+        [p.intake_ceiling_g_h or p.intake_g_h for p in plans]
+    )
+    intake_g_h = intake_plan_g_h.copy()
     wake_horizon = slp.wake_horizon_h(
         np.array([r.attr("schlaftoleranz") for r in field_riders])
     )
@@ -452,6 +458,19 @@ def simulate_race(
     mental_norm = np.array(
         [r.attr_norm("mentale_widerstandsfaehigkeit") for r in field_riders]
     )
+
+    # --- Strategiemodul Stufe 2 (Abschnitt 7.2) ----------------------
+    tactics = tac.TacticsState.for_field(n)
+    follow_protect = tac.follow_protective(
+        np.array([r.attr("pacing_disziplin") for r in field_riders])
+    )
+    follow_risk = tac.follow_risky(
+        np.array([r.attr("pacing_disziplin") for r in field_riders]),
+        np.array([r.attr("mentale_widerstandsfaehigkeit") for r in field_riders]),
+    )
+    if_mod = np.ones(n)
+    #: Bezugsgröße des Rückstands: die geplante Fahrzeit dieses Fahrers.
+    plan_time_s = np.array([max(p.est_ride_time_s, 1800.0) for p in plans])
 
     wprime_cap = fat.w_prime_capacity(
         np.array([r.attr("spritzigkeit") for r in field_riders]), weight
@@ -1002,6 +1021,56 @@ def simulate_race(
                 sleep_press = slp.pressure(wake_h, wake_horizon) * circadian
                 sleep_perf = slp.performance_factor(sleep_press)
 
+                # --- Regelkreis (Abschnitt 7.2) ----------------------
+                # Erst hier, nach Glykogen, Wetter und Schlafdruck: Der
+                # Regelkreis reagiert auf die Lage dieses Takts, nicht auf
+                # die des vorigen.
+                want = tac.desired(
+                    glyco_frac,
+                    temp_local,
+                    heat_norm,
+                    lost_s,
+                    plan_time_s,
+                    sleep_press,
+                    tactics.active,
+                )
+                switched = want != tactics.active
+                if switched.any():
+                    for i, rule_idx in zip(*np.nonzero(switched), strict=True):
+                        rule = tac.RULES[int(rule_idx)]
+                        turned_on = bool(want[i, rule_idx])
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t,
+                                DECISION,
+                                {
+                                    "rule": rule.key,
+                                    "label": rule.label,
+                                    "on": turned_on,
+                                    "dist_km": round(float(dist[i]) / 1000.0, 2),
+                                    "reason": tac.reason(
+                                        rule,
+                                        turned_on,
+                                        glyco=float(glyco_frac[i]) * 100.0,
+                                        temp=float(temp_local[i]),
+                                        lost=float(lost_s[i]) / 60.0,
+                                        press=float(sleep_press[i]) * 100.0,
+                                    ),
+                                },
+                            )
+                        )
+                    tactics.active = want
+                    if_mod = tac.intensity_modifier(want, follow_protect, follow_risk)
+                    # Im Sparmodus wird gegessen, was der Magen hergibt.
+                    saving = want[:, tac.RULE_INDEX["sparmodus"]]
+                    intake_g_h = np.where(
+                        saving,
+                        intake_plan_g_h
+                        + (intake_ceiling - intake_plan_g_h) * follow_protect,
+                        intake_plan_g_h,
+                    )
+
                 f_section = fm.section_form_at(section_track, dist, section_grid)
                 f_fat = fat.fatigue_factor(work_j / 1000.0, work_cap_kj)
                 # f_umwelt ist das Produkt aller aktiven Zustände
@@ -1012,7 +1081,7 @@ def simulate_race(
                     * bonk * sleep_perf * weather_perf * hydration_perf
                 )
                 ftp_eff = ftp * form_now
-                ftp_eff_if = ftp_eff * target_if
+                ftp_eff_if = ftp_eff * target_if * if_mod
                 # Abfahrtstempo: Zustaende, Muedigkeit, Sicht bei Nacht,
                 # Haftung bei Naesse und Seitenwind multiplizieren sich –
                 # unabhaengige Ursachen, unabhaengige Faktoren.
@@ -1227,10 +1296,39 @@ def simulate_race(
 
                     # Der geplante Halt am Servicepunkt …
                     kind = stop_kind[i][sp_i] if sp_i < n_sp else "kurz"
+                    planned_s = float(stop_planned[i, sp_i]) if sp_i < n_sp else 0.0
+
+                    # Regelkreis: Wer Schlafdruck angemeldet hat, macht aus
+                    # diesem Halt einen Schlafstopp (Abschnitt 7.2). Das ist
+                    # der Unterschied zwischen einer Entscheidung und dem
+                    # Notschlaf am Straßenrand — der kommt erst, wenn hier
+                    # niemand mehr rechtzeitig gehandelt hat.
+                    if kind != "schlaf" and tactics.active[i, tac.RULE_INDEX["schlafplan"]]:
+                        kind = "schlaf"
+                        planned_s = max(
+                            planned_s, float(rng_stop.uniform(*st.SLEEP_SHORT_S))
+                        )
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t_next,
+                                DECISION,
+                                {
+                                    "rule": "schlafstopp",
+                                    "label": "Schlafstopp",
+                                    "on": True,
+                                    "dist_km": round(float(dist[i]) / 1000.0, 2),
+                                    "reason": (
+                                        f"Halt zum Schlafstopp verlängert "
+                                        f"({planned_s / 60:.0f} min statt "
+                                        f"{max(float(stop_planned[i, sp_i]) if sp_i < n_sp else 0.0, 1.0) / 60:.0f} min)"
+                                    ),
+                                },
+                            )
+                        )
+
                     duration = st.stop_duration(
-                        float(stop_planned[i, sp_i]) if sp_i < n_sp else 0.0,
-                        float(service_factor[i]),
-                        rng_stop,
+                        planned_s, float(service_factor[i]), rng_stop
                     )
                     reason = {"voll": "Vollservice", "schlaf": "Schlafstopp"}.get(
                         kind, "Kurzservice"

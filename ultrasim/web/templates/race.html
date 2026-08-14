@@ -88,6 +88,9 @@
           </template>
 
           <div style="margin-top:.5rem">
+            <template x-for="(t, ti) in (focus.tactics || [])" :key="ti">
+              <span class="chip tactic" x-text="t"></span>
+            </template>
             <span class="chip" :class="{stop: focus.state===1, fin: focus.state===2, dnf: focus.state===3}"
                   x-text="stateLabel(focus.state)"></span>
             <a class="faint" style="font-size:.75rem;margin-left:.5rem"

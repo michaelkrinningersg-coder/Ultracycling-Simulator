@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M7 samt Editoren (M5b)
+## Stand: Meilensteine M1–M7b samt Editoren (M5b)
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -40,11 +40,11 @@ hier umgesetzt.
 | Fahrerentwicklung (M7) | Beim Saisonwechsel altern alle Fahrer: Leistungskurve nach Alter mit Scheitel um 31, Erfahrung wächst mit Rennen und Kilometern, Potenzial driftet, Rücktritte ab 34 mit Nachwuchs als Ersatz |
 | Streckeneditor (M5b) | GPX-Upload im Browser mit Vorschau: Distanz, Höhenmeter geglättet *und* ungeglättet, erkannte Anstiege, abgeleitete Distanzklasse. Splits und Servicepunkte per Drag im Höhenprofil verschiebbar, dazu Tabelle mit Kilometerfeld, Art und Hinzufügen/Löschen. Auf die Platte geht der Import erst, wenn man ihn dort speichert |
 | Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 363 Tests inklusive Golden-Master |
+| Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 393 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten**: das Strategiemodul der zweiten Stufe (M7b) — der
-Regelkreis, mit dem Fahrer im Rennen auf Rückstand, Wetter und Magen
-reagieren statt einem festen Plan zu folgen.
+**Noch nicht enthalten**: die Highlight-Automatik (zweite Hälfte von M7b)
+und M8 — die Kalibrierung an realen Ultra-Ergebnissen.
 
 ### Ein gerechnetes Rennen ist unveränderlich
 
@@ -88,6 +88,38 @@ Regler um 18 % anzuheben verschiebt die Ultraklasse von 10,0 auf 10,8 %
 und die mittlere um keinen einzigen Fahrer — dort ist schlicht niemand
 nah genug an der Schwelle. Das Balancing-Werkzeug schreibt diese
 Begründung mit aus, statt eine grüne Zahl zu behaupten.
+
+### Der Regelkreis macht aus Attributen Persönlichkeit
+
+Bis M7a fuhr jeder Fahrer seinen Rennplan zu Ende, egal was um ihn
+herum passierte. Der Regelkreis aus Abschnitt 7.2 prüft alle zehn
+Sekunden vier Lagen und verschiebt die Zielintensität um −10 %
+(Sparmodus, wenn der Glykogenspeicher unter ein Viertel fällt), −6 %
+(Hitzemodus), +7 % (Aufholjagd) oder −3 % (geplanter Schlaf), auf
+zusammen höchstens −18 % bis +12 %.
+
+Zwei Dinge halten das ruhig. Erstens hat jede Regel **getrennte Ein-
+und Ausschaltschwellen** — Sparmodus geht bei 25 % Speicher an und
+erst bei 35 % wieder aus. Ohne diese Hysterese flackert eine Regel im
+Sekundentakt, sobald ein Fahrer genau auf der Schwelle fährt, und das
+Board wäre ein Stroboskop. Zweitens skaliert das Befolgen mit der
+Persönlichkeit: Schutzregeln folgt jeder, aber ein Fahrer mit hoher
+Pacing-Disziplin folgt ihnen vollständig, ein undisziplinierter nur
+zur Hälfte. Bei der riskanten Regel ist es umgekehrt — wer
+undiszipliniert *und* mental fragil ist, geht mit anderthalbfacher
+Härte in die Aufholjagd, wer diszipliniert ist, praktisch gar nicht.
+
+Nachgemessen über ein Ultra-Feld: Die Fahrer, die in die Aufholjagd
+gehen, haben im Schnitt Pacing-Disziplin 48, das Gesamtfeld 56. Der
+Regler ist damit nicht nur vorhanden, sondern sortiert das Feld auch
+in die Richtung, die das Design-Dokument beschreibt. Der Rückstand
+misst sich dabei gegen die **geplante** Fahrzeit, nicht gegen die
+verstrichene — sonst löst eine Straßensperrung bei km 5 eine Panik
+aus, obwohl noch 1200 km zum Aufholen bleiben.
+
+Jede Entscheidung landet als Ereignis mit Begründung im Strom
+(Abschnitt 7.3), erscheint im Ticker und als Chip in der Board-Zeile
+des Fahrers.
 
 ---
 
@@ -206,6 +238,12 @@ und stehen damit **an der Position, die diese Prognose ergibt**, kursiv
 und ohne Platzziffer. Genau daraus entsteht die Frage „kommt er noch
 vorbei?“.
 
+Wer gerade eine taktische Entscheidung getroffen hat, trägt sie als
+Chip neben seinem Namen — „Aufholjagd“, „Sparmodus“, „Hitzemodus“ —
+solange die Regel greift, und nicht länger: Bei Aufgabe oder Zieleinlauf
+friert die Zeile ein, statt einen Fahrer weiter taktieren zu lassen, der
+längst nicht mehr auf der Strecke ist.
+
 Die Ergebnis- und Detailseiten sind Nachbetrachtungs-Screens und
 verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 
@@ -216,7 +254,7 @@ verraten den Ausgang; sie sind entsprechend zurückhaltend verlinkt.
 ```
 ultrasim/
   core/     physics · rider · form · fatigue · nutrition · sleep · conditions
-            weather · incidents · strategy · season · development
+            weather · incidents · strategy · tactics · season · development
             events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
@@ -228,8 +266,8 @@ ultrasim/
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
 tests/      geo · core · engine · conditions · nutrition · sleep · weather
-            incidents · season · season_web · editors · playback
-            golden_master
+            incidents · season · season_web · editors · tactics
+            playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
@@ -399,7 +437,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 363 Tests, rund 170 s
+pytest -q          # 393 Tests, rund 210 s
 ruff check ultrasim tools tests
 ```
 

@@ -53,18 +53,33 @@ class Job:
     finished: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Momentaufnahme für die Oberfläche.
+
+        ``state`` wird **einmal** gelesen und dann für beide Felder
+        benutzt. Wer ihn zweimal liest, baut sich eine Wette auf den
+        Threadwechsel: Zwischen dem Feld ``state`` und dem daraus
+        abgeleiteten ``done`` kann der Arbeiterthread den Auftrag
+        beenden, und heraus kommt ``{"state": "wartet", "done": true}``.
+        Genau das hat im CI einen Test umgeworfen — auf dem langsamsten
+        Läufer, versteht sich.
+
+        Zusammen mit der Reihenfolge im Arbeiterthread (erst Ergebnis
+        bzw. Begründung, dann Zustand) ist die Momentaufnahme damit in
+        sich stimmig: Steht ``done``, stehen auch die Felder dazu.
+        """
+        state = self.state
         return {
             "id": self.id,
             "kind": self.kind,
             "label": self.label,
             "season_id": self.season_id,
             "race_key": self.race_key,
-            "state": self.state,
+            "state": state,
             "progress": round(self.progress, 3),
             "detail": self.detail,
             "result": self.result,
             "error": self.error,
-            "done": self.state in (STATE_DONE, STATE_FAILED),
+            "done": state in (STATE_DONE, STATE_FAILED),
         }
 
 
@@ -163,12 +178,19 @@ class JobRunner:
                 job.state = STATE_DONE
                 job.progress = 1.0
             except Exception as exc:  # noqa: BLE001 - der Thread darf nie sterben
+                # **Erst die Begründung, dann der Zustand.** ``done`` wird
+                # aus dem Zustand abgeleitet, und die Oberfläche fragt im
+                # Sekundentakt ab: Steht der Zustand zuerst, kann ein
+                # Abruf genau dazwischen fallen und einen gescheiterten
+                # Auftrag ohne Fehlertext sehen. Genau das ist im CI
+                # passiert — auf dem langsamsten Läufer, weil der
+                # Traceback-Ausdruck dazwischen lag und Zeit kostet.
+                job.error = f"{type(exc).__name__}: {exc}"
                 job.state = STATE_FAILED
                 # Der volle Traceback in die Konsole, die Kurzfassung in
                 # die Oberfläche: Ein Rennen kann an fehlenden Strecken
                 # scheitern, und dann will man den Grund lesen können.
                 traceback.print_exc()
-                job.error = f"{type(exc).__name__}: {exc}"
             finally:
                 job.finished = time.time()
                 self._queue.task_done()

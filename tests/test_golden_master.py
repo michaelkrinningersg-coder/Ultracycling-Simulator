@@ -18,6 +18,8 @@ um Millisekunden.
 
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 
 from ultrasim.core.engine import RaceConfig, simulate_race
@@ -88,14 +90,92 @@ def test_race_result_is_stable(route):
     )
     actual = [(e.bib, round(e.finish_time_s, 2)) for e in finished]
 
-    if [bib for bib, _ in actual] != [bib for bib, _ in GOLDEN_RESULT] or any(
-        abs(a - b) > TOLERANCE_S
-        for (_, a), (_, b) in zip(actual, GOLDEN_RESULT, strict=True)
+    _compare(actual, GOLDEN_RESULT, TOLERANCE_S, "GOLDEN_RESULT")
+
+
+# ----------------------------------------------------------------------
+# Zweiter Lauf: die lange Distanz
+# ----------------------------------------------------------------------
+#: Der kurze Lauf oben dauert anderthalb Stunden. Schlaf, zweite Nacht,
+#: Notschlaf, Aufgabe – die halbe Simulation kommt dort nie an die
+#: Reihe, und eine Änderung daran bliebe unbemerkt. Dieser Lauf holt das
+#: nach: rund 1000 km, 40 Stunden, acht Fahrer.
+#:
+#: Die Toleranz ist mit zwei Sekunden auf 40 Stunden lockerer als oben –
+#: dieselbe Begründung, nur über 25-mal so viele Rechenschritte.
+GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 6847.0, "class": "mittel"}
+
+GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
+    (5, 142554.56),
+    (7, 143144.85),
+    (8, 147403.26),
+    (3, 152885.41),
+    (1, 156926.28),
+    (4, 165334.52),
+    (6, 169119.69),
+]
+
+#: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
+#: Gewinn des langen Laufs: Wer am Schlafmodell dreht, sieht hier sofort,
+#: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
+#: Zielzeiten in der Toleranz bleiben.
+GOLDEN_LONG_EVENTS: dict[str, int] = {
+    "CONDITION_END": 30,
+    "CONDITION_START": 30,
+    "DECISION": 9,
+    "DNF": 1,
+    "FINISH": 7,
+    "INCIDENT": 48,
+    "PLAN": 32,
+    "SLEEP": 2,
+    "SPLIT_PASSED": 315,
+    "START": 8,
+    "STOP_END": 129,
+    "STOP_START": 82,
+}
+
+TOLERANCE_LONG_S = 2.0
+
+
+@pytest.mark.slow
+def test_long_race_result_is_stable(route_long):
+    assert route_long.distance_m == pytest.approx(GOLDEN_LONG_ROUTE["distance_m"], abs=50.0)
+    assert route_long.ascent_m == pytest.approx(GOLDEN_LONG_ROUTE["ascent_m"], abs=5.0)
+    assert route_long.distance_class == GOLDEN_LONG_ROUTE["class"]
+
+    teams, riders = generate_pool(8, n_teams=2, seed=77)
+    result = simulate_race(route_long, riders, teams, RaceConfig(seed=2024))
+    finished = sorted(
+        (e for e in result.entries if e.finish_time_s is not None),
+        key=lambda e: e.finish_time_s,
+    )
+    actual = [(e.bib, round(e.finish_time_s, 2)) for e in finished]
+    events = dict(sorted(Counter(e.type for e in result.events).items()))
+
+    if events != GOLDEN_LONG_EVENTS:
+        pytest.fail(
+            "Der Ereignisstrom hat sich verschoben.\n"
+            "Wenn das gewollt ist, ersetze GOLDEN_LONG_EVENTS durch:\n\n"
+            f"GOLDEN_LONG_EVENTS = {events}\n\n"
+            f"alt: {GOLDEN_LONG_EVENTS}"
+        )
+    _compare(actual, GOLDEN_LONG_RESULT, TOLERANCE_LONG_S, "GOLDEN_LONG_RESULT")
+
+
+def _compare(
+    actual: list[tuple[int, float]],
+    golden: list[tuple[int, float]],
+    tolerance: float,
+    name: str,
+) -> None:
+    same_order = [bib for bib, _ in actual] == [bib for bib, _ in golden]
+    if not same_order or any(
+        abs(a - b) > tolerance for (_, a), (_, b) in zip(actual, golden, strict=True)
     ):
         block = "\n".join(f"    ({bib}, {t:.2f})," for bib, t in actual)
         pytest.fail(
             "Das Rennergebnis hat sich verschoben.\n"
-            "Wenn das gewollt ist, ersetze GOLDEN_RESULT durch:\n\n"
-            f"GOLDEN_RESULT = [\n{block}\n]\n\n"
-            f"alt: {GOLDEN_RESULT}\nneu: {actual}"
+            f"Wenn das gewollt ist, ersetze {name} durch:\n\n"
+            f"{name} = [\n{block}\n]\n\n"
+            f"alt: {golden}\nneu: {actual}"
         )

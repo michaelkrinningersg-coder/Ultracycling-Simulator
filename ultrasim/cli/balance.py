@@ -20,19 +20,18 @@ from pathlib import Path
 
 import numpy as np
 
+from ..calibration import DNF_TARGET, DURATION_TARGET_H
 from ..core import incidents as inc
 from ..core.engine import RaceConfig, simulate_race
 from ..core.events import INCIDENT
 from ..core.rider import generate_pool
 from ..data.store import Store
 
-#: Ziel-DNF-Korridor je Distanzklasse (Abschnitt 6.5).
-DNF_TARGET = {"kurz": (0.01, 0.02), "mittel": (0.04, 0.07), "ultra": (0.08, 0.12)}
-
-#: Dauerband je Distanzklasse aus Abschnitt 2. Das ist der einzige
-#: Kalibrierungsanker, den das Dokument selbst liefert – und damit der
-#: erste, gegen den sich die Simulation messen lassen muss.
-DURATION_TARGET_H = {"kurz": (5.0, 15.0), "mittel": (15.0, 50.0), "ultra": (50.0, 110.0)}
+#: Die Zielkorridore stehen in ``ultrasim.calibration`` – dort misst der
+#: Kalibrierungsbericht dagegen, hier die Konsolenausgabe. Zwei Kopien
+#: derselben Zahl wären genau die Sorte Fehler, die man erst bemerkt,
+#: wenn die beiden Werkzeuge sich widersprechen.
+__all__ = ["DNF_TARGET", "DURATION_TARGET_H", "main", "run"]
 
 
 def percentile_line(label: str, values: np.ndarray, unit: str = "", scale: float = 1.0) -> str:

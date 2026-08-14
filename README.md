@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M7b samt Editoren (M5b)
+## Stand: Meilensteine M1–M8 samt Editoren (M5b)
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -41,14 +41,17 @@ hier umgesetzt.
 | Streckeneditor (M5b) | GPX-Upload im Browser mit Vorschau: Distanz, Höhenmeter geglättet *und* ungeglättet, erkannte Anstiege, abgeleitete Distanzklasse. Splits und Servicepunkte per Drag im Höhenprofil verschiebbar, dazu Tabelle mit Kilometerfeld, Art und Hinzufügen/Löschen. Auf die Platte geht der Import erst, wenn man ihn dort speichert |
 | Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
 | Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 393 Tests inklusive Golden-Master |
+| Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: Dauerbänder und DNF-Korridor je Strecke, Siegverteilung nach Archetyp bei identischem Potenzial-Budget, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 410 Tests inklusive zweier Golden-Master |
 
-**Noch nicht enthalten**: M8 — die Kalibrierung gegen einen Anker
-außerhalb des Design-Dokuments. Die Highlight-Automatik aus M7b ist
-bewusst gestrichen: Der Ticker meldet ohnehin jedes größere Ereignis,
-und eine automatische Auswahl „sehenswerter“ Momente würde in einem
-Einzelzeitfahren ohne Kameraführung nichts hinzufügen, was die
-Ereignisliste nicht schon zeigt.
+**Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
+meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
+„sehenswerter“ Momente würde in einem Einzelzeitfahren ohne
+Kameraführung nichts hinzufügen, was die Ereignisliste nicht schon
+zeigt. Ebenso der Abgleich mit realen Ultra-Ergebnissen aus M8: Für die
+großen Rennen liegen die Strecken nicht als GPX vor, und eine
+Kalibrierung gegen nachgebaute Profile misst am Ende den
+Profilgenerator.
 
 ### Ein gerechnetes Rennen ist unveränderlich
 
@@ -262,16 +265,19 @@ ultrasim/
             events · engine
   geo/      gpx_import · smoothing · segmentation · splits · route
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
+  calibration.py           Messungen *an* der Simulation: Dauerband, DNF,
+                           Archetypen, Attribut-Sensitivität
   season_runner.py         Dienstschicht: Kalender rechnen, werten, altern
   web/      main · playback · jobs · routers/ · templates/ · static/
             routers: pages · routes (Streckeneditor) · pool (Fahrer, Teams)
                      seasons (Kalender) · api (Board, SSE)
-  cli/      simulate · balance · season
+  cli/      simulate · balance · calibrate · season
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
+docs/       GAME_DESIGN.md · KALIBRIERUNG.md (erzeugt, eingecheckt)
 tests/      geo · core · engine · conditions · nutrition · sleep · weather
             incidents · season · season_web · editors · tactics
-            playback · golden_master
+            calibration · playback · golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
@@ -417,7 +423,77 @@ Klassen-Zielkorridor.
 `tests/test_golden_master.py` hält Streckenkennzahlen und ein
 Rennergebnis auf festen Seeds fest. Wird er rot, ist er nicht kaputt —
 er zeigt, dass sich das Balancing verschoben hat, und druckt die neuen
-Werte kopierfertig aus.
+Werte kopierfertig aus. Es sind zwei Läufe: einer über 60 km und
+anderthalb Stunden, einer über 1000 km und vierzig Stunden. Den zweiten
+braucht es, weil im ersten die halbe Simulation nie an die Reihe kommt —
+Schlafdruck, zirkadianer Tiefpunkt, Notschlaf und Aufgabe gibt es auf
+einer Feierabendrunde nicht. Der lange Lauf hält deshalb nicht nur die
+Zielzeiten fest, sondern auch die **Häufigkeit jedes Ereignistyps**: Wer
+am Schlafmodell dreht, sieht sofort, dass aus zwei Schlafstopps keiner
+mehr geworden ist, auch wenn die Zeiten in der Toleranz bleiben.
+
+### Der Kalibrierungsbericht
+
+```bash
+python -m ultrasim.cli.calibrate        # ~25 min, schreibt docs/KALIBRIERUNG.md
+```
+
+`balance` ist das Werkzeug zum Hinsehen — eine Strecke, viele Zahlen,
+alles auf der Konsole. [`docs/KALIBRIERUNG.md`](docs/KALIBRIERUNG.md) ist
+das Werkzeug zum **Vergleichen**: alle Strecken auf einmal, und das
+Ergebnis liegt als eingecheckte Datei im Repository. Der Unterschied ist
+der Diff. Wer am Balancing dreht, sieht in der Änderungsansicht schwarz
+auf weiß, was sich bewegt hat, statt es in einer Konsolenausgabe zu
+suchen, die nach dem Schließen des Fensters weg ist.
+
+Der Bericht beantwortet zwei Fragen, die die Dauerbänder nicht
+beantworten: **Was ist ein einzelnes Attribut wert?** und **passen die
+Archetypen zu den Strecken?**
+
+**Alle Varianten in einem Rennen.** Naheliegend wäre, je Attribut zwei
+komplette Rennen zu rechnen — bei 25 Attributen, zwei Richtungen und
+drei Strecken sind das 150 Läufe und eine knappe Stunde, und jeder Lauf
+trägt die Streuung von Wetter und Zwischenfällen mit sich. Stattdessen
+starten alle Varianten **im selben Rennen**: Jeder Grundfahrer geht
+zusätzlich mit +10 und mit −10 Punkten auf genau einem Attribut an den
+Start. Weil die Zufallsströme an `(Seed, Fahrer-ID, Zweck)` hängen und
+nicht an der Startposition, bekommen alle Kopien eines Fahrers denselben
+Wetterverlauf, dieselben Pannenkandidaten und dieselbe Tagesform — was
+an Zeit übrig bleibt, ist das Attribut und sonst nichts. Ein Rennen mit
+1000 Startern kostet dabei nur das Vierfache eines Rennens mit 24, weil
+die Simulation ohnehin über das ganze Feld vektorisiert ist.
+
+Der Test, der diese Messung trägt, ist entsprechend unscheinbar: *Zwei
+Kopien desselben Fahrers im selben Rennen fahren dieselbe Zeit.* Ginge
+irgendwann ein Zufallsstrom an die Startposition statt an die
+Fahrer-ID, wäre der ganze Bericht still Rauschen.
+
+**Was nicht messbar ist, steht nicht drin.** Jede Wirkung muss zwei
+Hürden nehmen: mindestens drei Sekunden groß und mindestens dreimal so
+groß wie ihr eigener Standardfehler. Ohne die zweite Hürde liest man aus
+zwanzig Fahrern, von denen einer eine Panne hatte, eine Attributwirkung
+von sieben Minuten heraus. Drei Standardfehler statt der üblichen zwei,
+weil die Tabelle 75 Felder hat — bei zwei wären rechnerisch drei
+Fehltreffer darunter, und ein Fehltreffer ist teuer: Jemand fängt an,
+ein Attribut zu reparieren, das nie kaputt war.
+
+**Ein Attribut kann dieser Aufbau grundsätzlich nicht messen.**
+`konstanz` steuert allein die *Streuung* der Tagesform, und die
+Tagesform ist `1 + sd·z` mit einem z, das beide Kopien eines Fahrers aus
+demselben Zufallsstrom ziehen. Die Paardifferenz ist damit proportional
+zu −z: Bei einem Fahrer mit gutem Tag *schadet* Konstanz, bei einem mit
+schlechtem hilft sie, und im Mittel stünde in der Tabelle der
+Stichprobenmittelwert der Zufallszahlen statt der Wirkung des Attributs.
+Der erste Berichtslauf hat dort −12, −37 und −44 Sekunden ausgewiesen,
+auf allen drei Strecken negativ und scheinbar bestätigt — in Wahrheit
+dreimal dieselben Zufallszahlen. Seitdem steht `konstanz` in einer
+Ausnahmeliste, mit dieser Begründung im Bericht.
+
+Damit Hitze- und Nässeattribute überhaupt eine Lage bekommen, in der sie
+wirken können, läuft die Messung zusätzlich mit **erzwungenem Wetter**
+— Hitze, Kälte, Dauerregen, Sturm. Ohne diesen Abschnitt hieße „nicht
+messbar“ fälschlich „wirkungslos“: An einem 16-Grad-Tag ist
+Hitzetoleranz nichts wert.
 
 ---
 
@@ -441,7 +517,8 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 393 Tests, rund 210 s
+pytest -q                    # 410 Tests, rund 265 s
+pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 230 s
 ruff check ultrasim tools tests
 ```
 

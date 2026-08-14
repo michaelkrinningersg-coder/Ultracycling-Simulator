@@ -70,5 +70,29 @@ def route_medium(medium_gpx):
 
 
 @pytest.fixture(scope="session")
+def long_gpx(tmp_path_factory) -> Path:
+    """Rund 1000 km – lang genug für die zweite Nacht.
+
+    Erst hier greifen die Mechaniken, die auf der kurzen und der
+    mittleren Strecke nie an die Reihe kommen: Schlafdruck über dem
+    Wachhorizont, geplante Schlafstopps, der zirkadiane Tiefpunkt, und
+    ein Ereignisstrom, der lang genug ist, dass Pannen und Aufgaben
+    tatsächlich vorkommen.
+    """
+    path = tmp_path_factory.mktemp("gpx") / "long.gpx"
+    _, profile, (lat, lon, ele) = PRESETS["langstrecke"]
+    scaled = [(length * 0.85, grade) for length, grade in profile]
+    tracks = build_track(scaled, lat, lon, ele, 25.0, 1.2, 4242)
+    write_gpx(path, "Langstrecke", *tracks)
+    return path
+
+
+@pytest.fixture(scope="session")
+def route_long(long_gpx):
+    route, _ = import_gpx(long_gpx, name="Langstrecke")
+    return route
+
+
+@pytest.fixture(scope="session")
 def pool():
     return generate_pool(24, n_teams=4, seed=99)

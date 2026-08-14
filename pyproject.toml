@@ -24,6 +24,7 @@ build = ["pyinstaller>=6.5"]
 ultrasim = "ultrasim.web.main:main"
 ultrasim-simulate = "ultrasim.cli.simulate:main"
 ultrasim-balance = "ultrasim.cli.balance:main"
+ultrasim-calibrate = "ultrasim.cli.calibrate:main"
 ultrasim-import = "ultrasim.geo.gpx_import:main"
 
 [tool.setuptools.packages.find]
@@ -35,6 +36,9 @@ ultrasim = ["web/templates/*.html", "web/static/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "slow: Läufe über eine ganze Ultradistanz (Sekunden statt Millisekunden)",
+]
 
 [tool.ruff]
 line-length = 100

@@ -91,17 +91,17 @@ GOLDEN_ROUTE = {
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
+    (12, 5971.39),
     (6, 6002.87),
-    (12, 6017.78),
-    (8, 6134.84),
+    (8, 6133.09),
+    (9, 6194.08),
     (11, 6235.80),
-    (9, 6241.73),
     (3, 6290.08),
     (5, 6345.32),
     (2, 6523.86),
     (10, 6596.00),
-    (4, 6661.59),
-    (7, 7015.86),
+    (4, 6601.15),
+    (7, 6964.80),
     (1, 7077.46),
 ]
 
@@ -186,11 +186,15 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   506 s, ``konstanz`` kostete 0,9 und wirkt nichts — der eine kaufte
 #:   billig ein, der andere zahlte für nichts. Beide Preise sind
 #:   nachgezogen, und weil das Budget alle Attribute gegeneinander
-#:   normiert, verschiebt sich jeder Fahrer ein Stück.
+#:   normiert, verschiebt sich jeder Fahrer ein Stück. Die Umpreisung
+#:   hat als Balancing-Hebel dann allerdings nur ein bis drei Plätze
+#:   gebracht — weniger als einen Standardfehler. Gewirkt haben die
+#:   Offsets und der Körperbau: ``fettverbrennung`` von 24 auf 15 und
+#:   der Diesel von ``wkg_bias=-0.20`` auf 0 bei +4 cm Körpergröße.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
     (7, 147407.67),
     (8, 151069.51),
-    (5, 151129.00),
+    (5, 151720.62),
     (3, 153680.17),
     (4, 162378.01),
     (1, 163182.08),
@@ -204,7 +208,7 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 GOLDEN_LONG_EVENTS: dict[str, int] = {
     "CONDITION_END": 36,
     "CONDITION_START": 44,
-    "DECISION": 11,
+    "DECISION": 10,
     "DNF": 1,
     "FINISH": 7,
     "INCIDENT": 53,

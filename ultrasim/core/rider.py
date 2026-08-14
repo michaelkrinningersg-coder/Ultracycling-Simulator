@@ -45,8 +45,19 @@ from .names import (
 #:
 #: Die beiden Preise sind deshalb nachgezogen. Nicht alle: Ein Preis, der
 #: exakt der gemessenen Wirkung folgt, macht jede Verteilung gleich gut
-#: und die Archetypen damit bedeutungslos. Es geht darum, die beiden
-#: Ausreißer zu schließen, nicht darum, Entscheidungen abzuschaffen.
+#: und die Archetypen damit bedeutungslos.
+#:
+#: **Als Balancing-Hebel taugt das allerdings nicht**, und das war eine
+#: Fehleinschätzung. Gemessen brachte die Umpreisung ein bis drei
+#: Plätze, also weniger als einen Standardfehler. Der Grund steht in
+#: ``_apply_potential_budget``: Normiert wird der *gewichtete
+#: Mittelwert*, ein teureres Attribut skaliert also alle anderen
+#: herunter — und der Fettverbrenner besaß vor allem Attribute, die
+#: ohnehin nichts bewirken. Ein Budget kann einen Archetyp nicht
+#: disziplinieren, dessen übrige Attribute wertlos sind. Die Preise
+#: stehen hier, weil sie für sich richtiger sind als vorher, nicht weil
+#: sie etwas ausbalanciert hätten; das taten am Ende die Offsets und der
+#: Körperbau.
 ATTRIBUTES: dict[str, float] = {
     # Grundattribute
     "flach": 1.0,
@@ -224,7 +235,7 @@ ARCHETYPES: dict[str, Archetype] = {
          "fettverbrennung": 12, "sitzkomfort": 10, "risikobereitschaft": -8},
         spread=8.5,
         height_bias_cm=4.0,
-        wkg_bias=-0.08,
+        wkg_bias=0.0,
     ),
     "schlafgeiziger": Archetype(
         "schlafgeiziger",
@@ -249,7 +260,7 @@ ARCHETYPES: dict[str, Archetype] = {
     "fettverbrenner": Archetype(
         "fettverbrenner",
         "Fettverbrenner",
-        {"fettverbrennung": 24, "kohlenhydratverbrennung": -10, "spritzigkeit": -16,
+        {"fettverbrennung": 15, "kohlenhydratverbrennung": -10, "spritzigkeit": -16,
          "ausdauer": 8},
     ),
     "draufgaenger": Archetype(

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – Karriere{% endblock %}
+{% block subtitle %}Karrieren über mehrere Jahre{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <div class="panel-title"><span>Karrieren</span><span class="faint">{{ careers|length }}</span></div>
+    {% if careers %}
+    <table>
+      <thead>
+        <tr><th>Karriere</th><th class="right">ab</th><th class="right">Jahre</th>
+            <th class="right">abgeschlossen</th><th>letzter Champion</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for career in careers %}
+        <tr>
+          <td><a href="/career/{{ career.id }}">{{ career.name }}</a></td>
+          <td class="right mono">{{ career.first_year }}</td>
+          <td class="right mono">{{ career.n_seasons }}</td>
+          <td class="right mono">{{ career.years_closed }}</td>
+          <td>{{ career.last_champion or "–" }}</td>
+          <td class="right"><a href="/career/{{ career.id }}">öffnen ▸</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dim">Noch keine Karriere angelegt.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Neue Karriere</span></div>
+    {% if not routes %}
+    <p class="dim">Ohne Strecken kein Kalender. Zuerst eine GPX-Datei importieren.</p>
+    {% elif not pool_exists %}
+    <p class="dim">Ohne Fahrerpool keine Karriere. Zuerst ein Feld erzeugen.</p>
+    {% else %}
+    <form method="post" action="/careers" class="form-row">
+      <label>Name
+        <input type="text" name="name" value="Weltserie" required maxlength="60">
+      </label>
+      <label>Erstes Jahr
+        <input type="number" name="year" value="{{ this_year + 1 }}" min="1990" max="2999" required>
+      </label>
+      <label>Rennen je Jahr
+        <input type="number" name="n_races" value="8" min="1" max="40" required>
+      </label>
+      <button type="submit">Karriere starten</button>
+    </form>
+    <p class="dim">
+      Eine Karriere ist eine Kette von Saisons mit gemeinsamem Fahrerpool.
+      Der Kalender des ersten Jahres wird vorgeschlagen und danach von Jahr
+      zu Jahr übernommen — dieselben Rennen an denselben Terminen, nur mit
+      anderem Wetter. Zwischen zwei Jahren altert das ganze Feld.
+    </p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

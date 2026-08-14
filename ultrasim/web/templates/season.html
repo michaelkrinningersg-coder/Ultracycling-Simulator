@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ season.name }} – UltraSim{% endblock %}
 {% block subtitle %}{{ season.name }} · {{ season.year }} · {{ rows|length }} Termine{% endblock %}
-{% block topbar %}<a class="faint" href="/seasons">◂ Saisons</a>{% endblock %}
+{% block topbar %}<a class="faint" href="/seasons">◂ Saisons</a>
+{% if career %}<a class="faint" href="/career/{{ career.id }}">{{ career.name }}</a>{% endif %}{% endblock %}
 
 {% block body %}
 <div class="page" x-data="seasonJobs('{{ season.id }}', {{ busy|lower }})">
@@ -9,6 +10,64 @@
   {% if not pool_exists %}
   <div class="panel"><p class="bad">Kein Fahrerpool vorhanden — Rennen lassen sich nicht rechnen.
     <span class="mono">python -m ultrasim.cli.simulate pool --riders 250</span></p></div>
+  {% endif %}
+
+  <!-- Jahresband ------------------------------------------------- -->
+  {% if plan %}
+  {% set tight = plan | selectattr("crowded") | list %}
+  <div class="panel">
+    <div class="panel-title">
+      <span>Saisonverlauf {{ season.year }}</span>
+      <span class="faint {% if tight %}bad{% endif %}">
+        {% if tight %}{{ tight|length }} Termin{{ 'e' if tight|length != 1 }} zu eng
+        {% else %}Abstände tragen{% endif %}
+      </span>
+    </div>
+
+    <div class="yearband">
+      <div class="months">
+        {% for month in ["J","F","M","A","M","J","J","A","S","O","N","D"] %}
+        <span>{{ month }}</span>
+        {% endfor %}
+      </div>
+      <div class="track">
+        {% for row in plan %}
+        {# Erholungsfenster als Balken hinter dem Termin: So weit reicht
+           die Wirkung dieses Rennens in den Kalender hinein. #}
+        <div class="recovery {{ row.route.distance_class if row.route else '' }}"
+             style="left: {{ (row.position * 100)|round(2) }}%;
+                    width: {{ ((row.recovery_days / 365.0) * 100)|round(2) }}%"></div>
+        {% endfor %}
+        {% for row in plan %}
+        <div class="marker {% if row.crowded %}tight{% endif %}"
+             style="left: {{ (row.position * 100)|round(2) }}%"
+             title="{{ row.race.name }} · {{ row.race.day|de_date }}{% if row.gap_days %} · {{ row.gap_days }} Tage Pause{% endif %} · Erholung {{ row.recovery_days|round(0)|int }} Tage"></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <p class="dim">
+      Der Balken hinter jedem Termin ist sein <strong>Erholungsfenster</strong>:
+      so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 %
+      Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld
+      angeschlagen — solche Termine sind rot markiert. Für gerechnete Rennen
+      steht die gemessene Arbeit ihrer Fahrer dahinter, für die übrigen eine
+      Schätzung aus Länge und Höhenmetern.
+    </p>
+
+    {% if tight %}
+    <ul class="plain">
+      {% for row in tight %}
+      <li>
+        <span class="mono">{{ row.race.day|de_date }}</span>
+        {{ row.race.name }} —
+        <span class="bad">{{ row.gap_days }} Tage Pause, nötig wären
+        {{ row.rest_needed|round(0)|int }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
   {% endif %}
 
   <!-- ----------------------------------------------------------- -->

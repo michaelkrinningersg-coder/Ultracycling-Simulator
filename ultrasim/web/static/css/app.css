@@ -319,3 +319,57 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
    eine Entscheidung etwas anderes ist als ein Zustand, der einem
    widerfährt. */
 .chip.tactic { border-color: var(--accent-2); color: var(--accent-2); }
+
+/* Karriere: Rücktritte und Nachwuchs stehen nebeneinander, weil sie
+   dasselbe Ereignis von zwei Seiten sind. */
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .9rem; }
+.split h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+            color: var(--fg-dim); margin: 0 0 .35rem; font-weight: 600; }
+ul.plain { list-style: none; margin: 0; padding: 0; }
+ul.plain li { padding: .1rem 0; border-bottom: 1px solid var(--line); }
+ul.plain li:last-child { border-bottom: 0; }
+
+/* Jahresband des Kalenders. Die Frage, die eine Datumsliste nicht
+   beantwortet, ist die nach dem Abstand: Nach einem Ultra braucht das
+   Feld gut drei Wochen. Deshalb liegt hinter jedem Termin sein
+   Erholungsfenster als Balken — überlappt der nächste Punkt damit, ist
+   der Kalender zu eng. */
+.yearband { margin: .2rem 0 .6rem; }
+.yearband .months { display: grid; grid-template-columns: repeat(12, 1fr);
+                    font-size: .62rem; color: var(--fg-faint);
+                    letter-spacing: .1em; margin-bottom: .18rem; }
+.yearband .months span { text-align: center; }
+.yearband .track { position: relative; height: 1.6rem; border-radius: var(--radius);
+                   background: var(--bg-panel-2);
+                   background-image: repeating-linear-gradient(to right,
+                     var(--line) 0 1px, transparent 1px calc(100% / 12));
+                   background-size: calc(100% / 12) 100%; }
+.yearband .recovery { position: absolute; top: .42rem; height: .76rem;
+                      border-radius: 2px; background: #3f8f5a33; border-right: 1px solid #3f8f5a55; }
+.yearband .recovery.mittel { background: #b48a2a33; border-right-color: #b48a2a55; }
+.yearband .recovery.ultra { background: #b0453f33; border-right-color: #b0453f55; }
+.yearband .marker { position: absolute; top: .2rem; width: 3px; height: 1.2rem;
+                    margin-left: -1px; border-radius: 1px; background: var(--fg);
+                    cursor: help; }
+.yearband .marker.tight { background: var(--bad); box-shadow: 0 0 0 2px #f8717a33; }
+
+/* Ereignis-Laufband über der ganzen Breite. Es steht oben, weil ein
+   Ticker das Erste ist, was man beim Einschalten liest — und es zeigt
+   nur zehn Zeilen, weil alles darüber niemand mehr mitliest. */
+.tickerbar { grid-column: 1 / -1; display: flex; align-items: stretch; gap: .5rem;
+             background: var(--bg-panel); border: 1px solid var(--line);
+             border-radius: var(--radius); padding: .3rem .45rem; overflow: hidden; }
+.tickerbar-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
+                   color: var(--fg-faint); align-self: center; padding-right: .5rem;
+                   border-right: 1px solid var(--line); }
+.tickerbar-items { display: flex; gap: .45rem; overflow-x: auto; scrollbar-width: none; }
+.tickerbar-items::-webkit-scrollbar { display: none; }
+.tick { display: inline-flex; align-items: baseline; gap: .3rem; white-space: nowrap;
+        font-size: .74rem; padding: .12rem .45rem; border-radius: 999px;
+        border: 1px solid var(--line); color: var(--fg-dim); }
+.tick .t { font-variant-numeric: tabular-nums; color: var(--fg-faint); font-size: .68rem; }
+.tick.focus { border-color: var(--accent); color: var(--fg); }
+.tick.best_time { border-color: var(--good); color: var(--good); }
+.tick.dnf, .tick.incident { border-color: var(--bad); color: var(--bad); }
+.tick.sleep { border-color: var(--accent-2); color: var(--accent-2); }
+.tick.finish { border-color: var(--good); color: var(--fg); }

@@ -32,6 +32,7 @@ from typing import Any
 
 import numpy as np
 
+from ..core.career import Career
 from ..core.conditions import ConditionRecord
 from ..core.engine import RaceConfig, RaceEntry, RaceResult, Telemetry
 from ..core.events import RaceEvent
@@ -357,6 +358,57 @@ class Store:
 
     def delete_season(self, season_id: str) -> None:
         path = self.season_path(season_id)
+        if path.exists():
+            path.unlink()
+
+    # ------------------------------------------------------------------
+    # Karrieren (mehrere Saisons in Folge)
+    # ------------------------------------------------------------------
+    @property
+    def careers_dir(self) -> Path:
+        return self.root / "careers"
+
+    def career_path(self, career_id: str) -> Path:
+        return self.careers_dir / f"{career_id}.json"
+
+    def save_career(self, career: Career) -> Path:
+        self.careers_dir.mkdir(parents=True, exist_ok=True)
+        path = self.career_path(career.id)
+        path.write_text(json.dumps(career.to_dict(), ensure_ascii=False, indent=1), "utf-8")
+        return path
+
+    def load_career(self, career_id: str) -> Career:
+        path = self.career_path(career_id)
+        if not path.exists():
+            raise FileNotFoundError(f"Karriere '{career_id}' nicht gefunden ({path})")
+        return Career.from_dict(json.loads(path.read_text("utf-8")))
+
+    def list_careers(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        if not self.careers_dir.exists():
+            return out
+        for path in sorted(self.careers_dir.glob("*.json")):
+            try:
+                data = json.loads(path.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            chapters = data.get("chapters", [])
+            last = chapters[-1] if chapters else None
+            champion = (last or {}).get("standings") or []
+            out.append(
+                {
+                    "id": data["id"],
+                    "name": data["name"],
+                    "first_year": data["first_year"],
+                    "n_seasons": len(data.get("season_ids", [])),
+                    "years_closed": len(chapters),
+                    "last_champion": champion[0]["name"] if champion else None,
+                }
+            )
+        return sorted(out, key=lambda c: (-c["first_year"], c["name"]))
+
+    def delete_career(self, career_id: str) -> None:
+        path = self.career_path(career_id)
         if path.exists():
             path.unlink()
 

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – {{ rider_name }}{% endblock %}
+{% block subtitle %}{{ rider_name }} · {{ career.name }}{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <div class="panel-title">
+      <span>Lebenslauf</span>
+      <span class="faint">
+        {{ history|length }} Jahre{% if titles %} · {{ titles }} Titel{% endif %}
+      </span>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="right">Jahr</th><th class="right">Alter</th>
+            <th class="right">Platz</th><th class="right">Punkte</th>
+            <th class="right">Siege</th><th class="right">Starts</th>
+            <th class="right">Potenzial</th><th class="right">FTP</th>
+            <th>Entwicklung</th></tr>
+      </thead>
+      <tbody>
+        {% for year in history %}
+        <tr>
+          <td class="right mono">{{ year.year }}</td>
+          <td class="right mono">{{ year.development.age if year.development else "–" }}</td>
+          <td class="right mono {% if year.rank == 1 %}good{% endif %}">
+            {{ year.rank or "–" }}</td>
+          <td class="right mono">{{ year.points|round(0)|int }}</td>
+          <td class="right mono">{{ year.standing.wins if year.standing else 0 }}</td>
+          <td class="right mono">{{ year.standing.starts if year.standing else 0 }}</td>
+          <td class="right mono">
+            {{ year.development.potential|round(1) if year.development else "–" }}</td>
+          <td class="right mono">
+            {{ year.development.ftp_w|round(0)|int if year.development and year.development.ftp_w else "–" }}</td>
+          <td class="faint">{{ year.development.note if year.development else "" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim">
+      Alter, Potenzial und FTP stehen für den Stand <em>nach</em> dem
+      Jahreswechsel — Platzierung und Punkte für die Saison davor. So liest
+      sich die Zeile als das, was sie ist: Ergebnis des Jahres, und was das
+      Jahr aus dem Fahrer gemacht hat.
+    </p>
+  </div>
+
+  <div class="panel">
+    <a class="faint" href="/career/{{ career.id }}">◂ zurück zur Karriere</a>
+  </div>
+
+</div>
+{% endblock %}

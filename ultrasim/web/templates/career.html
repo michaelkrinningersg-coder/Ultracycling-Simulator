@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – {{ career.name }}{% endblock %}
+{% block subtitle %}{{ career.name }} · ab {{ career.first_year }}{% endblock %}
+
+{% block body %}
+{% set busy = jobs | selectattr("done", "equalto", false) | list | length > 0 %}
+<div class="page" x-data="careerJobs('{{ career.id }}', {{ busy|lower }})">
+
+  <div class="panel" x-show="running.length" x-cloak>
+    <div class="panel-title"><span>Jahreswechsel läuft</span></div>
+    <div class="joblist">
+      <template x-for="job in running" :key="job.id">
+        <div class="job">
+          <span class="mono" x-text="job.label"></span>
+          <span class="bar"><span class="fill" :style="`width:${(job.progress*100).toFixed(0)}%`"></span></span>
+          <span class="faint mono" x-text="job.state + (job.detail ? ' · ' + job.detail : '')"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="panel" x-show="failed.length" x-cloak>
+    <div class="joblist">
+      <template x-for="job in failed" :key="job.id">
+        <div class="job bad"><span x-text="job.label"></span><span class="mono" x-text="job.error"></span></div>
+      </template>
+    </div>
+  </div>
+
+  <!-- Jahre ------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Jahre</span>
+      <span class="faint">{{ career.years_closed }} abgeschlossen</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="right">Jahr</th><th>Saison</th><th class="right">Termine</th>
+            <th class="right">gerechnet</th><th>Champion</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for season in seasons %}
+        {% set chapter = career.chapter(season.year) %}
+        <tr>
+          <td class="right mono">{{ season.year }}</td>
+          <td><a href="/season/{{ season.id }}">{{ season.name }}</a></td>
+          <td class="right mono">{{ season.n_races }}</td>
+          <td class="right mono {% if season.n_computed == season.n_races and season.n_races %}good{% endif %}">
+            {{ season.n_computed }}</td>
+          <td>
+            {% if chapter and chapter.champion %}
+            <a href="/career/{{ career.id }}/rider/{{ chapter.champion.rider_id }}">
+              {{ chapter.champion.name }}</a>
+            <span class="faint mono">{{ chapter.champion.points|round(0)|int }} P</span>
+            {% elif season.closed %}<span class="dim">ohne Wertung</span>
+            {% else %}<span class="dim">läuft</span>{% endif %}
+          </td>
+          <td class="right"><a href="/season/{{ season.id }}">Kalender ▸</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Ewige Bestenliste ------------------------------------------- -->
+  {% if hall_of_fame %}
+  <div class="panel">
+    <div class="panel-title">
+      <span>Ewige Bestenliste</span>
+      <span class="faint">über {{ career.years_closed }} Jahre</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="right">#</th><th>Fahrer</th><th>Team</th>
+            <th class="right">Titel</th><th class="right">Podestjahre</th>
+            <th class="right">Siege</th><th class="right">Punkte</th>
+            <th class="right">Saisons</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for row in hall_of_fame %}
+        <tr>
+          <td class="right mono">{{ loop.index }}</td>
+          <td><a href="/career/{{ career.id }}/rider/{{ row.rider_id }}">{{ row.name }}</a></td>
+          <td class="faint">{{ row.team_name }}</td>
+          <td class="right mono {% if row.titles %}good{% endif %}">{{ row.titles }}</td>
+          <td class="right mono">{{ row.podium_years }}</td>
+          <td class="right mono">{{ row.wins }}</td>
+          <td class="right mono">{{ row.points|round(0)|int }}</td>
+          <td class="right mono">{{ row.seasons }}</td>
+          <td class="faint">
+            {% if row.retired_year %}Rücktritt {{ row.retired_year }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim">
+      Sortiert nach Titeln, dann Podestjahren, Siegen und erst zuletzt nach
+      Punkten. Punkte allein wären ungerecht gegenüber kurzen Karrieren: Wer
+      zehn Jahre im Mittelfeld fährt, sammelt mehr als der Fahrer mit zwei
+      Titeln und einem frühen Rücktritt.
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- Jahreswechsel ----------------------------------------------- -->
+  <div class="panel" id="jahreswechsel">
+    <div class="panel-title"><span>Jahreswechsel</span></div>
+    {% if current %}
+    {% if current.n_computed < current.n_races %}
+    <p class="dim">
+      {{ current.name }}: erst {{ current.n_computed }} von {{ current.n_races }}
+      Terminen gerechnet. Der Jahreswechsel friert die Wertung ein — es lohnt
+      sich, vorher fertig zu rechnen.
+    </p>
+    {% endif %}
+    <form method="post" action="/career/{{ career.id }}/close" class="form-row">
+      <label>Seed
+        <input type="number" name="seed" value="{{ current.year }}" min="0" max="999999">
+      </label>
+      <button type="submit">{{ current.year }} abschließen und {{ current.year + 1 }} eröffnen</button>
+    </form>
+    <p class="dim">
+      Der Jahreswechsel ist die einzige Aktion, die bestehende Daten
+      überschreibt: Danach ist jeder Fahrer ein Jahr älter, einige sind
+      zurückgetreten, Nachwuchs rückt nach. Deshalb wird die Wertung vorher
+      als Kapitel eingefroren — aus dem Feld des Folgejahres ließe sie sich
+      nicht mehr rekonstruieren. Der Kalender des neuen Jahres übernimmt die
+      Termine des alten.
+    </p>
+    {% else %}
+    <p class="dim">Diese Karriere hat keine Saison.</p>
+    {% endif %}
+  </div>
+
+  <!-- Letzter Wechsel im Detail ----------------------------------- -->
+  {% set last = career.chapters[-1] if career.chapters else None %}
+  {% if last %}
+  <div class="panel">
+    <div class="panel-title">
+      <span>Wechsel {{ last.year }} → {{ last.year + 1 }}</span>
+      <span class="faint">{{ last.retired|length }} Rücktritte · {{ last.newcomers|length }} Neue</span>
+    </div>
+    <div class="split">
+      <div>
+        <h3>Zurückgetreten</h3>
+        {% if last.retired %}
+        <ul class="plain">
+          {% for note in last.retired %}
+          <li><span class="mono">{{ note.age }}</span> {{ note.name }}</li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="dim">Niemand.</p>{% endif %}
+      </div>
+      <div>
+        <h3>Neu im Feld</h3>
+        {% if last.newcomers %}
+        <ul class="plain">
+          {% for note in last.newcomers %}
+          <li><span class="mono">{{ note.age }}</span> {{ note.name }}
+            <span class="faint mono">{{ note.potential|round(1) }}</span></li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="dim">Kein Nachwuchs.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <form method="post" action="/career/{{ career.id }}/delete"
+          onsubmit="return confirm('Karriereakte löschen? Die Saisons und Rennen bleiben erhalten.')">
+      <button type="submit" class="danger">Karriereakte löschen</button>
+      <span class="dim">Saisons und gerechnete Rennen bleiben stehen.</span>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block head %}
+<script defer src="/static/vendor/alpine.min.js"></script>
+<script>
+  // Aufträge liegen beim JobRunner unter der Karriere-ID, deshalb
+  // funktioniert derselbe Endpunkt wie für die Saison.
+  function careerJobs(careerId, busy) {
+    return {
+      jobs: [],
+      timer: null,
+      get running() { return this.jobs.filter(j => !j.done); },
+      get failed() { return this.jobs.filter(j => j.state === 'fehler'); },
+      init() { if (busy) this.poll(); },
+      async poll() {
+        const res = await fetch(`/api/season/${careerId}/jobs`);
+        this.jobs = await res.json();
+        if (this.running.length) {
+          this.timer = setTimeout(() => this.poll(), 1000);
+        } else {
+          window.location.reload();
+        }
+      },
+      destroy() { if (this.timer) clearTimeout(this.timer); },
+    };
+  }
+  document.addEventListener('alpine:init', () => window.Alpine.data('careerJobs', careerJobs));
+</script>
+{% endblock %}

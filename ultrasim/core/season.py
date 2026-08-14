@@ -101,6 +101,35 @@ FRESHNESS_P = 0.70
 FRESHNESS_FLOOR = 0.62
 
 
+def recovery_days(
+    work_kj: float,
+    capacity_kj: float,
+    regeneration: float = 50.0,
+    target_freshness: float = 0.98,
+) -> float:
+    """Wie lange nach einem Rennen, bis die Frische wieder ``target`` erreicht?
+
+    Die Umkehrung von ``freshness_factor`` und ``residual_work_kj``, in
+    geschlossener Form:
+
+        frische = 1 − VERLUST · (rest/kapazität)^P   mit rest = arbeit·e^(−t/τ)
+
+    nach t aufgelöst. Gedacht für die Kalenderplanung — dort ist die
+    Frage nicht „wie müde ist er jetzt", sondern „wann kann er wieder".
+
+    Null bedeutet: Das Rennen war kurz genug, um überhaupt keine Pause
+    zu erzwingen.
+    """
+    if work_kj <= 0.0 or capacity_kj <= 0.0:
+        return 0.0
+    allowed_ratio = math.pow(max(1.0 - target_freshness, 0.0) / FRESHNESS_LOSS, 1.0 / FRESHNESS_P)
+    allowed_kj = allowed_ratio * capacity_kj
+    if allowed_kj >= work_kj:
+        return 0.0
+    tau = recovery_tau_days(regeneration)
+    return max(tau * math.log(work_kj / allowed_kj), 0.0)
+
+
 def freshness_factor(residual_kj: float, capacity_kj: float) -> float:
     """Multiplikator auf die haltbare Leistung, konstant über das Rennen.
 
@@ -142,7 +171,7 @@ class CalendarRace:
     name: str
     route_id: str
     day: date
-    n_riders: int = 60
+    n_riders: int = 250
     seed: int = 1
     weather_preset: str | None = None
     #: None = aus der Strecke abgeleitet, sobald sie bekannt ist.
@@ -371,6 +400,7 @@ __all__ = [
     "freshness_factor",
     "points_for_rank",
     "race_coefficient",
+    "recovery_days",
     "recovery_tau_days",
     "residual_work_kj",
     "score_race",

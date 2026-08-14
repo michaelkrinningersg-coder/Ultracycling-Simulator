@@ -60,6 +60,100 @@ def race_summaries(store: Store, season: sn.Season) -> dict[str, RaceSummary]:
     return out
 
 
+#: Rennarbeit je „flachem Kilometer", gemessen an gerechneten Rennen:
+#: 14,8 kJ auf der Voralpen-Runde, 14,9 auf dem Hochgebirgs-Marathon,
+#: 13,8 auf der Nordroute. Der Wert ist erstaunlich stabil, weil die
+#: Strecke über ``effort_km`` bereits Höhenmeter enthält und der Rennplan
+#: die Intensität an die Distanz anpasst — lange Rennen werden langsamer
+#: gefahren, kosten pro Kilometer aber ähnlich viel.
+WORK_PER_EFFORT_KM_KJ = 15.0
+
+#: Arbeitskapazität eines Fahrers mit Durchschnittswerten (Ausdauer und
+#: Regeneration 50, 70 kg). Bezugsgröße für das Erholungsfenster im
+#: Kalender — dort geht es um den Kalender, nicht um einen bestimmten
+#: Fahrer.
+NOMINAL_CAPACITY_KJ = 42_000.0
+
+
+def estimated_work_kj(distance_km: float, ascent_m: float) -> float:
+    """Was ein Rennen einen durchschnittlichen Fahrer an Arbeit kostet."""
+    return sn.effort_km(distance_km, ascent_m) * WORK_PER_EFFORT_KM_KJ
+
+
+@dataclass
+class PlanRow:
+    """Ein Termin, wie ihn die Kalenderansicht braucht."""
+
+    race: sn.CalendarRace
+    route: dict[str, Any] | None
+    #: Position im Jahr, 0…1 — für das Jahresband.
+    position: float
+    gap_days: int | None
+    #: Wie lange ein durchschnittlicher Fahrer nach *diesem* Rennen
+    #: braucht, bis er wieder auf 98 % Frische ist.
+    recovery_days: float
+    #: Wie viel Erholung der *vorherige* Termin verlangt hätte. Das ist
+    #: die Zahl, gegen die sich die Pause messen lassen muss.
+    rest_needed: float
+    work_kj: float
+    #: Stammt ``work_kj`` aus einem gerechneten Rennen oder aus der Schätzung?
+    measured: bool
+
+    @property
+    def crowded(self) -> bool:
+        """Startet dieses Rennen, bevor das vorherige verdaut ist?"""
+        return self.gap_days is not None and self.gap_days < self.rest_needed
+
+
+def calendar_plan(store: Store, season: sn.Season) -> list[PlanRow]:
+    """Der Kalender als Planungsansicht: Termine, Pausen, Erholungsfenster.
+
+    Die Tabelle beantwortet „was steht wann an", diese Ansicht die
+    eigentliche Frage: **Ist der Kalender fahrbar?** Nach einem Ultra
+    braucht ein Durchschnittsfahrer gut drei Wochen, bis die Frische
+    wieder bei 98 % liegt; steht das nächste Rennen vorher, startet das
+    ganze Feld angeschlagen. Das sieht man einer Datumsliste nicht an.
+
+    Wo ein Rennen schon gerechnet ist, steht die *gemessene* Arbeit
+    seiner Fahrer; sonst eine Schätzung aus Länge und Höhenmetern.
+    """
+    routes = {r["id"]: r for r in store.list_routes()}
+    summaries = race_summaries(store, season)
+    rows: list[PlanRow] = []
+    previous: date | None = None
+
+    for calendar_race in season.sorted_races():
+        route = routes.get(calendar_race.route_id)
+        summary = summaries.get(calendar_race.id)
+        work = 0.0
+        measured = False
+        if summary is not None:
+            done = sorted(e.work_kj for e in summary.entries if e.work_kj > 0.0)
+            if done:
+                work = done[len(done) // 2]
+                measured = True
+        if not measured and route is not None:
+            work = estimated_work_kj(route["distance_km"], route["ascent_m"])
+
+        day = calendar_race.day
+        start = date(day.year, 1, 1)
+        span = (date(day.year, 12, 31) - start).days or 1
+        rows.append(
+            PlanRow(
+                race=calendar_race,
+                route=route,
+                position=min(max((day - start).days / span, 0.0), 1.0),
+                gap_days=(day - previous).days if previous else None,
+                recovery_days=sn.recovery_days(work, NOMINAL_CAPACITY_KJ),
+                rest_needed=rows[-1].recovery_days if rows else 0.0,
+                work_kj=work,
+                measured=measured,
+            )
+        )
+        previous = day
+    return rows
+
+
 def coefficients(store: Store, season: sn.Season) -> dict[str, float]:
     """Rennkoeffizient je Termin, aus der Strecke oder von Hand gesetzt."""
     cache: dict[str, float] = {}
@@ -309,7 +403,7 @@ def suggest_calendar(
                 name=route["name"],
                 route_id=route["id"],
                 day=day,
-                n_riders=60,
+                n_riders=250,
                 seed=1000 + i,
             )
         )

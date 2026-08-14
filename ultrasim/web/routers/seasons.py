@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from ... import career_runner as careers
 from ... import season_runner as runner
 from ...core import season as sn
 from ...core.season import CalendarRace, Season
@@ -146,6 +147,8 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "jobs": [j.to_dict() for j in state.jobs.list_jobs(season_id)[:8]],
             "busy": state.jobs.active_for(season_id) is not None,
             "points_head": season.points_head or list(sn.POINTS_HEAD),
+            "plan": runner.calendar_plan(store, season),
+            "career": careers.career_of_season(store, season_id),
         },
     )
 

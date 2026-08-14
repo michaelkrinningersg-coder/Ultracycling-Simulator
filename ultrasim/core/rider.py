@@ -161,7 +161,7 @@ ARCHETYPES: dict[str, Archetype] = {
         {"flach": 24, "berg": -16, "spritzigkeit": 8, "pacing_disziplin": 10,
          "ausdauer": -4, "konstanz": 6, "seitenwindfestigkeit": 8},
         height_bias_cm=3.0,
-        wkg_bias=-0.10,
+        wkg_bias=0.0,
     ),
     "kletterer": Archetype(
         "kletterer",
@@ -169,7 +169,7 @@ ARCHETYPES: dict[str, Archetype] = {
         {"berg": 25, "flach": -14, "spritzigkeit": 6, "hitzetoleranz": 6,
          "hoehenanpassung": 12, "seitenwindfestigkeit": -10},
         height_bias_cm=-6.0,
-        wkg_bias=0.45,
+        wkg_bias=0.20,
     ),
     "diesel": Archetype(
         "diesel",

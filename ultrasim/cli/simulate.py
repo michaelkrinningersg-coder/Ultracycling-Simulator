@@ -92,7 +92,7 @@ def cmd_race(args: argparse.Namespace) -> int:
     result = simulate_race(route, riders, teams, config, progress=progress if args.verbose else None)
 
     race_id = args.id or f"{args.route}-{args.seed}"
-    store.save_race(race_id, args.route, result)
+    store.save_race(race_id, args.route, result, route=route)
     print(
         f"Gerechnet in {result.compute_seconds:.1f} s · "
         f"Telemetrie {result.telemetry.nbytes() / 1e6:.1f} MB "
@@ -163,7 +163,10 @@ def cmd_rider(args: argparse.Namespace) -> int:
     """Fahrerdetail: Plan, Ereignisse, Splitverlauf."""
     store = Store(args.data)
     result, route_id = store.load_race(args.race_id)
-    route = store.load_route(route_id)
+    # Die Strecke, auf der gefahren wurde – nicht die, die heute unter
+    # dem Namen liegt. Der Streckeneditor darf sie inzwischen geändert
+    # haben, und dann passten Splitnamen und Splitzeiten nicht mehr.
+    route = store.race_route(args.race_id, route_id)
 
     entry = None
     for candidate in result.entries:

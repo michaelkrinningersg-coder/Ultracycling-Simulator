@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block title %}{{ route.name }} – Streckeneditor{% endblock %}
+{% block subtitle %}
+  {{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km · {{ '%.0f'|format(route.ascent_m) }} hm
+  · Klasse {{ route.distance_class }}{% if draft_token %} · <span class="warn">Entwurf</span>{% endif %}
+{% endblock %}
+{% block topbar %}<a class="faint" href="/routes">◂ Strecken</a>{% endblock %}
+
+{% block head %}
+<script type="module" src="/static/js/route-editor.js"></script>
+<script defer src="/static/vendor/alpine.min.js"></script>
+{% endblock %}
+
+{% block body %}
+{# Die Streckendaten als JSON-Block statt im x-data-Attribut: tojson
+   maskiert Anführungszeichen nicht, und ein Streckenname mit einem
+   Apostroph darin würde das Attribut sonst mitten im Satz beenden. #}
+<script id="route-data" type="application/json">{{ route_json|tojson }}</script>
+<script id="editor-options" type="application/json">{{ {
+  "routeId": route_id,
+  "draftToken": draft_token,
+  "suggestedId": suggested_id,
+  "minGapM": min_gap_m,
+}|tojson }}</script>
+
+<div class="page" x-data="routeEditor(
+       JSON.parse(document.getElementById('route-data').textContent),
+       JSON.parse(document.getElementById('editor-options').textContent))">
+
+  {% if draft_token %}
+  <div class="panel">
+    <div class="panel-title"><span>Import — noch nicht gespeichert</span></div>
+    <div class="import-report">
+      <div><span class="k">Distanz</span><span class="v">{{ '%.1f'|format(report.distance_m / 1000) }} km</span></div>
+      <div><span class="k">Klasse</span><span class="v">{{ report.distance_class }}</span></div>
+      <div><span class="k">Höhenmeter</span><span class="v">{{ '%.0f'|format(report.ascent_smoothed_m) }} m</span>
+        <span class="faint">ungeglättet {{ '%.0f'|format(report.ascent_raw_m) }} m</span></div>
+      <div><span class="k">Ø |Steigung|</span><span class="v">{{ '%.2f'|format(report.mean_abs_grade_smoothed * 100) }} %</span>
+        <span class="faint">ungeglättet {{ '%.2f'|format(report.mean_abs_grade_raw * 100) }} %</span></div>
+      <div><span class="k">GPX-Punkte</span><span class="v">{{ report.n_raw_points }}</span>
+        <span class="faint">{{ report.n_dropped_duplicates }} Duplikate entfernt,
+          {{ report.n_interpolated_ele }} Höhen interpoliert</span></div>
+      <div><span class="k">Segmente</span><span class="v">{{ report.n_segments }}</span></div>
+      <div><span class="k">Anstiege</span><span class="v">{{ report.n_climbs }}</span></div>
+    </div>
+    <p class="dim" style="max-width:82ch;margin-top:.6rem">
+      Der Unterschied zwischen geglättet und ungeglättet ist kein Schönheitsfehler,
+      sondern der Punkt: DEM-Rauschen von ±2 m je Rasterpunkt summiert sich über
+      tausende Punkte zu Höhenmetern, die es nie gab, und zu Steigungen, die kein
+      Fahrer je gefahren ist.
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Profil</span>
+      <span class="faint">Splits und Servicepunkte an den Griffen ziehen</span>
+    </div>
+    <canvas x-ref="canvas" class="profile" style="height:230px"></canvas>
+    <div class="legend" style="margin-top:.35rem">
+      <span><i style="background:#ffc247"></i>Split</span>
+      <span><i style="background:#4ade80"></i>Ziel (fest)</span>
+      <span><i style="background:#47b4ff"></i>Servicepunkt</span>
+      <span><i style="background:rgba(217,83,79,.4)"></i>kategorisierter Anstieg</span>
+    </div>
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title"><span>Name und Kennung</span></div>
+    <div class="form-row">
+      <label>Name
+        <input type="text" x-model="name" @input="dirty = true" maxlength="60" style="min-width:18rem">
+      </label>
+      {% if route_id %}
+      <label>Kennung
+        <input type="text" value="{{ route_id }}" disabled>
+      </label>
+      {% else %}
+      <label>Kennung
+        <input type="text" x-model="slug" @input="dirty = true">
+      </label>
+      {% endif %}
+      <button class="primary" @click="save()" :disabled="saving"
+              x-text="saving ? 'Speichert…' : (draftToken ? 'Strecke speichern' : 'Änderungen speichern')"></button>
+      {% if draft_token %}
+      <form method="post" action="/routes/draft/{{ draft_token }}/discard" class="inline">
+        <button class="danger" type="submit">Import verwerfen</button>
+      </form>
+      {% endif %}
+      <span class="warn" x-show="dirty" x-cloak>ungespeicherte Änderungen</span>
+      <span class="bad" x-text="error" x-show="error" x-cloak></span>
+    </div>
+    {% if usage %}
+    <p class="dim" style="margin-top:.6rem">
+      {{ usage|length }} gerechnete{{ 'r' if usage|length == 1 else '' }} Rennen auf dieser Strecke
+      ({{ usage[:3]|join(', ') }}{% if usage|length > 3 %} …{% endif %}).
+      Änderungen hier berühren sie nicht — jedes Rennen trägt die Strecke, auf der
+      es gefahren wurde, als Kopie bei sich.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="marker-grid">
+    <div class="panel">
+      <div class="panel-title">
+        <span>Splits</span>
+        <span class="faint" x-text="splits.length + ' Zeitmesspunkte'"></span>
+      </div>
+      <table class="markers">
+        <thead><tr><th class="right">km</th><th>Name</th><th>Art</th><th class="right">Abstand</th><th></th></tr></thead>
+        <tbody>
+          <template x-for="(split, i) in splits" :key="i">
+            <tr :class="{focus: hover && hover.list === 'splits' && hover.index === i}">
+              <td class="right">
+                <input type="number" step="0.1" min="0" class="km"
+                       :value="km(split.dist_m)"
+                       :disabled="split.kind === 'finish'"
+                       @change="setDist('splits', i, $event.target.value)">
+              </td>
+              <td><input type="text" x-model="split.name" @input="dirty = true"
+                         :disabled="split.kind === 'finish'"></td>
+              <td>
+                <select x-model="split.kind" @change="dirty = true" :disabled="split.kind === 'finish'">
+                  <option value="interval">Zwischenzeit</option>
+                  <option value="summit">Gipfel</option>
+                  <option value="control">Kontrollpunkt</option>
+                  <option value="finish" disabled>Ziel</option>
+                </select>
+              </td>
+              <td class="right mono faint" x-text="(gapBefore(i) / 1000).toFixed(1) + ' km'"></td>
+              <td class="right">
+                <button class="danger" @click="remove('splits', i)"
+                        x-show="split.kind !== 'finish'">×</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <button @click="addSplit()" style="margin-top:.5rem">+ Split</button>
+      <button @click="resetMarkers()" style="margin-left:.4rem">Zurücksetzen</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>Servicepunkte</span>
+        <span class="faint" x-text="services.length + ' Treffpunkte'"></span>
+      </div>
+      <table class="markers">
+        <thead><tr><th class="right">km</th><th>Name</th><th></th></tr></thead>
+        <tbody>
+          <template x-for="(sp, i) in services" :key="i">
+            <tr :class="{focus: hover && hover.list === 'services' && hover.index === i}">
+              <td class="right">
+                <input type="number" step="0.1" min="0" class="km" :value="km(sp.dist_m)"
+                       @change="setDist('services', i, $event.target.value)">
+              </td>
+              <td><input type="text" x-model="sp.name" @input="dirty = true"></td>
+              <td class="right"><button class="danger" @click="remove('services', i)">×</button></td>
+            </tr>
+          </template>
+          <tr x-show="!services.length"><td colspan="3" class="dim">Kein Treffpunkt — das Feld fährt durch.</td></tr>
+        </tbody>
+      </table>
+      <button @click="addService()" style="margin-top:.5rem">+ Servicepunkt</button>
+      <p class="dim" style="margin-top:.6rem;max-width:46ch">
+        Servicepunkte sind die einzigen Stellen, an denen das Begleitfahrzeug
+        wartet: Nur dort wird verpflegt, das Rad gewechselt und geschlafen. Ihre
+        Lage bestimmt den ganzen Stoppplan des Strategiemoduls.
+      </p>
+    </div>
+  </div>
+
+  {% if route_id %}
+  <div class="panel">
+    <div class="panel-title"><span>Strecke löschen</span></div>
+    <form method="post" action="/route/{{ route_id }}/delete"
+          onsubmit="return confirm('Streckendatei löschen? Gerechnete Rennen bleiben erhalten, Kalendertermine auf diese Strecke zeigen danach ins Leere.')">
+      <button class="danger" type="submit">Streckendatei löschen</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

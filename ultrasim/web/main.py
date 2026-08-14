@@ -39,6 +39,12 @@ class AppState:
         self.store = Store(data_root)
         self.playback = PlaybackRegistry()
         self.jobs = JobRunner()
+        #: Importierte, aber noch nicht gespeicherte Strecken (M5b).
+        #: Bewusst nur im Speicher: Ein Entwurf ist eine Vorschau, keine
+        #: Datenlage. Wer den Server neu startet, lädt die GPX-Datei neu –
+        #: sie liegt ohnehin schon unter data/gpx/.
+        self.drafts: OrderedDict[str, tuple[Route, object]] = OrderedDict()
+        self._max_drafts = 8
         self._views: OrderedDict[str, tuple[RaceResult, Route, RaceView]] = OrderedDict()
         self._max_cached = 3
 
@@ -53,7 +59,7 @@ class AppState:
             self._views.move_to_end(race_id)
             return self._views[race_id]
         result, route_id = self.store.load_race(race_id)
-        route = self.store.load_route(route_id)
+        route = self.store.race_route(race_id, route_id)
         bundle = (result, route, RaceView(result, route))
         self._views[race_id] = bundle
         while len(self._views) > self._max_cached:
@@ -62,6 +68,11 @@ class AppState:
 
     def invalidate(self, race_id: str) -> None:
         self._views.pop(race_id, None)
+
+    def add_draft(self, token: str, route: Route, report: object) -> None:
+        self.drafts[token] = (route, report)
+        while len(self.drafts) > self._max_drafts:
+            self.drafts.popitem(last=False)
 
 
 def create_app(data_root: str | Path | None = None) -> FastAPI:
@@ -76,9 +87,11 @@ def create_app(data_root: str | Path | None = None) -> FastAPI:
     templates.env.filters["de_date"] = _de_date
     app.state.templates = templates
 
-    from .routers import api, pages, seasons  # zirkuläre Importe vermeiden
+    from .routers import api, pages, pool, routes, seasons  # zirkuläre Importe vermeiden
 
     app.include_router(pages.router)
+    app.include_router(routes.router)
+    app.include_router(pool.router)
     app.include_router(seasons.router)
     app.include_router(api.router)
 

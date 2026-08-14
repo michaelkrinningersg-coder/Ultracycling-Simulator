@@ -11,7 +11,7 @@ Dieses README beschreibt, was davon gebaut ist und wie man es benutzt.
 
 ---
 
-## Stand: Meilensteine M1–M7
+## Stand: Meilensteine M1–M7 samt Editoren (M5b)
 
 Das Design-Dokument gliedert die Umsetzung in acht Meilensteine und
 definiert in Abschnitt 16 den Umfang der ersten Fassung. Genau der ist
@@ -38,10 +38,25 @@ hier umgesetzt.
 | Kalender-Editor (M7) | Der erste Editor im Browser: Saison anlegen, Termine hinzufügen, verschieben und löschen, Rennen einzeln oder am Stück rechnen lassen. Die Rechnung läuft im Hintergrund mit Fortschrittsanzeige — ein Ultra dauert Minuten, dafür gibt es keinen Request |
 | Restermüdung (M7) | Ein Rennen wirkt ins nächste: Die Rennarbeit klingt exponentiell ab (Zeitkonstante aus dem Attribut Regeneration) und wirkt über zwei Wege — als bereits geleistete Arbeit im Ermüdungszähler und als Frischefaktor auf die haltbare Leistung |
 | Fahrerentwicklung (M7) | Beim Saisonwechsel altern alle Fahrer: Leistungskurve nach Alter mit Scheitel um 31, Erfahrung wächst mit Rennen und Kilometern, Potenzial driftet, Rücktritte ab 34 mit Nachwuchs als Ersatz |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 325 Tests inklusive Golden-Master |
+| Streckeneditor (M5b) | GPX-Upload im Browser mit Vorschau: Distanz, Höhenmeter geglättet *und* ungeglättet, erkannte Anstiege, abgeleitete Distanzklasse. Splits und Servicepunkte per Drag im Höhenprofil verschiebbar, dazu Tabelle mit Kilometerfeld, Art und Hinzufügen/Löschen. Auf die Platte geht der Import erst, wenn man ihn dort speichert |
+| Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail und Saison, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 363 Tests inklusive Golden-Master |
 
-**Noch nicht enthalten**: die Editoren für Strecke, Fahrer und Team (M5b),
-das Strategiemodul der zweiten Stufe (M7b).
+**Noch nicht enthalten**: das Strategiemodul der zweiten Stufe (M7b) — der
+Regelkreis, mit dem Fahrer im Rennen auf Rückstand, Wetter und Magen
+reagieren statt einem festen Plan zu folgen.
+
+### Ein gerechnetes Rennen ist unveränderlich
+
+Sobald es Editoren gibt, wird das zur Frage: Was passiert mit dem Rennen
+vom letzten Mai, wenn heute ein Split von km 40 auf km 45 wandert?
+Nichts. Jedes Rennen legt beim Rechnen eine Kopie seiner Strecke im
+eigenen Verzeichnis ab und trägt seine Fahrer ohnehin schon als Kopie
+bei sich. Der Editor ist dadurch völlig frei — ohne die Kopie stünde die
+Zeit von km 40 unter dem Namen „km 45", und beim Löschen eines Splits
+passte nicht einmal mehr die Spaltenzahl der Splitzeiten. 150 kB je
+Rennen neben zweistelligen Megabyte Telemetrie sind dafür ein
+angemessener Preis.
 
 Was gerade wirkt, steht offen in der Oberfläche: Das Fahrerdetail zeigt
 alle 25 Attribute, aber nur die 21, die tatsächlich in die Simulation
@@ -127,6 +142,8 @@ Drei Strecken liegen bei, je eine pro Distanzklasse:
 
 ### Eigene Strecke importieren
 
+Im Browser unter `/routes` per Datei-Auswahl — oder auf der Kommandozeile:
+
 ```bash
 python -m ultrasim.geo.gpx_import meine-strecke.gpx --name "Meine Strecke"
 ```
@@ -205,16 +222,20 @@ ultrasim/
   data/     store          (Dateiablage: JSON für Stammdaten, npz für Telemetrie)
   season_runner.py         Dienstschicht: Kalender rechnen, werten, altern
   web/      main · playback · jobs · routers/ · templates/ · static/
+            routers: pages · routes (Streckeneditor) · pool (Fahrer, Teams)
+                     seasons (Kalender) · api (Board, SSE)
   cli/      simulate · balance · season
   app.py    Startlogik der ausgelieferten Anwendung
 tools/      make_demo_gpx.py
 tests/      geo · core · engine · conditions · nutrition · sleep · weather
-            incidents · season · season_web · playback · golden_master
+            incidents · season · season_web · editors · playback
+            golden_master
 data/
   gpx/      Quelldateien der mitgelieferten Strecken
   routes/   importierte Strecken (gzip-JSON, eingecheckt)
   races/    gerechnete Rennen (erzeugt, nicht eingecheckt)
   seasons/  Kalender und Wertung (erzeugt, nicht eingecheckt)
+  gpx/      hochgeladene Quelldateien (erzeugt, nicht eingecheckt)
 ```
 
 Architekturprinzip aus Abschnitt 13: **Die Simulation ist eine reine
@@ -378,7 +399,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q          # 325 Tests, rund 95 s
+pytest -q          # 363 Tests, rund 170 s
 ruff check ultrasim tools tests
 ```
 

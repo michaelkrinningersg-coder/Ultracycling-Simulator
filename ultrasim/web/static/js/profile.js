@@ -37,6 +37,10 @@ export class ProfileView {
     this.windowM = opts.windowM || null;
     this.height = opts.height || 150;
     this.showLabels = opts.showLabels !== false;
+    // Der Streckeneditor zeichnet Splits und Servicepunkte selbst: Dort
+    // sind sie anfassbar und müssen bei jedem Mausschritt neu liegen,
+    // hier stecken sie im vorgerenderten Untergrund.
+    this.showMarkers = opts.showMarkers !== false;
     this.route = null;
     this.positions = [];
     this.focus = -1;
@@ -62,6 +66,9 @@ export class ProfileView {
     this.viewStart = 0;
     this.viewEnd = route.distance_m;
   }
+
+  /** Untergrund verwerfen – nötig, wenn sich Marker geändert haben. */
+  invalidate() { this._baseKey = ''; }
 
   setFrame(positions, focusEntry, neighbourIds, conditions) {
     this.positions = positions;
@@ -191,7 +198,7 @@ export class ProfileView {
 
     // Splits
     c.font = '9px ui-monospace, monospace';
-    for (const split of this.route.splits) {
+    for (const split of (this.showMarkers ? this.route.splits : [])) {
       if (split.dist_m < this.viewStart || split.dist_m > this.viewEnd) continue;
       const xx = this.x(split.dist_m);
       c.beginPath();
@@ -209,7 +216,7 @@ export class ProfileView {
     }
 
     // Servicepunkte
-    for (const sp of this.route.service_points) {
+    for (const sp of (this.showMarkers ? this.route.service_points : [])) {
       if (sp.dist_m < this.viewStart || sp.dist_m > this.viewEnd) continue;
       const xx = this.x(sp.dist_m);
       c.fillStyle = '#47b4ff';

@@ -212,7 +212,7 @@ def run_calendar_race(
     result = simulate_race(route, riders, teams, config, progress=progress)
 
     race_id = race_id_for(season, calendar_race)
-    store.save_race(race_id, calendar_race.route_id, result)
+    store.save_race(race_id, calendar_race.route_id, result, route=route)
     calendar_race.race_id = race_id
     if save_season:
         store.save_season(season)

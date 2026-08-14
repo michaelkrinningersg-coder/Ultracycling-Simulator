@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}{{ rider.name }} – Fahrereditor{% endblock %}
+{% block subtitle %}{{ rider.name }} · {{ rider.nation }} · {{ team.name if team else '—' }}{% endblock %}
+{% block topbar %}<a class="faint" href="/pool">◂ Fahrerpool</a>{% endblock %}
+
+{% block head %}<script defer src="/static/vendor/alpine.min.js"></script>{% endblock %}
+
+{% block body %}
+<script id="rider-data" type="application/json">{{ {
+  "id": rider.id,
+  "name": rider.name,
+  "nation": rider.nation,
+  "team_id": rider.team_id,
+  "age": rider.age,
+  "height_cm": rider.height_cm,
+  "weight_kg": rider.weight_kg,
+  "ftp_w": rider.ftp_w,
+  "archetype": rider.archetype,
+  "attributes": rider.attributes,
+}|tojson }}</script>
+<script id="rider-meta" type="application/json">{{ {
+  "weights": weights,
+  "fieldMean": field_mean,
+  "wkgRange": wkg_range,
+  "attrRange": attr_range,
+}|tojson }}</script>
+
+<div class="page" x-data="riderEditor()">
+
+  <div class="panel">
+    <div class="panel-title"><span>Stammdaten</span></div>
+    <div class="form-row">
+      <label>Name<input type="text" x-model="r.name" style="min-width:14rem"></label>
+      <label>Nation<input type="text" x-model="r.nation" maxlength="3" style="min-width:4rem"></label>
+      <label>Team
+        <select x-model.number="r.team_id">
+          {% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Archetyp
+        <select x-model="r.archetype">
+          {% for key, a in archetypes.items() %}<option value="{{ key }}">{{ a.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Alter<input type="number" x-model.number="r.age" min="17" max="60"></label>
+      <label>Größe (cm)<input type="number" x-model.number="r.height_cm" min="150" max="215" step="0.5"></label>
+      <label>Gewicht (kg)<input type="number" x-model.number="r.weight_kg" min="45" max="110" step="0.1"></label>
+      <label>FTP (W)<input type="number" x-model.number="r.ftp_w" min="100" max="600" step="1"></label>
+    </div>
+
+    <div class="readout" style="margin-top:.8rem">
+      <div class="item"><span class="k">Potenzial</span>
+        <span class="v big" x-text="potential.toFixed(1)"></span></div>
+      <div class="item"><span class="k">gegen Feldmittel</span>
+        <span class="v" :class="deltaClass" x-text="delta"></span></div>
+      <div class="item"><span class="k">W/kg</span>
+        <span class="v" :class="wkgOk ? '' : 'bad'" x-text="wkg.toFixed(2)"></span></div>
+      <div class="item"><span class="k">Grenzen</span>
+        <span class="v faint">{{ '%.1f'|format(wkg_range[0]) }}–{{ '%.1f'|format(wkg_range[1]) }} W/kg</span></div>
+    </div>
+    <p class="dim" x-show="!wkgOk" x-cloak style="margin-top:.4rem">
+      Beim Speichern wird die FTP ins Plausibilitätsband gezogen — eine
+      Leistung außerhalb 3,5–6,0 W/kg hängt die gesamte Physikkalibrierung
+      an ein einzelnes Eingabefeld.
+    </p>
+
+    <div class="form-row" style="margin-top:.8rem">
+      <button class="primary" @click="save()" :disabled="saving"
+              x-text="saving ? 'Speichert…' : 'Speichern'"></button>
+      <button @click="reset()">Zurücksetzen</button>
+      <span class="warn" x-show="dirty" x-cloak>ungespeicherte Änderungen</span>
+      <span class="good" x-show="saved" x-cloak>gespeichert</span>
+      <span class="bad" x-text="error" x-show="error" x-cloak></span>
+    </div>
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Attribute</span>
+      <span class="faint">hell hervorgehoben = greift derzeit in die Simulation ein</span>
+    </div>
+    <div class="attr-grid">
+      {% for key in weights %}
+      <div class="attr {% if key in active %}on{% endif %}">
+        <label>
+          <span class="k">{{ labels.get(key, key) }}
+            <span class="faint">×{{ '%.1f'|format(weights[key]) }}</span></span>
+          <span class="row">
+            <input type="range" min="{{ attr_range[0] }}" max="{{ attr_range[1] }}" step="1"
+                   x-model.number="r.attributes['{{ key }}']">
+            <input type="number" class="val" min="{{ attr_range[0] }}" max="{{ attr_range[1] }}" step="0.1"
+                   x-model.number="r.attributes['{{ key }}']">
+          </span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="dim" style="max-width:82ch;margin-top:.7rem">
+      Das Gewicht hinter dem Namen sagt, wie teuer eine Stärke im Budget ist —
+      nicht, wie stark sie wirkt. Das Potenzial oben ist das gewichtete Mittel
+      aller 25 Werte; der Generator normiert es auf einen Zielwert, damit jede
+      Stärke irgendwo bezahlt wird. Hier darf jeder Wert überschrieben werden,
+      die Anzeige zeigt nur mit, was das Feldgefüge davon hält.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Fahrer löschen</span></div>
+    <form method="post" action="/pool/rider/{{ rider.id }}/delete"
+          onsubmit="return confirm('Fahrer aus dem Pool entfernen? Gerechnete Rennen behalten ihn.')">
+      <button class="danger" type="submit">Aus dem Pool entfernen</button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+  function riderEditor() {
+    const original = JSON.parse(document.getElementById('rider-data').textContent);
+    const meta = JSON.parse(document.getElementById('rider-meta').textContent);
+    return {
+      r: structuredClone(original),
+      saving: false, saved: false, error: '',
+      get dirty() { return JSON.stringify(this.r) !== JSON.stringify(original); },
+      /* Dasselbe gewichtete Mittel wie in Rider.potential – hier noch
+         einmal, damit der Wert beim Schieben sofort mitläuft und nicht
+         erst nach dem Speichern. */
+      get potential() {
+        let sum = 0, total = 0;
+        for (const [key, w] of Object.entries(meta.weights)) {
+          sum += (this.r.attributes[key] ?? 50) * w;
+          total += w;
+        }
+        return sum / total;
+      },
+      get delta() {
+        const d = this.potential - meta.fieldMean;
+        return (d >= 0 ? '+' : '') + d.toFixed(1);
+      },
+      get deltaClass() {
+        const d = this.potential - meta.fieldMean;
+        return d > 6 ? 'warn' : d < -6 ? 'faint' : '';
+      },
+      get wkg() { return this.r.ftp_w / Math.max(this.r.weight_kg, 1); },
+      get wkgOk() { return this.wkg >= meta.wkgRange[0] && this.wkg <= meta.wkgRange[1]; },
+      reset() { this.r = structuredClone(original); this.saved = false; this.error = ''; },
+      async save() {
+        this.saving = true; this.error = ''; this.saved = false;
+        try {
+          const res = await fetch(`/pool/rider/${original.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(this.r),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || 'Speichern fehlgeschlagen');
+          window.location.reload();
+        } catch (err) {
+          this.error = String(err.message || err);
+        } finally {
+          this.saving = false;
+        }
+      },
+    };
+  }
+  document.addEventListener('alpine:init', () => window.Alpine.data('riderEditor', riderEditor));
+</script>
+{% endblock %}

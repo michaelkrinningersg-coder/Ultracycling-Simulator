@@ -51,6 +51,9 @@ def ensure_user_data(verbose: bool = True) -> Path:
     (root / "routes").mkdir(parents=True, exist_ok=True)
     (root / "races").mkdir(parents=True, exist_ok=True)
     (root / "seasons").mkdir(parents=True, exist_ok=True)
+    # Hochgeladene GPX-Dateien bleiben liegen: Ein Neuimport mit anderen
+    # Einstellungen soll die Datei nicht noch einmal verlangen.
+    (root / "gpx").mkdir(parents=True, exist_ok=True)
 
     source = bundle_dir() / "data" / "routes"
     if source.is_dir() and source.resolve() != (root / "routes").resolve():
@@ -100,7 +103,7 @@ def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
         route, pool[:40], teams, RaceConfig(seed=42, name=f"{route.name} – Demo")
     )
     race_id = f"{pick['id']}-42"
-    store.save_race(race_id, pick["id"], result)
+    store.save_race(race_id, pick["id"], result, route=route)
     if verbose:
         print(f"Fertig in {result.compute_seconds:.1f} s.")
     return race_id

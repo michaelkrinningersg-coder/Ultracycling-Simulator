@@ -30,6 +30,8 @@ hiddenimports = collect_submodules("uvicorn") + [
     "ultrasim.web.routers.api",
     "ultrasim.web.routers.pages",
     "ultrasim.web.routers.seasons",
+    "ultrasim.web.routers.routes",
+    "ultrasim.web.routers.pool",
     "python_multipart",
 ]
 

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – Strecken{% endblock %}
+{% block subtitle %}Strecken{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  <div class="panel">
+    <div class="panel-title"><span>GPX importieren</span></div>
+    <form method="post" action="/routes/import" enctype="multipart/form-data" class="form-row">
+      <label>GPX-Datei
+        <input type="file" name="gpx" accept=".gpx,application/gpx+xml" required>
+      </label>
+      <label>Name (optional)
+        <input type="text" name="name" placeholder="aus der Datei übernehmen" maxlength="60">
+      </label>
+      <button class="primary" type="submit">Importieren</button>
+    </form>
+    <p class="dim" style="max-width:82ch;margin-top:.6rem">
+      Aus komoot, BRouter, Strava oder einer GPS-Aufzeichnung — der Importer
+      entfernt Duplikate, interpoliert fehlende Höhen, rastert auf 10 m, glättet
+      mit Savitzky-Golay und leitet Segmente, Anstiege, Splits und Servicepunkte
+      ab. Das Ergebnis kommt zuerst in den Editor; auf die Platte geht es erst,
+      wenn du es dort speicherst. Bis {{ max_mb }} MB.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title"><span>Vorhandene Strecken</span><span class="faint">{{ routes|length }}</span></div>
+    {% if routes %}
+    <table>
+      <thead>
+        <tr><th>Kennung</th><th>Name</th><th class="right">Distanz</th><th class="right">Höhenmeter</th>
+            <th>Klasse</th><th class="right">Anstiege</th><th class="right">Splits</th>
+            <th>Benutzt von</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for route in routes %}
+        <tr>
+          <td class="mono faint">{{ route.id }}</td>
+          <td><a href="/route/{{ route.id }}">{{ route.name }}</a></td>
+          <td class="right mono">{{ '%.1f'|format(route.distance_km) }} km</td>
+          <td class="right mono">{{ route.ascent_m }} m</td>
+          <td><span class="badge {{ route.distance_class }}">{{ route.distance_class }}</span></td>
+          <td class="right mono faint">{{ route.n_climbs }}</td>
+          <td class="right mono faint">{{ route.n_splits }}</td>
+          <td class="dim">
+            {% if route.races %}{{ route.races|length }} Rennen{% else %}<span class="faint">—</span>{% endif %}
+          </td>
+          <td class="right nowrap">
+            <a href="/route/{{ route.id }}"><button>Bearbeiten</button></a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem">
+      Eine Strecke zu ändern berührt gerechnete Rennen nicht: Jedes Rennen trägt
+      die Strecke, auf der es gefahren wurde, als Kopie im eigenen Verzeichnis.
+    </p>
+    {% else %}
+    <p class="dim">Noch keine Strecke vorhanden. Oben eine GPX-Datei hochladen.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

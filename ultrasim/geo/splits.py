@@ -79,3 +79,74 @@ def build_service_points(distance_m: float, distance_class: str) -> list[Service
         )
         d += spacing
     return points
+
+
+#: Mindestabstand zwischen zwei Markern. Zwei Zeitmesspunkte 30 m
+#: auseinander sind kein Zeitmesspunkt mehr, sondern ein Messfehler — und
+#: im Board zwei Zeilen, die dasselbe sagen.
+MIN_MARKER_GAP_M = 200.0
+
+
+def normalise_splits(
+    entries: list[tuple[float, str, str]], distance_m: float
+) -> list[Split]:
+    """Aus rohen (Distanz, Name, Art)-Tripeln eine saubere Splitliste.
+
+    Sortiert, entdoppelt, neu durchnummeriert — und stellt sicher, dass
+    genau ein Ziel-Split am Streckenende steht. Der Editor darf beliebig
+    zerren; die Ordnung stellt diese Funktion her, nicht die Oberfläche.
+    Das Ziel ist dabei nicht verhandelbar: Die Zielzeit *ist* das
+    Ergebnis, und sie an km 940 einer 1000-km-Strecke zu legen wäre kein
+    Editorentscheid, sondern ein kaputtes Rennen.
+    """
+    cleaned: list[tuple[float, str, str]] = []
+    for dist_m, name, kind in entries:
+        value = float(dist_m)
+        if not 0.0 < value < distance_m - MIN_MARKER_GAP_M:
+            continue  # das Ziel wird unten selbst gesetzt
+        # Ein "Ziel" mitten auf der Strecke ist keins. Es hier stehen zu
+        # lassen ergäbe zwei Zieldurchfahrten in einem Rennen — die
+        # Auswertung nimmt den letzten, die Anzeige den ersten, und
+        # niemand fände den Grund.
+        if kind == "finish":
+            kind = "control"
+        cleaned.append((value, name.strip() or f"km {value / 1000:.0f}", kind or "interval"))
+
+    cleaned.sort(key=lambda row: row[0])
+    kept: list[tuple[float, str, str]] = []
+    for row in cleaned:
+        if kept and row[0] - kept[-1][0] < MIN_MARKER_GAP_M:
+            continue
+        kept.append(row)
+
+    splits = [
+        Split(idx=i, dist_m=round(dist, 1), name=name, kind=kind)
+        for i, (dist, name, kind) in enumerate(kept)
+    ]
+    splits.append(Split(idx=len(splits), dist_m=round(distance_m, 1), name="Ziel", kind="finish"))
+    return splits
+
+
+def normalise_service_points(
+    entries: list[tuple[float, str]], distance_m: float
+) -> list[ServicePoint]:
+    """Dasselbe für Servicepunkte.
+
+    Anders als beim Ziel gibt es hier keinen Pflichteintrag: Eine Strecke
+    ganz ohne Treffpunkt ist zulässig — dann fährt das Feld eben durch.
+    """
+    cleaned = [
+        (float(dist_m), name.strip())
+        for dist_m, name in entries
+        if 0.0 < float(dist_m) < distance_m
+    ]
+    cleaned.sort(key=lambda row: row[0])
+    kept: list[tuple[float, str]] = []
+    for row in cleaned:
+        if kept and row[0] - kept[-1][0] < MIN_MARKER_GAP_M:
+            continue
+        kept.append(row)
+    return [
+        ServicePoint(idx=i, dist_m=round(dist, 1), name=name or f"SP {i + 1}")
+        for i, (dist, name) in enumerate(kept)
+    ]

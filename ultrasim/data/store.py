@@ -151,9 +151,21 @@ class Store:
     # ------------------------------------------------------------------
     # Rennen
     # ------------------------------------------------------------------
-    def save_race(self, race_id: str, route_id: str, result: RaceResult) -> Path:
+    def save_race(
+        self, race_id: str, route_id: str, result: RaceResult, route: Route | None = None
+    ) -> Path:
         target = self.race_dir(race_id)
         target.mkdir(parents=True, exist_ok=True)
+
+        # Momentaufnahme der Strecke ins Rennverzeichnis. Die Splitzeiten
+        # gehören zu *diesen* Splits: Verschiebt der Streckeneditor später
+        # einen Zeitmesspunkt von km 40 auf km 45, stünde sonst die Zeit
+        # von km 40 unter dem Namen "km 45", und beim Hinzufügen oder
+        # Löschen passte nicht einmal mehr die Spaltenzahl. 150 kB neben
+        # zweistelligen Megabyte Telemetrie sind der Preis dafür, dass ein
+        # gerechnetes Rennen unveränderlich bleibt.
+        if route is not None:
+            route.save(target / "route.json.gz")
 
         meta = {
             "race_id": race_id,
@@ -188,6 +200,20 @@ class Store:
             split_ranks=result.split_ranks,
         )
         return target
+
+    def race_route(self, race_id: str, route_id: str) -> Route:
+        """Die Strecke, auf der ein Rennen gefahren wurde.
+
+        Bevorzugt die Momentaufnahme im Rennverzeichnis. Rennen aus der
+        Zeit vor dem Streckeneditor haben keine und greifen auf die
+        Streckendatei zurück — solange sie unverändert ist, macht das
+        keinen Unterschied, und wenn nicht, ist es das Beste, was noch
+        geht.
+        """
+        snapshot = self.race_dir(race_id) / "route.json.gz"
+        if snapshot.exists():
+            return Route.load(snapshot)
+        return self.load_route(route_id)
 
     def load_race(self, race_id: str) -> tuple[RaceResult, str]:
         target = self.race_dir(race_id)

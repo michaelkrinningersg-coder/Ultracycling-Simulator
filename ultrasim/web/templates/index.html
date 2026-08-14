@@ -52,9 +52,11 @@ python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</
       </tbody>
     </table>
     {% else %}
-    <p class="dim">Keine Strecken gefunden. GPX importieren:</p>
-    <pre class="mono dim">python -m ultrasim.geo.gpx_import meine-strecke.gpx</pre>
+    <p class="dim">Keine Strecken gefunden.</p>
     {% endif %}
+    <p class="dim" style="margin-top:.5rem">
+      <a href="/routes">GPX importieren und Strecken bearbeiten ▸</a>
+    </p>
   </div>
 
   <div class="panel">
@@ -81,15 +83,19 @@ python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</
   <div class="panel">
     <div class="panel-title"><span>Stand des Aufbaus</span></div>
     <p class="dim" style="max-width:70ch">
-      Diese Fassung deckt die Meilensteine M1–M7 des Game-Design-Dokuments ab:
+      Diese Fassung deckt die Meilensteine M1–M7 samt Editoren (M5b) ab:
       GPX-Import mit Glättung und Segmentierung, Physikmodell, Fahrergenerator mit
       Archetypen, Form- und Ermüdungsmodell, Rennplan des Strategiemoduls,
       Verpflegung, Glykogen und Schlaf, Wetter, Wind und Tag-Nacht-Zyklus,
       den Ereigniskatalog samt Aufgabe sowie Saisonkalender, Wertung und
       Fahrerentwicklung — dazu die Live-Telemetrie mit Höhenprofil und
       Playback bis 1000×.
-      Noch offen: die Editoren für Strecke, Fahrer und Team (M5b) und das
-      Strategiemodul der zweiten Stufe (M7b).
+      Dazu die Editoren: <a href="/routes">Strecken</a> mit GPX-Import und
+      verschiebbaren Splits, <a href="/pool">Fahrer und Teams</a>, und der
+      <a href="/seasons">Kalender</a>.
+      Noch offen ist das Strategiemodul der zweiten Stufe (M7b) — der Regelkreis,
+      mit dem Fahrer im Rennen auf Rückstand, Wetter und Magen reagieren statt
+      einem festen Plan zu folgen.
     </p>
   </div>
 

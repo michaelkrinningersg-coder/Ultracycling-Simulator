@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}UltraSim – Fahrer und Teams{% endblock %}
+{% block subtitle %}Fahrerpool · {{ stats.n }} Fahrer in {{ teams|length }} Teams{% endblock %}
+
+{% block head %}<script defer src="/static/vendor/alpine.min.js"></script>{% endblock %}
+
+{% block body %}
+<div class="page" x-data="{ q: '', team: '', arch: '' }">
+
+  {% if not riders %}
+  <div class="panel">
+    <div class="panel-title"><span>Noch kein Fahrerpool</span></div>
+    <form method="post" action="/pool/reset" class="form-row">
+      <label>Fahrer<input type="number" name="riders" value="250" min="2" max="2000"></label>
+      <label>Teams<input type="number" name="teams" value="0" min="0" max="200" placeholder="automatisch"></label>
+      <label>Seed<input type="number" name="seed" value="1"></label>
+      <button class="primary" type="submit">Pool erzeugen</button>
+    </form>
+    <p class="dim" style="max-width:80ch;margin-top:.6rem">
+      Bei 250 Fahrern sind 25–35 Teams à 7–10 Fahrer plausibel; zu wenige Teams
+      machen die Servicedisziplin zum dominanten Faktor. Teams leer lassen heißt:
+      der Generator wählt.
+    </p>
+  </div>
+  {% else %}
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Feld</span>
+      <span class="faint">
+        Potenzial Ø {{ stats.mean }} · σ {{ stats.sd }} · {{ stats.min }}–{{ stats.max }}
+      </span>
+    </div>
+    <div class="form-row" style="margin-bottom:.6rem">
+      <label>Suche<input type="text" x-model="q" placeholder="Name oder Nation"></label>
+      <label>Team
+        <select x-model="team">
+          <option value="">alle</option>
+          {% for t in teams %}<option value="{{ t.name }}">{{ t.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Archetyp
+        <select x-model="arch">
+          <option value="">alle</option>
+          {% for key, a in archetypes.items() %}<option value="{{ key }}">{{ a.label }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="pool-table">
+      <table>
+        <thead>
+          <tr><th class="right">Pot.</th><th>Name</th><th></th><th>Team</th><th>Archetyp</th>
+              <th class="right">Alter</th><th class="right">kg</th><th class="right">FTP</th>
+              <th class="right">W/kg</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for rider in riders %}
+          <tr x-show="(!q || '{{ (rider.name ~ ' ' ~ rider.nation)|lower }}'.includes(q.toLowerCase()))
+                      && (!team || team === '{{ team_names.get(rider.team_id, '') }}')
+                      && (!arch || arch === '{{ rider.archetype }}')">
+            <td class="right mono">{{ '%.1f'|format(rider.potential) }}</td>
+            <td><a href="/pool/rider/{{ rider.id }}">{{ rider.name }}</a></td>
+            <td class="faint">{{ rider.nation }}</td>
+            <td class="dim">
+              <span class="swatch" style="background:{{ team_colors.get(rider.team_id, '#888') }}"></span>
+              {{ team_names.get(rider.team_id, '—') }}
+            </td>
+            <td class="faint">{{ archetypes[rider.archetype].label if rider.archetype in archetypes else rider.archetype }}</td>
+            <td class="right mono faint">{{ rider.age }}</td>
+            <td class="right mono faint">{{ '%.1f'|format(rider.weight_kg) }}</td>
+            <td class="right mono">{{ '%.0f'|format(rider.ftp_w) }}</td>
+            <td class="right mono">{{ '%.2f'|format(rider.wkg) }}</td>
+            <td class="right"><a href="/pool/rider/{{ rider.id }}">Bearbeiten</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title"><span>Fahrer erzeugen</span></div>
+    <form method="post" action="/pool/generate" class="form-row">
+      <label>Anzahl<input type="number" name="count" value="10" min="1" max="500"></label>
+      <label>Archetyp
+        <select name="archetype">
+          <option value="">gemischt</option>
+          {% for key, a in archetypes.items() %}<option value="{{ key }}">{{ a.label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Team
+        <select name="team_id">
+          <option value="-1">reihum verteilen</option>
+          {% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Potenzial Ø<input type="number" name="potential_mean" value="50" min="36" max="64" step="1"></label>
+      <label>Seed<input type="number" name="seed" value="0" placeholder="zufällig"></label>
+      <button class="primary" type="submit">Erzeugen</button>
+    </form>
+    <p class="dim" style="max-width:82ch;margin-top:.6rem">
+      Das Potenzial-Budget verhindert Überfahrer: Die Summe der gewichteten
+      Attribute wird auf den Zielwert normiert, jede Stärke muss also irgendwo
+      bezahlt werden. 50 ist Feldmittel, 64 die Obergrenze des Generators.
+    </p>
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel" id="teams">
+    <div class="panel-title"><span>Teams</span><span class="faint">{{ teams|length }}</span></div>
+    <table>
+      <thead>
+        <tr><th></th><th>Name</th><th>Nation</th><th class="right">Servicedisziplin</th>
+            <th class="right">Faktor</th><th class="right">Kader</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for t in teams %}
+        <tr>
+          <td><span class="swatch" style="background:{{ t.color }}"></span></td>
+          <td>{{ t.name }}</td>
+          <td class="faint">{{ t.nation }}</td>
+          <td class="right mono">{{ '%.0f'|format(t.servicedisziplin) }}</td>
+          <td class="right mono faint">×{{ '%.2f'|format(t.service_factor) }}</td>
+          <td class="right mono faint">{{ team_sizes.get(t.id, 0) }}</td>
+          <td class="right nowrap">
+            <details class="edit">
+              <summary>▾</summary>
+              <div class="editor">
+                <form method="post" action="/pool/team/{{ t.id }}" class="form-row">
+                  <label>Name<input type="text" name="name" value="{{ t.name }}" required></label>
+                  <label>Nation<input type="text" name="nation" value="{{ t.nation }}" maxlength="3" style="min-width:4rem"></label>
+                  <label>Farbe<input type="color" name="color" value="{{ t.color }}"></label>
+                  <label>Servicedisziplin
+                    <input type="number" name="servicedisziplin" value="{{ '%.0f'|format(t.servicedisziplin) }}" min="1" max="99">
+                  </label>
+                  <button type="submit">Speichern</button>
+                </form>
+                <div class="row-actions">
+                  <form method="post" action="/pool/team/{{ t.id }}/delete" class="inline"
+                        onsubmit="return confirm('Team auflösen? Seine Fahrer wechseln ins erste verbleibende Team.')">
+                    <button class="danger" type="submit">Team auflösen</button>
+                  </form>
+                </div>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem;max-width:82ch">
+      Servicedisziplin ist das einzige Team-Attribut und wirkt als Multiplikator
+      auf jede Stoppdauer: 1,25 bei 0 · 1,00 bei 50 · 0,75 bei 100. Ein starker
+      Fahrer in einem schlampigen Team verliert dort Zeit, die keine Beinarbeit
+      zurückholt.
+    </p>
+    <form method="post" action="/pool/team" class="form-row" style="margin-top:.6rem">
+      <label>Neues Team<input type="text" name="name" placeholder="Name (leer = generiert)"></label>
+      <button type="submit">Team anlegen</button>
+    </form>
+  </div>
+
+  <!-- --------------------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title"><span>Pool neu würfeln</span></div>
+    <form method="post" action="/pool/reset" class="form-row"
+          onsubmit="return confirm('Alle Fahrer und Teams verwerfen und neu erzeugen? Bearbeitete Fahrer gehen verloren.')">
+      <label>Fahrer<input type="number" name="riders" value="250" min="2" max="2000"></label>
+      <label>Teams<input type="number" name="teams" value="0" min="0" max="200"></label>
+      <label>Seed<input type="number" name="seed" value="1"></label>
+      <button class="danger" type="submit">Pool neu würfeln</button>
+      <span class="dim">Gerechnete Rennen bleiben unberührt — sie tragen ihre Fahrer als Kopie.</span>
+    </form>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

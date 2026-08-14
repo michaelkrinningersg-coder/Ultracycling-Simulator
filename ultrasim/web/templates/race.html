@@ -11,11 +11,30 @@
 {% endblock %}
 
 {% block topbar %}
+<a class="faint" href="/">◂ Übersicht</a>
+<a class="faint" href="/seasons">Saisons</a>
+<a class="faint" href="/careers">Karriere</a>
 <a href="/race/{{ race_id }}/results" title="Achtung: verrät den Ausgang">Ergebnis ▸</a>
 {% endblock %}
 
 {% block body %}
 <div class="live" x-data="raceLive('{{ race_id }}')" x-init="init()">
+
+  <!-- ------------------------------------------- Ereignis-Laufband -->
+  <div class="tickerbar">
+    <span class="tickerbar-label">Ticker</span>
+    <div class="tickerbar-items">
+      <template x-for="(e, i) in latest" :key="e.key">
+        <span class="tick" :class="[e.type.toLowerCase(), e.focus ? 'focus' : '']">
+          <span class="t" x-text="hms(e.t_s)"></span>
+          <span x-text="e.text"></span>
+        </span>
+      </template>
+      <template x-if="!latest.length">
+        <span class="tick dim">Noch nichts passiert.</span>
+      </template>
+    </div>
+  </div>
 
   <!-- ------------------------------------------------ Sidebar -->
   <aside class="sidebar">
@@ -37,7 +56,7 @@
           </div>
           <div class="readout" style="margin-top:.6rem">
             <div class="item"><span class="k">Gefahrene Zeit</span>
-              <span class="v big" x-text="hms(focus.own_time_s)"></span></div>
+              <span class="v big" x-text="hms(liveOwnTime)"></span></div>
           </div>
           <div class="readout" style="margin-top:.4rem">
             <div class="item"><span class="k">Fahrerzeit</span>
@@ -140,7 +159,7 @@
                :value="frame ? (frame.t_wall / Math.max(frame.horizon_s,1)) * 1000 : 0"
                @input="seekFraction($event.target.value / 1000)">
         <span class="faint mono" style="font-size:.75rem"
-              x-text="frame ? `Renn-Wanduhr ${hms(frame.t_wall)} / ${hms(frame.horizon_s)}` : ''"></span>
+              x-text="frame ? `Renn-Wanduhr ${hms(liveWall)} / ${hms(frame.horizon_s)}` : ''"></span>
       </div>
       <template x-if="error"><div class="bad" style="margin-top:.4rem" x-text="error"></div></template>
     </div>
@@ -229,7 +248,7 @@
                   <span x-text="row.name"></span>
                   <span class="faint" style="font-size:.7rem" x-text="' ' + row.nation"></span></td>
               <td class="dim" x-text="row.team"></td>
-              <td class="time" x-text="row.t_s === null ? '—' : hms(row.t_s)"></td>
+              <td class="time" x-text="row.t_s === null ? '—' : hms(rowTime(row))"></td>
               <td class="gap" :class="row.gap_s > 0 ? 'pos' : (row.gap_s < 0 ? 'neg' : '')"
                   x-text="row.gap_s === null || row.gap_s === 0 ? '' : gap(row.gap_s)"></td>
               <td class="right mono faint" x-text="row.dist_km.toFixed(1)"></td>
@@ -251,23 +270,11 @@
         </tbody>
       </table>
       <div class="faint" style="font-size:.72rem;margin-top:.4rem">
-        Kursiv = Split noch nicht erreicht, Zeit ist eine Prognose aus aktuellem Tempo und Reststrecke.
+        Kursiv = Split noch nicht erreicht. Die Zeit ist dann die laufende Uhr des Fahrers —
+        sie zählt weiter und schiebt ihn nach hinten, sobald sie eine gefahrene Zeit überholt.
       </div>
     </div>
 
-    <!-- Ticker -->
-    <div class="panel">
-      <div class="panel-title"><span>Ticker</span>
-        <span class="faint">Fokusfahrer vollständig, vom Feld das Nennenswerte ·
-          Zeitangabe ist die Eigenzeit des jeweiligen Fahrers</span></div>
-      <div class="ticker">
-        <template x-for="(e, i) in ticker" :key="i">
-          <div :class="{focus: e.focus}">
-            <span class="t" x-text="hms(e.t_s)"></span><span x-text="e.text"></span>
-          </div>
-        </template>
-      </div>
-    </div>
   </div>
 
   <template x-if="tooltip">

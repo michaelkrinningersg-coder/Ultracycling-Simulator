@@ -36,6 +36,11 @@ DECISION = "DECISION"
 #: der Art im Payload statt acht Konstanten: Die UI behandelt sie alle
 #: gleich, und ein neuer Katalogeintrag soll keine Codeänderung sein.
 INCIDENT = "INCIDENT"
+#: Neue Bestzeit an einem Split. Kein Ereignis der Simulation, sondern
+#: eines der Betrachtung: Es entsteht erst dadurch, dass jemand zuschaut
+#: und die Zeiten in der Reihenfolge sieht, in der sie fallen. Erzeugt
+#: wird es deshalb in der Playback-Schicht, nicht in der Engine.
+BEST_TIME = "BEST_TIME"
 
 #: Ereignisse, die auch bei starkem Zeitraffer noch gestreamt werden.
 MAJOR_EVENTS = frozenset(
@@ -50,6 +55,7 @@ MAJOR_EVENTS = frozenset(
         BONK,
         SLEEP,
         CONDITION_START,
+        BEST_TIME,
     }
 )
 
@@ -78,6 +84,11 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
     p = event.payload
     if event.type == SPLIT_PASSED:
         return f"{who}Split {p.get('split_name', '')} in {_hms(event.t_s)}"
+    if event.type == BEST_TIME:
+        where = p.get("split_name", "")
+        margin = p.get("margin_s")
+        tail = f" ({_hms(event.t_s)}" + (f", {margin:.0f} s schneller)" if margin else ")")
+        return f"{who}Bestzeit {where}{tail}"
     if event.type == BIKE_CHANGE:
         return (
             f"{who}Radwechsel auf {p.get('bike', '')} "

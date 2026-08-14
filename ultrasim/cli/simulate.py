@@ -249,7 +249,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_race = sub.add_parser("race", help="Rennen rechnen")
     p_race.add_argument("route", help="Strecken-ID (siehe 'list')")
-    p_race.add_argument("--riders", type=int, default=40)
+    p_race.add_argument("--riders", type=int, default=250)
     p_race.add_argument("--seed", type=int, default=42)
     p_race.add_argument("--id", default=None, help="Renn-ID (Standard: <route>-<seed>)")
     p_race.add_argument("--name", default=None)

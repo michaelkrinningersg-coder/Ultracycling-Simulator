@@ -64,7 +64,14 @@ from .rider import Rider, Team, season_form
 SAMPLE_DT_S: dict[str, int] = {"kurz": 5, "mittel": 15, "ultra": 30}
 
 #: Startintervall nach Distanzklasse (Abschnitt 8.1.1).
-START_INTERVAL_S: dict[str, int] = {"kurz": 300, "mittel": 900, "ultra": 1800}
+#: Startabstand je Distanzklasse. Halbe Stunde auf allen Distanzen: Im
+#: Einzelzeitfahren ist der Abstand kein physikalischer Parameter — die
+#: Zeitschicht des Wetters hängt an der Eigenzeit des Fahrers, nicht an
+#: der Uhr —, sondern ein dramaturgischer. Er entscheidet, wie viele
+#: Fahrer gleichzeitig auf der Strecke sind und wie lange die Übertragung
+#: dauert. Bei 250 Startern spannt sich das Feld damit über fünf Tage
+#: Wanduhr; im Zeitraffer sind das Minuten.
+START_INTERVAL_S: dict[str, int] = {"kurz": 1800, "mittel": 1800, "ultra": 1800}
 
 STATE_RIDING = 0
 STATE_STOPPED = 1
@@ -111,7 +118,7 @@ class RaceConfig:
     def resolved_start_interval(self, distance_class: str) -> int:
         if self.start_interval_s is not None:
             return self.start_interval_s
-        return START_INTERVAL_S.get(distance_class, 900)
+        return START_INTERVAL_S.get(distance_class, 1800)
 
 
 @dataclass

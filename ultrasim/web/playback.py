@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 
 from ..core.engine import STATE_DNF, RaceResult, Telemetry
-from ..core.events import DECISION, DNF, MAJOR_EVENTS, RaceEvent
+from ..core.events import BEST_TIME, DECISION, DNF, MAJOR_EVENTS, RaceEvent
 from ..geo.route import Route
 
 #: Angebotene Zeitrafferstufen.
@@ -162,7 +162,8 @@ class RaceView:
         # Ereignisse nach Wanduhrzeit sortiert – so lässt sich der
         # Ausschnitt "seit dem letzten Frame" mit zwei Bisektionen finden.
         self._events = sorted(
-            result.events, key=lambda e: e.t_s + result.entries[e.entry_id].start_offset_s
+            list(result.events) + self._best_time_events(),
+            key=lambda e: e.t_s + result.entries[e.entry_id].start_offset_s,
         )
         self._event_wall = np.array(
             [e.t_s + result.entries[e.entry_id].start_offset_s for e in self._events]
@@ -194,6 +195,51 @@ class RaceView:
                 self._end_t.setdefault(event.entry_id, event.t_s)
 
     # ------------------------------------------------------------------
+    def _best_time_events(self) -> list[RaceEvent]:
+        """Bestzeiten als Ereignisse — erzeugt, nicht simuliert.
+
+        Eine Bestzeit ist kein Vorgang auf der Straße, sondern einer in
+        der Zeitnahme: Sie entsteht erst dadurch, dass die Zeiten in der
+        Reihenfolge eintreffen, in der gestartet wurde. Genau deshalb
+        steht das hier und nicht in der Engine — die kennt keine
+        Startreihenfolge und keinen Zuschauer.
+
+        Je Split werden die Ankünfte nach **Wanduhr** durchlaufen; wer
+        die bis dahin beste Zeit unterbietet, bekommt ein Ereignis. Der
+        erste an einer Marke ist immer dabei, sonst fehlte im Ticker
+        genau der Moment, in dem eine Zeit überhaupt erst entsteht.
+        """
+        out: list[RaceEvent] = []
+        times = self.result.split_times_s
+        if times.size == 0:
+            return out
+        for split_idx, split in enumerate(self.route.splits):
+            column = times[:, split_idx]
+            arrival = self.offsets + column
+            order = np.argsort(np.where(np.isfinite(arrival), arrival, np.inf), kind="stable")
+            best = np.inf
+            for entry_id in order:
+                value = float(column[entry_id])
+                if not np.isfinite(value):
+                    break  # ab hier hat niemand mehr eine Zeit
+                if value >= best:
+                    continue
+                out.append(
+                    RaceEvent(
+                        entry_id=int(entry_id),
+                        t_s=value,
+                        type=BEST_TIME,
+                        payload={
+                            "split_idx": split_idx,
+                            "split_name": split.name,
+                            "margin_s": None if best == np.inf else round(best - value, 1),
+                            "first": best == np.inf,
+                        },
+                    )
+                )
+                best = value
+        return out
+
     def _elapsed(self, entry_id: int, t_wall: float) -> float:
         """Eigenzeit eines Fahrers, abgeschnitten an seinem Rennende."""
         elapsed = t_wall - self.offsets[entry_id]
@@ -405,10 +451,19 @@ class RaceView:
         """Rangliste eines Splits (Abschnitt 9.1).
 
         Fahrer, die den Split schon passiert haben, stehen mit ihrer
-        Splitzeit und einem Rang. Wer noch unterwegs ist, erscheint
-        ausgegraut mit einer Prognosezeit aus aktuellem Tempo und
-        Reststrecke – genau die Spannung, die "kommt er noch vorbei?"
-        erzeugt.
+        Splitzeit und einem Rang. Wer noch unterwegs ist, steht mit
+        seiner **laufenden Uhr** — der Zeit, die seit seinem Start
+        vergangen ist — und rankt sich damit live zwischen die
+        gemessenen Zeiten.
+
+        Das ist die Zeitnahme aus dem Wintersport: Die Uhr des Fahrers
+        auf der Strecke läuft weiter, und mit jeder Sekunde, die sie über
+        eine bestehende Zeit hinauswandert, rutscht er einen Platz nach
+        hinten. Vorher stand hier eine Prognose aus Tempo und
+        Reststrecke; die war zwar treffsicherer, aber sie behauptete
+        etwas über die Zukunft. Die laufende Uhr behauptet nichts — sie
+        zeigt, was jetzt gilt, und die Spannung entsteht aus dem
+        Zuschauen statt aus der Hochrechnung.
         """
         split = self.route.splits[split_idx]
         snap = self.snapshot(t_wall)
@@ -432,26 +487,33 @@ class RaceView:
                 "conditions": self.condition_labels(i, t_wall),
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
-                rows.append({**base, "t_s": float(times[i]), "provisional": False})
+                rows.append(
+                    {**base, "t_s": float(times[i]), "provisional": False, "running": False}
+                )
             elif snap["state"][i] == STATE_DNF:
-                # Ausgeschieden vor dem Split: keine Prognose. Ein
-                # stehender Fahrer hätte sonst eine Fantasiezeit aus der
-                # Mindestgeschwindigkeit bekommen und stünde als "kommt
-                # noch" im Board, obwohl er nie mehr kommt.
-                rows.append({**base, "t_s": None, "provisional": True})
+                # Ausgeschieden vor dem Split: Seine Uhr steht. Sie
+                # weiterlaufen zu lassen hieße, ihn langsam durch das
+                # ganze Board nach unten zu schieben, obwohl er gar nicht
+                # mehr fährt.
+                rows.append({**base, "t_s": None, "provisional": True, "running": False})
             elif snap["started"][i]:
-                remaining = split.dist_m - float(snap["dist"][i])
-                speed = max(float(snap["v"][i]), 2.0)
-                projected = float(snap["elapsed"][i]) + remaining / speed
-                rows.append({**base, "t_s": projected, "provisional": True})
+                rows.append(
+                    {
+                        **base,
+                        "t_s": float(snap["elapsed"][i]),
+                        "provisional": True,
+                        # Für den Client: Diese Zeit läuft weiter und darf
+                        # zwischen zwei Frames mitgezählt werden.
+                        "running": True,
+                    }
+                )
             else:
-                rows.append({**base, "t_s": None, "provisional": True})
+                rows.append({**base, "t_s": None, "provisional": True, "running": False})
 
-        # Nach Zeit sortieren, ohne die Prognosen ans Ende zu verbannen:
-        # Ein Fahrer, der laut Prognose auf Rang 3 einschlägt, gehört
-        # zwischen Rang 2 und 4 – genau daraus entsteht die Frage "kommt
-        # er noch vorbei?". Eine Platzziffer bekommt er trotzdem nicht,
-        # die ist den gemessenen Zeiten vorbehalten.
+        # Nach Zeit sortieren, ohne die laufenden Uhren ans Ende zu
+        # verbannen: Ein Fahrer, dessen Uhr gerade zwischen Rang 2 und 4
+        # steht, gehört genau dorthin. Eine Platzziffer bekommt er
+        # trotzdem nicht — die ist den gemessenen Zeiten vorbehalten.
         ordered = sorted((r for r in rows if r["t_s"] is not None), key=lambda r: r["t_s"])
         pending = [r for r in rows if r["t_s"] is None]  # noch nicht gestartet
         for row in pending:
@@ -524,6 +586,9 @@ class RaceView:
                     "conditions": self.condition_labels(i, t_wall),
                     "t_s": actual,
                     "provisional": provisional,
+                    # Die virtuelle Rangliste projiziert auf eine
+                    # gemeinsame Distanz; dort ist Mitzählen sinnlos.
+                    "running": False,
                 }
             )
         rows.sort(key=lambda r: r["t_s"])

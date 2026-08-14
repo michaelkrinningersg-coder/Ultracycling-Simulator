@@ -65,16 +65,23 @@ GOLDEN_ROUTE = {
 #:   gemerkt, weil der Entwicklungsrechner 3.11 fährt. Der Generator
 #:   rundet jetzt; die Strecke ist auf allen Versionen 60 100 m lang und
 #:   das Feld entsprechend 2,5 s langsamer.
+#: * M8 – Archetyp-Balancing. Der Kletterer hatte bei gleichem Budget in
+#:   *jeder* physischen Größe die Nase vorn: mehr W/kg, mehr absolute
+#:   Watt und die kleinste Frontfläche. Sein ``wkg_bias`` sinkt von 0,45
+#:   auf 0,20, der des Zeitfahrers steigt von −0,10 auf 0. Damit ändern
+#:   sich Gewicht und FTP aller neu erzeugten Fahrer, und die Reihenfolge
+#:   verschiebt sich entsprechend – Startnummer 6 und 3 gewinnen, 10
+#:   verliert drei Minuten.
 GOLDEN_RESULT = [
+    (6, 6149.69),
     (8, 6153.77),
     (12, 6209.28),
-    (6, 6216.18),
     (11, 6330.70),
+    (3, 6431.96),
     (5, 6432.69),
     (9, 6466.89),
-    (10, 6504.72),
-    (3, 6509.30),
     (2, 6589.41),
+    (10, 6683.31),
     (4, 6877.14),
     (7, 7198.12),
     (1, 7238.15),
@@ -115,14 +122,23 @@ def test_race_result_is_stable(route):
 #: dieselbe Begründung, nur über 25-mal so viele Rechenschritte.
 GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 6847.0, "class": "mittel"}
 
+#: * Radwechsel am Anstieg. Vorher konnte ein Fahrer nur am
+#:   Servicepunkt wechseln; auf 507 km mit fünf Servicepunkten war ein
+#:   Abschnitt 90 km lang, und weil darin 80 % Flachland stecken, gewann
+#:   das Zeitfahrrad über die Summe — der Fahrer quälte sich damit über
+#:   jeden Pass. Jetzt sind Fuß und Kuppe kategorisierter Anstiege
+#:   ebenfalls Abschnittsgrenzen (im unterstützten Rennen steht das
+#:   Begleitfahrzeug dort). Aus 0 werden 11 Radwechsel, und das Feld
+#:   wird auf dieser welligen Strecke rund 10 Minuten langsamer: Die
+#:   Wechsel kosten Zeit, die sich erst auf steileren Pässen auszahlt.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (5, 142554.56),
-    (7, 143144.85),
-    (8, 147403.26),
-    (3, 152885.41),
-    (1, 156926.28),
-    (4, 165334.52),
-    (6, 169119.69),
+    (5, 143389.09),
+    (7, 144156.60),
+    (8, 147473.97),
+    (3, 151516.47),
+    (1, 158590.47),
+    (4, 164359.10),
+    (6, 167968.84),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -130,13 +146,14 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
 GOLDEN_LONG_EVENTS: dict[str, int] = {
-    "CONDITION_END": 30,
-    "CONDITION_START": 30,
+    "BIKE_CHANGE": 11,
+    "CONDITION_END": 32,
+    "CONDITION_START": 32,
     "DECISION": 9,
     "DNF": 1,
     "FINISH": 7,
     "INCIDENT": 48,
-    "PLAN": 32,
+    "PLAN": 75,
     "SLEEP": 2,
     "SPLIT_PASSED": 315,
     "START": 8,

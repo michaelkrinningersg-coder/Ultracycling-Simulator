@@ -139,6 +139,13 @@ def create_session(request: Request, race_id: str) -> JSONResponse:
     # Der Fokus liegt anfangs auf dem Fahrer mit der höchsten Startnummer –
     # beim Zeitfahren also auf dem gesetzten Favoriten.
     session.focus_entry = max(range(len(result.entries)), key=lambda i: result.entries[i].bib)
+    # …und die Uhr auf seinen Start. Bei halbstündigem Startabstand und
+    # 250 Fahrern liegt der Favorit fünf Tage hinter dem ersten Starter;
+    # bei null zu beginnen hieße, die Übertragung mit einem Fahrer zu
+    # eröffnen, der noch tagelang nicht losfährt. So schaltet man dazu,
+    # wenn er rollt — vor ihm ist das halbe Feld schon unterwegs, und
+    # das Board hat Zeiten, in die er sich einordnen kann.
+    session.sim_t = float(result.entries[session.focus_entry].start_offset_s)
     return JSONResponse({"token": token, "session": session.to_dict()})
 
 

@@ -249,6 +249,46 @@ def estimate_section_time(
     return float(np.sum(dists / v))
 
 
+#: Kürzester Abschnitt, für den sich eine eigene Radwahl lohnt. Darunter
+#: trägt kein Gewinn die Wechselkosten, und der Plan würde nur unruhig.
+MIN_SECTION_M = 3000.0
+
+#: Ab dieser Länge und dieser mittleren Steigung stellt sich das
+#: Begleitfahrzeug an den Fuß eines Anstiegs. Vier Kilometer mit 3 %
+#: sind 120 Höhenmeter — darunter ist es eine Welle, und ein Radwechsel
+#: dafür hat sich noch nie gelohnt.
+BIKE_STOP_MIN_LENGTH_M = 4000.0
+BIKE_STOP_MIN_GRADE = 0.03
+
+
+def _section_bounds(route: Route) -> list[float]:
+    """Wo ein Fahrer das Rad wechseln kann.
+
+    Zwei Sorten Marken: die Servicepunkte der Strecke und Fuß und Kuppe
+    jedes nennenswerten Anstiegs. Der Anstieg *erzeugt dabei keinen
+    Servicepunkt* — ein solcher zöge einen Halt nach sich, und dann
+    hielte das Feld an jedem Berg an, auch wenn es gar nichts zu wechseln
+    gibt. Er eröffnet nur die Möglichkeit; ob gewechselt wird, entscheidet
+    weiter unten die Rechnung, und die muss den Wechsel selbst mittragen.
+    """
+    marks = {0.0, route.distance_m}
+    marks.update(sp.dist_m for sp in route.service_points)
+    for climb in route.climbs:
+        if climb.length_m >= BIKE_STOP_MIN_LENGTH_M and climb.grade_avg >= BIKE_STOP_MIN_GRADE:
+            marks.add(climb.dist_start_m)
+            marks.add(climb.dist_end_m)
+    ordered = sorted(m for m in marks if 0.0 <= m <= route.distance_m)
+    # Zu dicht beieinander liegende Marken zusammenfassen: Ein Anstieg,
+    # der 500 m hinter einem Servicepunkt beginnt, ist derselbe Halt.
+    out = [ordered[0]]
+    for mark in ordered[1:]:
+        if mark - out[-1] >= MIN_SECTION_M:
+            out.append(mark)
+    if out[-1] < route.distance_m:
+        out[-1] = route.distance_m
+    return out
+
+
 def build_bike_plan(
     rider: Rider,
     route: Route,
@@ -259,14 +299,25 @@ def build_bike_plan(
 ) -> tuple[list[SectionPlan], list[tuple[float, str]]]:
     """Radwahl je Abschnitt zwischen zwei Servicepunkten (Abschnitt 6.4).
 
-    Der Radwechsel ist an einen Servicepunkt gebunden. Deshalb wird nicht
-    pro Einzelanstieg entschieden, sondern für den ganzen kommenden
-    Abschnitt: Zeit für beide Varianten summieren, die kleinere nehmen –
-    und den Wechsel nur ausführen, wenn er sich nach Abzug seiner Kosten
-    überhaupt lohnt. Ohne diese Prüfung wechselt ein Fahrer bei jedem
-    2,1-km-Hügel mit 3 % und verliert netto Zeit.
+    Entschieden wird abschnittsweise, nicht pro Einzelanstieg: Zeit für
+    beide Varianten summieren, die kleinere nehmen – und den Wechsel nur
+    ausführen, wenn er sich nach Abzug seiner Kosten überhaupt lohnt.
+    Ohne diese Prüfung wechselt ein Fahrer bei jedem 2,1-km-Hügel mit
+    3 % und verliert netto Zeit.
+
+    **Wo ein Abschnitt endet, ist die eigentliche Frage.** Zuerst waren
+    das nur die Servicepunkte — und damit lag der Fehler auf der Hand:
+    Auf dem Hochgebirgs-Marathon liegen fünf Servicepunkte auf 507 km,
+    ein Abschnitt ist also 90 km lang und enthält 15 bis 21 % Steilstück.
+    Über die Summe gewinnt das Zeitfahrrad um zwei Minuten, und der
+    Fahrer quält sich damit über jeden Pass, obwohl es dort vier Minuten
+    kostet. Deshalb sind jetzt auch **Fuß und Kuppe kategorisierter
+    Anstiege** Abschnittsgrenzen: Im unterstützten Rennen fährt das
+    Begleitfahrzeug mit, und genau dort steht es. Die
+    Wirtschaftlichkeitsprüfung bleibt — sie entscheidet weiter, ob sich
+    der Wechsel lohnt.
     """
-    bounds = [0.0] + [sp.dist_m for sp in route.service_points] + [route.distance_m]
+    bounds = _section_bounds(route)
     power = rider.ftp_w * target_if
     sections: list[SectionPlan] = []
     notes: list[tuple[float, str]] = []

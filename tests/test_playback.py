@@ -353,3 +353,114 @@ def test_board_rows_carry_condition_labels(client):
     frame = client.get(f"/api/playback/{token}/frame").json()
     assert all("conditions" in row for row in frame["board"]["rows"])
     assert isinstance(frame["focus"]["conditions"], list)
+
+
+# ----------------------------------------------------------------------
+# Laufende Uhr im Board
+# ----------------------------------------------------------------------
+def test_a_rider_before_the_split_shows_his_running_clock(view):
+    """Keine Prognose mehr, sondern die Zeit seit seinem Start.
+
+    Das ist die Zeitnahme aus dem Wintersport: Die Uhr läuft, und wer
+    noch unterwegs ist, steht mit dem, was sie gerade zeigt.
+    """
+    split_idx = len(view.route.splits) - 1  # Ziel: da ist am Anfang niemand
+    board = view.board_rows(t_wall=1800.0, split_idx=split_idx, focus=0)
+    running = [r for r in board["rows"] if r["running"]]
+    assert running, "Auf halber Strecke muss jemand unterwegs sein"
+
+    snap = view.snapshot(1800.0)
+    for row in running:
+        assert row["provisional"] is True
+        assert row["rank"] is None
+        assert row["t_s"] == pytest.approx(float(snap["elapsed"][row["entry_id"]]))
+
+
+def test_the_running_clock_advances_with_the_wall_clock(view):
+    split_idx = len(view.route.splits) - 1
+    early = view.board_rows(1800.0, split_idx, focus=0)
+    later = view.board_rows(2400.0, split_idx, focus=0)
+    first = {r["entry_id"]: r for r in early["rows"] if r["running"]}
+    second = {r["entry_id"]: r for r in later["rows"] if r["running"]}
+    common = set(first) & set(second)
+    assert common
+    for entry_id in common:
+        assert second[entry_id]["t_s"] == pytest.approx(first[entry_id]["t_s"] + 600.0)
+
+
+def test_a_running_rider_drops_behind_times_he_passes(view):
+    """Die eigentliche Aussage der laufenden Uhr.
+
+    Sobald sie über eine gefahrene Zeit hinauswandert, rutscht der
+    Fahrer einen Platz nach hinten — ohne dass sich an der Strecke
+    irgendetwas ändert.
+    """
+    split_idx = 1
+    times = view.result.split_times_s[:, split_idx]
+    reached = view.offsets + times
+    # Wanduhr kurz nachdem der erste Fahrer den Split passiert hat.
+    t0 = float(np.nanmin(np.where(np.isfinite(reached), reached, np.inf))) + 60.0
+
+    def position(t):
+        rows = view.board_rows(t, split_idx, focus=0)["rows"]
+        order = [r["entry_id"] for r in rows]
+        running = [r for r in rows if r["running"]]
+        return order, running
+
+    order_a, running_a = position(t0)
+    assert running_a, "Es muss noch jemand unterwegs sein"
+    watched = running_a[0]["entry_id"]
+
+    order_b, _ = position(t0 + 3600.0)
+    if watched in order_a and watched in order_b:
+        assert order_b.index(watched) >= order_a.index(watched)
+
+
+def test_a_retired_rider_keeps_a_still_clock(view):
+    """Ein Aufgeber darf nicht langsam durchs Board nach unten wandern."""
+    end = view.result.telemetry.n_samples * view.result.telemetry.sample_dt_s
+    board = view.board_rows(float(end), split_idx=len(view.route.splits) - 1, focus=0)
+    for row in board["rows"]:
+        if row["state"] == 3:  # DNF
+            assert row["running"] is False
+            assert row["t_s"] is None
+
+
+# ----------------------------------------------------------------------
+# Bestzeiten im Ticker
+# ----------------------------------------------------------------------
+def test_best_times_only_ever_improve(view):
+    from ultrasim.core.events import BEST_TIME
+
+    per_split: dict[int, list[float]] = {}
+    for event in view._events:
+        if event.type != BEST_TIME:
+            continue
+        per_split.setdefault(event.payload["split_idx"], []).append(event.t_s)
+    assert per_split, "Ein Rennen ohne einzige Bestzeit gibt es nicht"
+    for split_idx, values in per_split.items():
+        assert values == sorted(values, reverse=True), (
+            f"Split {split_idx}: Bestzeiten müssen fallen, nicht steigen"
+        )
+
+
+def test_the_first_time_at_a_marker_counts_as_a_best_time(view):
+    from ultrasim.core.events import BEST_TIME
+
+    firsts = [
+        e for e in view._events if e.type == BEST_TIME and e.payload.get("first")
+    ]
+    # Genau eine erste Zeit je Split, an dem überhaupt jemand ankam.
+    assert len({e.payload["split_idx"] for e in firsts}) == len(firsts)
+    assert all(e.payload["margin_s"] is None for e in firsts)
+
+
+def test_best_times_stay_behind_the_wall_clock(view):
+    """Auch erzeugte Ereignisse dürfen die Zukunft nicht verraten."""
+    from ultrasim.core.events import BEST_TIME
+
+    t = 3000.0
+    visible = view.events_between(0.0, t, speed=1, focus=None)
+    for event in visible:
+        if event.type == BEST_TIME:
+            assert event.t_s + view.offsets[event.entry_id] <= t

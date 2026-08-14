@@ -355,3 +355,107 @@ def test_active_attribute_list_matches_the_code():
             f"'{key}' wird {'benutzt' if used else 'nicht benutzt'}, steht aber "
             f"{'nicht ' if used else ''}in ACTIVE_ATTRIBUTES"
         )
+
+
+# ----------------------------------------------------------------------
+# Radwahl am Anstieg
+# ----------------------------------------------------------------------
+def test_the_road_bike_wins_on_a_steep_climb():
+    """Die Grundlage der ganzen Radwahl — erst danach lohnt der Rest.
+
+    Das Zeitfahrrad wiegt anderthalb Kilo mehr und verliert an Rampen
+    über 6 % vier Prozent Wirkungsgrad; sein Windvorteil zählt bei
+    12 km/h praktisch nicht. Über zehn Kilometer bei 8 % sind das
+    Minuten.
+    """
+    rider = generate_rider(np.random.default_rng(3), 0, 0, archetype="allrounder")
+    dists = np.array([10_000.0])
+    for grade, expected in ((0.0, ph.BIKE_TT), (0.08, ph.BIKE_ROAD)):
+        grades = np.array([grade])
+        t_road = st.estimate_section_time(
+            rider, rider.ftp_w * 0.7, 0.16, grades, dists, 800.0, ph.BIKE_ROAD
+        )
+        t_tt = st.estimate_section_time(
+            rider, rider.ftp_w * 0.7, 0.16, grades, dists, 800.0, ph.BIKE_TT
+        )
+        faster = ph.BIKE_TT if t_tt < t_road else ph.BIKE_ROAD
+        assert faster == expected, f"bei {grade:.0%} sollte {expected} schneller sein"
+
+
+def test_a_long_climb_opens_a_bike_change(route_medium):
+    """Fuß und Kuppe eines echten Anstiegs sind Abschnittsgrenzen.
+
+    Ohne sie liegt ein Abschnitt zwischen zwei Servicepunkten, und auf
+    507 km mit fünf Servicepunkten sind das 90 km. Weil darin 80 %
+    Flachland stecken, gewinnt das Zeitfahrrad über die Summe — und der
+    Fahrer quält sich damit über jeden Pass.
+    """
+    qualifying = [
+        c
+        for c in route_medium.climbs
+        if c.length_m >= st.BIKE_STOP_MIN_LENGTH_M and c.grade_avg >= st.BIKE_STOP_MIN_GRADE
+    ]
+    assert qualifying, "Die Fixture soll einen richtigen Anstieg haben"
+    bounds = st._section_bounds(route_medium)
+    for climb in qualifying:
+        assert any(abs(b - climb.dist_start_m) < st.MIN_SECTION_M for b in bounds), (
+            f"Kein Abschnittswechsel am Fuß von km {climb.dist_start_m / 1000:.1f}"
+        )
+
+
+def test_a_mere_bump_does_not_open_a_bike_change(route_medium):
+    """Unter 4 km oder unter 3 % bleibt es eine Welle."""
+    bounds = set(st._section_bounds(route_medium))
+    for climb in route_medium.climbs:
+        if climb.length_m < st.BIKE_STOP_MIN_LENGTH_M or climb.grade_avg < st.BIKE_STOP_MIN_GRADE:
+            assert climb.dist_start_m not in bounds
+
+
+def test_sections_stay_long_enough_to_be_worth_a_change(route_medium):
+    bounds = st._section_bounds(route_medium)
+    gaps = np.diff(np.array(bounds))
+    assert (gaps >= st.MIN_SECTION_M).all(), "Zu dichte Marken müssen zusammenfallen"
+    assert bounds[0] == 0.0
+    assert bounds[-1] == pytest.approx(route_medium.distance_m)
+
+
+def test_the_bike_follows_the_stopwatch_including_the_change(route_medium):
+    """Die Regel, auf die es ankommt.
+
+    Gewechselt wird genau dann, wenn das andere Rad **mehr** Zeit
+    einspart, als der Wechsel kostet — und sonst nie. Ein Abschnitt mit
+    halbem Steilanteil, auf dem das Straßenrad 53 Sekunden gutmacht, ist
+    bei 60 Sekunden Wechselkosten kein Grund abzusteigen.
+    """
+    rng = np.random.default_rng(9)
+    rider = generate_rider(rng, 0, 0, archetype="kletterer")
+    cost = 60.0
+    sections, _ = st.build_bike_plan(rider, route_medium, 0.72, 0.2, change_cost_s=cost)
+
+    current = ph.BIKE_ROAD
+    for section in sections:
+        faster = ph.BIKE_TT if section.est_time_tt_s < section.est_time_road_s else ph.BIKE_ROAD
+        gain = abs(section.est_time_road_s - section.est_time_tt_s)
+        if faster != current and gain > cost:
+            assert section.bike == faster, "Ein Wechsel, der sich rechnet, muss stattfinden"
+            current = faster
+        else:
+            assert section.bike == current, "Ohne Gewinn bleibt das Rad, wie es ist"
+
+
+def test_a_real_pass_is_ridden_on_the_road_bike(route_medium):
+    """Der Befund, der das ausgelöst hat: Pässe im Zeitfahrrad.
+
+    Auf einem Anstieg, der lang und steil genug ist, trägt der Gewinn
+    die Wechselkosten mit Abstand — dort darf kein Zeitfahrrad stehen.
+    """
+    rng = np.random.default_rng(9)
+    rider = generate_rider(rng, 0, 0, archetype="kletterer")
+    sections, _ = st.build_bike_plan(rider, route_medium, 0.72, 0.2, change_cost_s=60.0)
+    clear = [
+        s
+        for s in sections
+        if s.est_time_tt_s - s.est_time_road_s > 100.0  # Straßenrad klar schneller
+    ]
+    assert clear, "Die Fixture soll einen richtigen Pass enthalten"
+    assert all(s.bike == ph.BIKE_ROAD for s in clear)

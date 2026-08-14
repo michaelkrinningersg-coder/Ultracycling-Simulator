@@ -129,14 +129,20 @@ def test_seeded_start_order_puts_the_favourite_last(route):
     potentials = [rider.potential for rider, _, _ in order]
     assert potentials == sorted(potentials)
     assert order[0][2] == 0.0
-    assert order[-1][2] == 300 * (len(order) - 1)
+    assert order[-1][2] == 300 * (len(order) - 1)  # Intervall kommt als Argument
 
 
-def test_start_interval_defaults_follow_distance_class(route):
+def test_start_interval_is_half_an_hour_on_every_distance(route):
+    """Der Startabstand ist ein dramaturgischer Parameter, kein physikalischer.
+
+    Die Eigenzeit eines Fahrers hängt nicht davon ab, wann er losfährt —
+    er bekommt sein eigenes Wetter und seine eigene Tageszeit. Der
+    Abstand entscheidet nur, wie viele gleichzeitig auf der Strecke sind.
+    """
     config = RaceConfig()
-    assert config.resolved_start_interval("kurz") == 300
-    assert config.resolved_start_interval("mittel") == 900
-    assert config.resolved_start_interval("ultra") == 1800
+    for distance_class in ("kurz", "mittel", "ultra"):
+        assert config.resolved_start_interval(distance_class) == 1800
+    assert RaceConfig(start_interval_s=120).resolved_start_interval("kurz") == 120
 
 
 def test_sample_rate_follows_distance_class():

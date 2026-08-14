@@ -25,7 +25,7 @@ import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -193,6 +193,27 @@ class Telemetry:
     hydration_pct: np.ndarray  # uint8, 100 = frisch, 0 = 4 % Gewicht verloren
     bike: np.ndarray  # uint8
     state: np.ndarray  # uint8
+    #: Die Faktoren, aus denen ``form_pct`` entsteht — je uint8 in
+    #: Prozent. ``form_pct`` allein sagt *dass* einer schwach ist, nicht
+    #: *warum*; die Simulation multipliziert dafür ein knappes Dutzend
+    #: Faktoren, und ohne Aufzeichnung ist die Zerlegung hinterher nicht
+    #: mehr rekonstruierbar. Saison-, Tagesform und Frische stehen nicht
+    #: hier, sondern am Starter: Sie sind über das ganze Rennen konstant.
+    #:
+    #: ``None`` heißt: aus einem Rennen von vor dieser Aufzeichnung. Die
+    #: Oberfläche sagt dann „nicht aufgezeichnet" statt zu raten.
+    factors: dict[str, np.ndarray] | None = None
+
+    #: Reihenfolge und Beschriftung der aufgezeichneten Faktoren.
+    FACTOR_LABELS: ClassVar[dict[str, str]] = {
+        "section": "Abschnittsform",
+        "fatigue": "Langzeitermüdung",
+        "conditions": "Zustände",
+        "bonk": "Hungerast",
+        "sleep": "Schlafmangel",
+        "weather": "Wetter",
+        "hydration": "Flüssigkeit",
+    }
 
     @property
     def n_entries(self) -> int:
@@ -651,6 +672,13 @@ def simulate_race(
     buf_hyd = np.full((n, cap), 100, dtype=np.uint8)
     buf_bike = np.zeros((n, cap), dtype=np.uint8)
     buf_state = np.zeros((n, cap), dtype=np.uint8)
+    # Die Zerlegung der Form. Sieben zusätzliche uint8-Kanäle kosten bei
+    # 250 Fahrern rund 7 MB vor der Kompression — der Preis dafür, dass
+    # die Oberfläche „warum ist der langsam?" beantworten kann, statt nur
+    # „der ist langsam".
+    buf_factors = {
+        key: np.full((n, cap), 100, dtype=np.uint8) for key in Telemetry.FACTOR_LABELS
+    }
     n_samples = 0
 
     def _grow() -> None:
@@ -666,12 +694,32 @@ def simulate_race(
             grown.append(bigger)
         (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_hyd,
          buf_bike, buf_state) = grown
+        for key, buf in buf_factors.items():
+            bigger = np.full((n, new_cap), 100, dtype=np.uint8)
+            bigger[:, :cap] = buf
+            buf_factors[key] = bigger
         cap = new_cap
 
     def _record() -> None:
         nonlocal n_samples
         if n_samples >= cap:
             _grow()
+        for key, value in (
+            ("section", f_section),
+            ("fatigue", f_fat),
+            ("conditions", f_umwelt),
+            ("bonk", bonk),
+            ("sleep", sleep_perf),
+            ("weather", weather_perf),
+            ("hydration", hydration_perf),
+        ):
+            # Runden statt abschneiden: Sieben Faktoren mit je einem
+            # halben Prozent Abschneidefehler summieren sich sonst zu
+            # einer Zerlegung, die spürbar unter der Form liegt, die sie
+            # erklären soll.
+            buf_factors[key][:, n_samples] = np.clip(
+                np.round(np.asarray(value, dtype=np.float64) * 100.0), 0, 255
+            ).astype(np.uint8)
         buf_dist[:, n_samples] = np.minimum(dist, total_distance).astype(np.int32)
         buf_v[:, n_samples] = np.clip(v * 100.0, 0, 32000).astype(np.int16)
         buf_p[:, n_samples] = np.clip(power_now, 0, 32000).astype(np.int16)
@@ -702,6 +750,12 @@ def simulate_race(
     crr_mod = np.ones(n)
     bonk = np.ones(n)
     sleep_perf = np.ones(n)
+    # Die übrigen Formfaktoren setzt erst der Langsam-Tick; ohne
+    # Vorbelegung stünde die erste Aufzeichnung vor einem leeren Namen.
+    f_section = np.ones(n)
+    f_fat = np.ones(n)
+    f_umwelt = np.ones(n)
+    hydration_perf = np.ones(n)
     sleep_press = np.zeros(n)
     headwind = np.zeros(n)
     weather_perf = np.ones(n)
@@ -1433,6 +1487,7 @@ def simulate_race(
         hydration_pct=buf_hyd[:, :n_samples].copy(),
         bike=buf_bike[:, :n_samples].copy(),
         state=buf_state[:, :n_samples].copy(),
+        factors={k: v[:, :n_samples].copy() for k, v in buf_factors.items()},
     )
 
     entries = [

@@ -92,6 +92,12 @@ function raceLive(raceId) {
       return this.focus.own_time_s + (riding ? this.liveDelta : 0);
     },
     get latest() { return this.ticker.slice(0, 10); },
+    //: Der Faktor, der gerade am meisten kostet — die Kurzfassung des
+    //: Warum-Panels für die zugeklappte Zeile.
+    get worstFactor() {
+      const rows = this.focus && this.focus.factors ? this.focus.factors.rows : null;
+      return rows && rows.length && rows[0].pct < 99.5 ? rows[0] : null;
+    },
     get board() { return this.frame ? this.frame.board : null; },
     get rows() { return this.board ? this.board.rows : []; },
     get filteredStart() {

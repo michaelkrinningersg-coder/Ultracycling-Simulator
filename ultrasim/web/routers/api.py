@@ -270,6 +270,7 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
             "team": view.teams[rider.team_id].name if rider.team_id in view.teams else "",
             "color": view.teams[rider.team_id].color if rider.team_id in view.teams else "#888",
             "started": bool(snap["started"][focus]),
+            "factors": view.factors_at(focus, t),
             "own_time_s": round(max(own_time, 0.0), 1),
             "own_clock": clock,
             "dist_m": int(snap["dist"][focus]),

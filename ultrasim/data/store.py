@@ -199,6 +199,12 @@ class Store:
             state=result.telemetry.state,
             split_times_s=result.split_times_s.astype(np.float32),
             split_ranks=result.split_ranks,
+            # Die Formfaktoren unter eigenem Präfix, damit ein Rennen ohne
+            # sie weiterhin lädt.
+            **{
+                f"factor_{key}": value
+                for key, value in (result.telemetry.factors or {}).items()
+            },
         )
         return target
 
@@ -236,6 +242,16 @@ class Store:
                 hydration_pct=data["hydration_pct"],
                 bike=data["bike"],
                 state=data["state"],
+                # Rennen von vor der Faktoraufzeichnung haben diese
+                # Schlüssel nicht. ``None`` heißt für die Oberfläche
+                # „nicht aufgezeichnet"; sie sagt das dann auch, statt
+                # eine Zerlegung zu erfinden.
+                factors={
+                    key: data[f"factor_{key}"]
+                    for key in Telemetry.FACTOR_LABELS
+                    if f"factor_{key}" in data
+                }
+                or None,
             )
             split_times = data["split_times_s"].astype(np.float64)
             split_ranks = data["split_ranks"]

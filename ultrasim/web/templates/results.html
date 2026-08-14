@@ -33,6 +33,9 @@
           <td class="right mono faint">{{ '%.3f'|format(row.entry.day_form) }}</td>
           <td><a href="/race/{{ race_id }}/rider/{{ row.entry.entry_id }}">Detail</a></td>
         </tr>
+        {% if row.report %}
+        <tr class="report"><td></td><td></td><td colspan="9">{{ row.report }}</td></tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
@@ -45,10 +48,57 @@
             <td class="bad">{{ row.entry.status }}</td>
             <td class="right mono faint">{% if row.entry.dnf_dist_m %}km {{ '%.0f'|format(row.entry.dnf_dist_m / 1000) }}{% endif %}</td>
             <td class="dim">{{ row.entry.dnf_reason }}</td></tr>
+        {% if row.report %}
+        <tr class="report"><td></td><td colspan="5">{{ row.report }}</td></tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
     {% endif %}
   </div>
+
+  <!-- Splitmatrix ------------------------------------------------- -->
+  {% if matrix.rows %}
+  <div class="panel">
+    <div class="panel-title">
+      <span>Splitzeiten</span>
+      <span class="faint">
+        die ersten {{ matrix.shown }} von {{ matrix.total }} im Ziel ·
+        Farbe = Rang an dieser Marke
+      </span>
+    </div>
+    <div class="matrix-scroll">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th class="right">Rg</th><th class="name">Fahrer</th>
+            {% for split in matrix.splits %}<th class="right">{{ split.name }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in matrix.rows %}
+          <tr>
+            <td class="right mono">{{ row.entry.rank }}</td>
+            <td class="name">{{ row.name }}</td>
+            {% for cell in row.cells %}
+            <td class="right mono cell"
+                {% if cell.shade is not none %}style="--shade: {{ cell.shade }}"{% endif %}>
+              {% if cell.t_s is not none %}<span class="rk">{{ cell.rank }}</span>{{ cell.t_s|hms }}
+              {% else %}<span class="faint">—</span>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="dim">
+      Grün heißt vorn an dieser Marke, rot hinten. Eine Zeile, die von
+      links nach rechts rot wird, ist ein Einbruch — und eine, die grün
+      wird, eine Aufholjagd. Genau das steht auch im Satz über der
+      Tabelle, hier sieht man es über die Distanz.
+    </p>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}

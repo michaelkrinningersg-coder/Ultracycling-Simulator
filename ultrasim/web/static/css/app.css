@@ -373,3 +373,46 @@ ul.plain li:last-child { border-bottom: 0; }
 .tick.dnf, .tick.incident { border-color: var(--bad); color: var(--bad); }
 .tick.sleep { border-color: var(--accent-2); color: var(--accent-2); }
 .tick.finish { border-color: var(--good); color: var(--fg); }
+
+/* Rennbericht: eine Zeile Fließtext unter der Ergebniszeile, bewusst
+   ohne eigene Spalte — er gehört zum Fahrer darüber, nicht in eine
+   Tabellenlogik. */
+tr.report td { padding-top: 0; padding-bottom: .35rem; border-top: 0;
+               color: var(--fg-dim); font-size: .78rem; font-style: italic; }
+
+/* Splitmatrix. 250 Fahrer mal 30 Marken passen auf keinen Bildschirm,
+   also scrollt sie waagerecht und hält die Fahrerspalte fest. */
+.matrix-scroll { overflow-x: auto; max-height: 70vh; }
+table.matrix { font-size: .72rem; border-collapse: separate; border-spacing: 0; }
+table.matrix th { position: sticky; top: 0; background: var(--bg-panel); z-index: 2;
+                  white-space: nowrap; }
+table.matrix td.name, table.matrix th.name { position: sticky; left: 0; z-index: 1;
+                  background: var(--bg-panel); white-space: nowrap; }
+table.matrix th.name { z-index: 3; }
+table.matrix td.cell { white-space: nowrap; padding: .1rem .4rem;
+  /* Farbverlauf grün → rot über den Rang. Kein Schwellwert, keine
+     Klassen: Die Zelle rechnet ihre Farbe aus der Zahl. */
+  background: color-mix(in oklab, #2f7a4d calc((1 - var(--shade, 1)) * 100%), #7a2f34); }
+table.matrix td.cell .rk { color: var(--fg); opacity: .55; margin-right: .35rem;
+                           font-size: .66rem; }
+
+/* Warum-Panel: die Form in ihre Faktoren zerlegt. Zugeklappt zeigt es
+   den teuersten Faktor — das ist meistens die ganze Antwort. */
+details.why { margin-top: .5rem; border-top: 1px solid var(--line); padding-top: .4rem; }
+details.why > summary { cursor: pointer; display: flex; justify-content: space-between;
+  gap: .5rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--fg-dim); list-style: none; white-space: nowrap; }
+details.why > summary > span { overflow: hidden; text-overflow: ellipsis; }
+details.why > summary::-webkit-details-marker { display: none; }
+details.why > summary::before { content: "▸ "; color: var(--fg-faint); }
+details.why[open] > summary::before { content: "▾ "; }
+.why-row { display: grid; grid-template-columns: 7.5rem 1fr 2.6rem; align-items: center;
+           gap: .35rem; font-size: .72rem; padding: .06rem 0; }
+.why-row.flat { opacity: .38; }
+.why-row .k { color: var(--fg-dim); }
+.why-row .bar { height: .4rem; background: var(--bg-panel-2); border-radius: 2px;
+                overflow: hidden; }
+.why-row .fill { display: block; height: 100%; }
+.why-row .fill.loss { background: var(--bad); }
+.why-row .fill.gain { background: var(--good); }
+.why-row .v { text-align: right; }

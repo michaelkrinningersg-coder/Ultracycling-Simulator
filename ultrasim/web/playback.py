@@ -195,6 +195,50 @@ class RaceView:
                 self._end_t.setdefault(event.entry_id, event.t_s)
 
     # ------------------------------------------------------------------
+    def factors_at(self, entry_id: int, t_wall: float) -> dict[str, Any] | None:
+        """Woraus sich die Form eines Fahrers gerade zusammensetzt.
+
+        Die Simulation multipliziert ein knappes Dutzend Faktoren zu
+        einer Zahl. Die Zahl steht in der Anzeige, die Faktoren nicht —
+        und damit beantwortet die Oberfläche „der ist langsam", aber
+        nicht „warum". Hier kommen sie zurück, der teuerste zuerst.
+
+        Drei davon sind über das ganze Rennen konstant und stehen
+        deshalb am Starter statt in der Telemetrie: Saisonform, Tagesform
+        und die Frische, mit der er ins Rennen gegangen ist.
+
+        ``None`` für Rennen, die vor der Faktoraufzeichnung entstanden
+        sind — dann sagt die Oberfläche das, statt zu raten.
+        """
+        factors = self.telemetry.factors
+        if not factors:
+            return None
+        entry = self.result.entries[entry_id]
+        elapsed = self._elapsed(entry_id, t_wall)
+        if elapsed < 0.0:
+            return None
+        idx = int(self.sample_idx(np.array([elapsed]))[0])
+
+        rows = [
+            {"key": "season", "label": "Saisonform", "pct": round(entry.season_form * 100.0, 1)},
+            {"key": "day", "label": "Tagesform", "pct": round(entry.day_form * 100.0, 1)},
+            {"key": "fresh", "label": "Frische", "pct": round(entry.freshness * 100.0, 1)},
+        ]
+        for key, label in Telemetry.FACTOR_LABELS.items():
+            channel = factors.get(key)
+            if channel is None:
+                continue
+            rows.append({"key": key, "label": label, "pct": float(channel[entry_id, idx])})
+
+        total = 1.0
+        for row in rows:
+            total *= float(row["pct"]) / 100.0
+        # Nach Kosten sortiert: Was am meisten wegnimmt, steht oben. Wer
+        # wissen will, warum einer einbricht, liest sonst zehn Zeilen, von
+        # denen neun „100 %" sagen.
+        rows.sort(key=lambda r: float(r["pct"]))
+        return {"rows": rows, "total_pct": round(total * 100.0, 1)}
+
     def _best_time_events(self) -> list[RaceEvent]:
         """Bestzeiten als Ereignisse — erzeugt, nicht simuliert.
 

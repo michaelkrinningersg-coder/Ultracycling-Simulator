@@ -92,6 +92,30 @@
               <span class="v"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
                     x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>
           </div>
+          <!-- Warum-Panel: die Form in ihre Faktoren zerlegt ------- -->
+          <details class="why" x-show="focus.factors" x-cloak>
+            <summary>
+              <span>Warum <span x-text="focus.form_pct + ' %'"></span></span>
+              <span class="faint" x-show="worstFactor"
+                    x-text="worstFactor ? worstFactor.label + ' ' + worstFactor.pct.toFixed(0) + ' %' : ''"></span>
+            </summary>
+            <template x-for="row in (focus.factors ? focus.factors.rows : [])" :key="row.key">
+              <div class="why-row" :class="{flat: row.pct >= 99.5 && row.pct <= 100.5}">
+                <span class="k" x-text="row.label"></span>
+                <span class="bar">
+                  <span class="fill" :class="row.pct < 100 ? 'loss' : 'gain'"
+                        :style="`width:${Math.min(Math.abs(row.pct - 100) * 4, 100)}%`"></span>
+                </span>
+                <span class="v mono" x-text="row.pct.toFixed(0) + ' %'"></span>
+              </div>
+            </template>
+            <p class="dim" style="font-size:.68rem;margin:.35rem 0 0">
+              Die Simulation multipliziert diese Faktoren zur Form. Jeder ist
+              auf ganze Prozent aufgezeichnet, das Produkt weicht deshalb um
+              ein Prozent von der Formanzeige ab.
+            </p>
+          </details>
+
           <template x-if="focus.conditions && focus.conditions.length">
             <div style="margin-top:.5rem">
               <template x-for="(c, ci) in focus.conditions" :key="ci">

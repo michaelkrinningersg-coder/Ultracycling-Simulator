@@ -44,7 +44,8 @@ hier umgesetzt.
 | Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: Dauerbänder und DNF-Korridor je Strecke, Siegverteilung nach Archetyp bei identischem Potenzial-Budget, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
 | Karriere | Saisons in Folge mit gemeinsamem Fahrerpool. Der Jahreswechsel friert erst die Wertung als Kapitel ein und lässt dann altern — umgekehrt stünde in der ewigen Bestenliste das Feld des Folgejahres. Der Kalender wird ins nächste Jahr übernommen statt neu vorgeschlagen: Dieselben Rennen an denselben Terminen machen die Bestenliste erst lesbar. Dazu ewige Bestenliste (Titel vor Punkten) und Lebenslauf je Fahrer |
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 450 Tests inklusive zweier Golden-Master |
+| Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 489 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -591,7 +592,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 450 Tests, rund 155 s
+pytest -q                    # 489 Tests, rund 160 s
 pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 125 s
 ruff check ultrasim tools tests
 ```

@@ -464,3 +464,54 @@ def test_best_times_stay_behind_the_wall_clock(view):
     for event in visible:
         if event.type == BEST_TIME:
             assert event.t_s + view.offsets[event.entry_id] <= t
+
+
+# ----------------------------------------------------------------------
+# Warum-Panel: die Form in ihre Faktoren zerlegt
+# ----------------------------------------------------------------------
+def test_the_factors_multiply_back_to_the_form(view):
+    """Die Zerlegung muss die Zahl ergeben, die sie erklären soll.
+
+    Auf ein Prozent genau: Jeder Faktor liegt als uint8 in Prozent vor,
+    und zehn davon summieren ihre Rundung auf.
+    """
+    t = 1800.0
+    breakdown = view.factors_at(0, t)
+    assert breakdown is not None, "Ein frisch gerechnetes Rennen zeichnet die Faktoren auf"
+
+    product = 1.0
+    for row in breakdown["rows"]:
+        product *= row["pct"] / 100.0
+    assert product * 100.0 == pytest.approx(breakdown["total_pct"], abs=0.2)
+
+    snap = view.snapshot(t)
+    assert breakdown["total_pct"] == pytest.approx(float(snap["form"][0]), abs=3.0)
+
+
+def test_the_costliest_factor_comes_first(view):
+    rows = view.factors_at(0, 1800.0)["rows"]
+    assert [r["pct"] for r in rows] == sorted(r["pct"] for r in rows)
+
+
+def test_every_factor_is_named(view):
+    from ultrasim.core.engine import Telemetry
+
+    labels = {r["key"] for r in view.factors_at(0, 1800.0)["rows"]}
+    assert set(Telemetry.FACTOR_LABELS) <= labels
+    # Die drei über das Rennen konstanten Größen stehen am Starter, nicht
+    # in der Telemetrie — fehlen dürfen sie trotzdem nicht.
+    assert {"season", "day", "fresh"} <= labels
+
+
+def test_a_rider_before_his_start_has_no_breakdown(view):
+    late = max(range(view.n), key=lambda i: view.offsets[i])
+    if view.offsets[late] > 0:
+        assert view.factors_at(late, 0.0) is None
+
+
+def test_a_race_without_recorded_factors_says_so(view):
+    """Rennen von vor der Aufzeichnung dürfen nicht raten."""
+    from dataclasses import replace
+
+    old = RaceView(replace(view.result, telemetry=replace(view.telemetry, factors=None)), view.route)
+    assert old.factors_at(0, 1800.0) is None

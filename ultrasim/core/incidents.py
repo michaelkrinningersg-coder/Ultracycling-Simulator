@@ -77,27 +77,40 @@ class IncidentSpec:
     km_per_event: float
     headroom: float = 1.0
     rough_factor: float = 1.0
+    #: Der Katalogname im Akkusativ, mit Artikel: „durch **einen
+    #: mechanischen Defekt**". Steht hier und nicht beim Textbaustein,
+    #: weil nur der Katalog weiß, welches Geschlecht sein Eintrag hat —
+    #: aus „Mechanischer Defekt" lässt es sich nicht ableiten, ohne
+    #: Deutsch zu können. Leer heißt: Der Name passt unverändert
+    #: („durch Verfahren", „durch Magenprobleme").
+    phrase: str = ""
+
+    def as_cause(self) -> str:
+        """Wie der Zwischenfall in einem Satz erscheint."""
+        # Ohne Artikel bleibt der Name, wie er ist: Substantive
+        # werden im Deutschen auch mitten im Satz großgeschrieben.
+        return self.phrase or self.label
 
 
 CATALOG: dict[str, IncidentSpec] = {
     # 1 pro ~450 km, ×2,5 Schotter, ×1,6 Nässe; Materialpflege ±35 %.
-    PANNE: IncidentSpec(PANNE, "Reifenpanne", 450.0, headroom=1.6 * 1.35, rough_factor=2.5),
+    PANNE: IncidentSpec(PANNE, "Reifenpanne", 450.0, headroom=1.6 * 1.35, rough_factor=2.5, phrase="eine Reifenpanne"),
     # 1 pro ~1500 km.
-    DEFEKT: IncidentSpec(DEFEKT, "Mechanischer Defekt", 1500.0, headroom=1.4, rough_factor=1.8),
+    DEFEKT: IncidentSpec(DEFEKT, "Mechanischer Defekt", 1500.0, headroom=1.4, rough_factor=1.8, phrase="einen mechanischen Defekt"),
     # "nur nachts, selten" – die Rate gilt für gefahrene Nachtkilometer.
-    LICHT: IncidentSpec(LICHT, "Lichtausfall", 2500.0, headroom=1.0),
+    LICHT: IncidentSpec(LICHT, "Lichtausfall", 2500.0, headroom=1.0, phrase="einen Lichtausfall"),
     # ×3 nachts, ×2 bei Schlafdruck; Navigationssicherheit ±50 %.
     VERFAHREN: IncidentSpec(VERFAHREN, "Verfahren", 1400.0, headroom=3.0 * 2.0 * 1.5),
     # Risiko, Nässe, Schlafdruck. Die Rate ist nicht dokumentiert; sie
     # ergibt sich rückwärts aus dem DNF-Korridor: Bei 8 % schweren
     # Stürzen darf ein 300er nicht schon an Stürzen sein DNF-Budget
     # verbrauchen.
-    STURZ: IncidentSpec(STURZ, "Sturz", 6000.0, headroom=2.0 * 2.0 * 1.9),
+    STURZ: IncidentSpec(STURZ, "Sturz", 6000.0, headroom=2.0 * 2.0 * 1.9, phrase="einen Sturz"),
     # Magenverträglichkeit, Hitze, Zufuhrrate. Der eigentliche Killer.
     MAGEN: IncidentSpec(MAGEN, "Magenprobleme", 1100.0, headroom=1.8 * 1.6 * 1.6),
     # Nur oberhalb der Hitzeschwelle, dann aber häufig.
-    HITZEEINBRUCH: IncidentSpec(HITZEEINBRUCH, "Hitzeeinbruch", 900.0, headroom=2.5),
-    SPERRUNG: IncidentSpec(SPERRUNG, "Sperrung", 1200.0, headroom=1.0),
+    HITZEEINBRUCH: IncidentSpec(HITZEEINBRUCH, "Hitzeeinbruch", 900.0, headroom=2.5, phrase="einen Hitzeeinbruch"),
+    SPERRUNG: IncidentSpec(SPERRUNG, "Sperrung", 1200.0, headroom=1.0, phrase="eine Sperrung"),
 }
 
 #: Anteil der Stürze, die das Rennen beenden (Abschnitt 6.5).

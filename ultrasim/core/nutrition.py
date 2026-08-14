@@ -106,10 +106,42 @@ def intake_ceiling_g_h(
     )
 
 
-def carb_burn_g_h(power_w: np.ndarray, intensity: np.ndarray, fat_norm: np.ndarray) -> np.ndarray:
+#: Wie stark Pacing-Disziplin den Kohlenhydratverbrauch verschiebt:
+#: ±6 % über die Spannweite des Attributs.
+#:
+#: Die Begründung steckt zwei Zeilen höher in ``carb_fraction``. Der
+#: Kohlenhydratanteil wächst linear mit der Intensität, der Verbrauch
+#: damit *quadratisch* — und für eine konvexe Funktion ist der Mittelwert
+#: über schwankende Leistung größer als der Wert am Mittel. Wer mit
+#: 250 W konstant fährt, verbrennt weniger Kohlenhydrate als wer
+#: abwechselnd 200 und 300 W tritt, obwohl beide dieselbe mittlere
+#: Leistung haben. Genau das ist Pacing-Disziplin.
+#:
+#: Modelliert wird das als Faktor und nicht, indem die Simulation
+#: tatsächlich unterschiedlich stark schwanken lässt: Die Schwankung
+#: käme aus dem Streckenprofil und wäre damit für alle Fahrer dieselbe.
+PACING_CARB_SPAN = 0.06
+
+
+def pacing_carb_factor(pacing_norm: np.ndarray | float) -> np.ndarray | float:
+    """Faktor auf den KH-Verbrauch aus der Pacing-Disziplin."""
+    return 1.0 - PACING_CARB_SPAN * np.clip(pacing_norm, -1.0, 1.0)
+
+
+def carb_burn_g_h(
+    power_w: np.ndarray,
+    intensity: np.ndarray,
+    fat_norm: np.ndarray,
+    pacing_norm: np.ndarray | float = 0.0,
+) -> np.ndarray:
     """Kohlenhydratverbrauch in Gramm pro Stunde bei gegebener Leistung."""
     kcal_h = metabolic_kcal(np.asarray(power_w) * 3.6)  # W -> kJ/h -> kcal/h
-    return kcal_h * carb_fraction(intensity, fat_norm) / CARB_KCAL_PER_G
+    return (
+        kcal_h
+        * carb_fraction(intensity, fat_norm)
+        * pacing_carb_factor(pacing_norm)
+        / CARB_KCAL_PER_G
+    )
 
 
 def sustainable_intensity(
@@ -118,21 +150,35 @@ def sustainable_intensity(
     glycogen_kcal: float,
     duration_h: float,
     fat_norm: float,
+    pacing_norm: float = 0.0,
 ) -> float:
     """Intensität, die der Energiehaushalt über die Distanz trägt.
 
     Gesucht ist das IF, bei dem der KH-Verbrauch gerade noch von Zufuhr
     plus geplanter Speicherentnahme gedeckt wird:
 
-        c · IF · (a + b · IF) = Zufuhr + Entnahme
+        f · c · IF · (a + b · IF) = Zufuhr + Entnahme
 
     Weil der KH-Anteil linear im IF ist, wird daraus eine quadratische
     Gleichung mit geschlossener Lösung – kein Löser, kein Iterieren, und
     im Rennplan beliebig oft aufrufbar.
+
+    ``f`` ist der Pacing-Faktor. Er steht auf der Verbrauchsseite und
+    lässt sich deshalb als Aufschlag auf das Angebot schreiben — wer
+    gleichmäßig fährt, hat effektiv mehr Vorrat.
+
+    Dass die Disziplin *hier* wirkt und nicht auf der Wunschintensität,
+    ist keine Geschmacksfrage. Der Rennplan nimmt am Ende
+    ``min(wish_if, energy_if)``, und der Energiedeckel bindet auf allen
+    vier mitgelieferten Strecken bei praktisch jedem Fahrer. Ein Bonus
+    auf die Wunschintensität wird davon weggeschnitten, bevor er etwas
+    tun kann — genau daran ist der erste Versuch gescheitert, und
+    dieselbe Falle erklärt, warum auch ``erfahrung`` auf drei von vier
+    Strecken nicht messbar ist.
     """
     duration_h = max(duration_h, 0.1)
     drawdown_g_h = PLANNED_DRAWDOWN * glycogen_kcal / CARB_KCAL_PER_G / duration_h
-    supply = intake_g_h + drawdown_g_h
+    supply = (intake_g_h + drawdown_g_h) / float(pacing_carb_factor(pacing_norm))
 
     c = metabolic_kcal(ftp_w * 3.6) / CARB_KCAL_PER_G  # g/h je Einheit IF
     if c <= 0:

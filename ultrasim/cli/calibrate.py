@@ -35,8 +35,19 @@ from ..data.store import Store
 from ..geo.route import Route
 from . import use_safe_console
 
-#: Reihenfolge der Strecken im Bericht: kurz, mittel, lang.
-DEFAULT_ROUTES = ("voralpen-runde", "hochgebirgs-marathon", "nordroute-langstrecke")
+#: Reihenfolge der Strecken im Bericht: kurz, mittel, mittel-flach, lang.
+#:
+#: Zwei Strecken der Klasse „mittel" ist kein Versehen. Der
+#: Hochgebirgs-Marathon und die Flachetappe sind fast gleich lang und in
+#: jeder anderen Hinsicht Gegenpole — 13,4 gegen 2,3 Höhenmeter je
+#: Kilometer. Nebeneinander in derselben Zeile sagt die Matrix damit
+#: nicht nur, was ein Attribut wert ist, sondern *wofür*.
+DEFAULT_ROUTES = (
+    "voralpen-runde",
+    "hochgebirgs-marathon",
+    "flachetappe-nordsee",
+    "nordroute-langstrecke",
+)
 
 
 def run(args: argparse.Namespace) -> int:

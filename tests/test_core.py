@@ -293,9 +293,44 @@ def test_weak_pacers_plan_too_hot():
                                                             "pacing_disziplin": 95.0, "erfahrung": 95.0}})
     reckless = Rider(**{**base.to_dict(), "attributes": {**base.attributes,
                                                          "pacing_disziplin": 5.0, "erfahrung": 5.0}})
-    good = np.mean([st.target_intensity(disciplined, 500, np.random.default_rng(i))[0] for i in range(200)])
-    bad = np.mean([st.target_intensity(reckless, 500, np.random.default_rng(i))[0] for i in range(200)])
+    # Geprüft wird der **Planungsfehler**, nicht die Zielintensität.
+    # Seit Pacing-Disziplin zweiseitig wirkt, plant der disziplinierte
+    # Fahrer durchaus höher als der schlampige — nur eben zu Recht:
+    # Gleichmäßiges Fahren trägt bei gleichem Aufwand mehr Leistung.
+    # Die Zielintensität zu vergleichen prüfte damit die falsche Größe.
+    good = np.mean([st.target_intensity(disciplined, 500, np.random.default_rng(i))[1] for i in range(200)])
+    bad = np.mean([st.target_intensity(reckless, 500, np.random.default_rng(i))[1] for i in range(200)])
     assert bad > good
+    assert good < st.MISJUDGE_THRESHOLD, "Wer sauber pact, hat keinen nennenswerten Überzug"
+
+
+def test_pacing_discipline_pays_in_both_directions():
+    """Oberhalb 50 muss Disziplin etwas *kaufen*, nicht nur nichts kosten.
+
+    Vorher hing die Größe allein an ``max(0, (50 − pd) / 50)``: Ein
+    Fahrer mit 80 plante Punkt für Punkt wie einer mit 50, und jeder
+    Punkt darüber war verschenktes Potenzial-Budget. Die
+    Sensitivitätsmatrix hat das Attribut folgerichtig mit −83 Sekunden
+    ausgewiesen — Disziplin *kostete* Zeit.
+    """
+    rng = np.random.default_rng(0)
+    base = generate_rider(rng, 0, 0, archetype="allrounder")
+
+    def plan(pd: float) -> tuple[float, float]:
+        r = Rider(**{**base.to_dict(), "attributes": {**base.attributes, "pacing_disziplin": pd}})
+        runs = [st.target_intensity(r, 500, np.random.default_rng(i)) for i in range(200)]
+        return float(np.mean([v for v, _, _ in runs])), float(np.mean([o for _, o, _ in runs]))
+
+    if_50, over_50 = plan(50.0)
+    if_100, over_100 = plan(100.0)
+    if_0, over_0 = plan(0.0)
+
+    # Oberseite: mehr Intensität, kein zusätzlicher Fehler.
+    assert if_100 > if_50 + 0.01
+    assert over_100 == pytest.approx(over_50, abs=1e-9)
+    # Unterseite: noch mehr Intensität, aber als Wette bezahlt.
+    assert if_0 > if_100
+    assert over_0 > over_100 + 0.02
 
 
 def test_terrain_factor_adds_power_uphill_only():

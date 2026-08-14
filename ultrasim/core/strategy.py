@@ -36,6 +36,13 @@ IF_A = 1.2977
 IF_B = 0.0911
 IF_CLIP = (0.45, 0.92)
 
+#: Was gute Pacing-Disziplin oberhalb des Mittelwerts einbringt: bis zu
+#: 2 pp Zielintensität bei Disziplin 100. Begründung siehe
+#: ``target_intensity`` — gleichmäßiges Fahren trägt bei gleichem
+#: inneren Aufwand eine höhere mittlere Leistung, also darf man näher an
+#: die eigene Grenze planen.
+PACING_SKILL_GAIN = 0.020
+
 #: Aufschlag am Anstieg – bei gleicher Intensität wäre man dort zu
 #: langsam, weil die Zeit pro Höhenmeter überproportional zählt.
 CLIMB_BOOST_BASE = 0.16
@@ -104,14 +111,38 @@ def target_intensity(
     dieser Fahrer die Rechnung dafür präsentiert bekommt.
     """
     base = base_target_if(distance_km)
-    skill = 0.030 * rider.attr_norm("ausdauer") + 0.018 * rider.attr_norm("erfahrung")
+
+    # Pacing-Disziplin wirkt in **beide** Richtungen, und das war sie
+    # lange nicht. Die Größe hing allein an ``max(0, (50 − pd) / 50)``:
+    # Unterhalb des Mittelwerts plante man zu heiß, oberhalb passierte
+    # gar nichts — ein Fahrer mit 80 plante Punkt für Punkt wie einer
+    # mit 50. Damit war jeder Punkt oberhalb 50 verschenktes
+    # Potenzial-Budget, und die Sensitivitätsmatrix hat das Attribut
+    # folgerichtig mit −83 Sekunden ausgewiesen: Disziplin *kostete*
+    # Zeit, weil nur die Unterseite überhaupt etwas bewirkte und diese
+    # Unterseite ein Glücksspiel mit positivem Erwartungswert war.
+    #
+    # Jetzt hat die Oberseite einen eigenen Kanal, und zwar einen
+    # physiologisch belegten: Gleichmäßiges Fahren trägt bei gleichem
+    # inneren Aufwand eine höhere mittlere Leistung als ruppiges. Wer
+    # sauber pact, darf deshalb näher an die eigene Grenze planen.
+    #
+    # Die Größen sind bewusst ungleich: Die Unterseite bringt bis zu
+    # 3,5 pp, die Oberseite 2,0. Wer zu heiß plant, gewinnt mehr — und
+    # riskiert dafür den Einbruch. Wer diszipliniert plant, gewinnt
+    # weniger, aber sicher. Genau das soll die Entscheidung sein.
+    pacing = rider.attr_norm("pacing_disziplin")
+    skill = (
+        0.030 * rider.attr_norm("ausdauer")
+        + 0.018 * rider.attr_norm("erfahrung")
+        + PACING_SKILL_GAIN * max(0.0, pacing)
+    )
 
     # Fehlplanung: wer schlecht pact und wenig Erfahrung hat, plant zu heiß.
     # Der Fehler ist systematisch (Vorzeichen immer nach oben) und hat
     # zusätzlich eine Zufallskomponente.
-    pacing_gap = max(0.0, (50.0 - rider.attr("pacing_disziplin")) / 50.0)
     exp_gap = max(0.0, (50.0 - rider.attr("erfahrung")) / 50.0)
-    overreach = 0.035 * pacing_gap * (1.0 + 0.5 * exp_gap)
+    overreach = 0.035 * max(0.0, -pacing) * (1.0 + 0.5 * exp_gap)
     overreach += float(rng.normal(0.0, 0.012))
 
     value = float(np.clip(base + skill + overreach, *IF_CLIP))
@@ -493,13 +524,14 @@ def build_plan(
     )
     glycogen = float(nut.glycogen_capacity_kcal(rider.weight_kg, rider.attr("ausdauer")))
     fat_norm = rider.attr_norm("fettverbrennung")
+    pacing_norm = rider.attr_norm("pacing_disziplin")
 
     target_if = wish_if
     ride_time = _estimate_ride_time(sections, wish_if, wish_if)
     energy_if = wish_if
     for _ in range(2):
         energy_if = nut.sustainable_intensity(
-            rider.ftp_w, intake, glycogen, ride_time / 3600.0, fat_norm
+            rider.ftp_w, intake, glycogen, ride_time / 3600.0, fat_norm, pacing_norm
         )
         target_if = float(np.clip(min(wish_if, energy_if), *IF_CLIP))
         ride_time = _estimate_ride_time(sections, target_if, wish_if)
@@ -523,7 +555,7 @@ def build_plan(
     # in die Magenwahrscheinlichkeit ein), und der Regelkreis hätte sonst
     # gar keinen Spielraum, wenn er "Zufuhr erhöhen" beschließt.
     planned_intake = planned_intake_g_h(
-        rider.ftp_w, target_if, glycogen, ride_time / 3600.0, fat_norm, intake
+        rider.ftp_w, target_if, glycogen, ride_time / 3600.0, fat_norm, intake, pacing_norm
     )
 
     misjudgement = plan_misjudgement(route, overreach, rng_misjudge or rng)
@@ -628,6 +660,7 @@ def planned_intake_g_h(
     duration_h: float,
     fat_norm: float,
     ceiling_g_h: float,
+    pacing_norm: float = 0.0,
 ) -> float:
     """Wie viel ein Fahrer bei seiner Zielintensität einplant.
 
@@ -641,7 +674,7 @@ def planned_intake_g_h(
     ist er auch der einzige Ort, an dem "Zufuhr erhöhen" überhaupt etwas
     bewirken kann. Wo er fehlt, bleibt dem Regelkreis nur das Tempo.
     """
-    burn = float(nut.carb_burn_g_h(ftp_w * target_if, target_if, fat_norm))
+    burn = float(nut.carb_burn_g_h(ftp_w * target_if, target_if, fat_norm, pacing_norm))
     drawdown = (
         nut.PLANNED_DRAWDOWN * glycogen_kcal / nut.CARB_KCAL_PER_G / max(duration_h, 0.1)
     )

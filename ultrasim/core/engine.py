@@ -471,6 +471,7 @@ def simulate_race(
     )
 
     fat_norm = np.array([r.attr_norm("fettverbrennung") for r in field_riders])
+    pacing_norm = np.array([r.attr_norm("pacing_disziplin") for r in field_riders])
     glyco_cap = nut.glycogen_capacity_kcal(
         weight, np.array([r.attr("ausdauer") for r in field_riders])
     )
@@ -960,7 +961,15 @@ def simulate_race(
                 work_j_last = work_j.copy()
                 mean_power = d_work_kj * 1000.0 / max(slow_dt, 1e-9)
                 intensity = mean_power / np.maximum(ftp_eff, 1.0)
-                burned = nut.metabolic_kcal(d_work_kj) * nut.carb_fraction(intensity, fat_norm)
+                # Der Pacing-Faktor muss hier genauso stehen wie im Plan
+                # — sonst rechnet der Fahrer mit einem Verbrauch, den er
+                # unterwegs nicht hat, und der Energiedeckel wäre eine
+                # Behauptung statt einer Bilanz.
+                burned = (
+                    nut.metabolic_kcal(d_work_kj)
+                    * nut.carb_fraction(intensity, fat_norm)
+                    * nut.pacing_carb_factor(pacing_norm)
+                )
                 taken = (
                     intake_g_h
                     * cond.channel(cond_mods, "kcal_aufnahme")

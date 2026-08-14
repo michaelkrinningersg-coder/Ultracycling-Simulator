@@ -279,3 +279,39 @@ def test_energy_model_slows_a_long_race_down(route_medium):
     a = min(e.finish_time_s for e in limited.entries if e.finish_time_s)
     b = min(e.finish_time_s for e in unlimited.entries if e.finish_time_s)
     assert a > b, "Auf dieser Distanz muss der Energiedeckel messbar bremsen"
+
+
+# ----------------------------------------------------------------------
+# Pacing-Disziplin über den Kraftstoff
+# ----------------------------------------------------------------------
+def test_steady_pacing_burns_less_carbohydrate():
+    """Der Verbrauch ist quadratisch in der Intensität, also konvex.
+
+    Wer mit 250 W konstant fährt, verbrennt weniger Kohlenhydrate als
+    wer abwechselnd 200 und 300 W tritt — bei gleicher mittlerer
+    Leistung. Genau das ist Pacing-Disziplin, und genau so ist sie
+    modelliert.
+    """
+    steady = nut.carb_burn_g_h(250.0, 0.75, 0.0, pacing_norm=1.0)
+    ragged = nut.carb_burn_g_h(250.0, 0.75, 0.0, pacing_norm=-1.0)
+    even = nut.carb_burn_g_h(250.0, 0.75, 0.0)
+    assert steady < even < ragged
+    assert even == nut.carb_burn_g_h(250.0, 0.75, 0.0, pacing_norm=0.0)
+
+
+def test_the_pacing_factor_stays_in_a_sane_band():
+    for norm in (-5.0, -1.0, 0.0, 1.0, 5.0):
+        assert 0.9 <= float(nut.pacing_carb_factor(norm)) <= 1.1
+
+
+def test_discipline_raises_the_sustainable_intensity():
+    """Der Punkt der ganzen Übung.
+
+    Ein Bonus auf die *Wunsch*intensität wäre wirkungslos gewesen: Der
+    Rennplan nimmt ``min(wish_if, energy_if)``, und der Energiedeckel
+    bindet auf allen vier mitgelieferten Strecken bei praktisch jedem
+    Fahrer. Wirken kann Disziplin nur, wenn sie den Deckel selbst hebt.
+    """
+    args = (280.0, 90.0, 1800.0, 20.0, 0.0)
+    assert nut.sustainable_intensity(*args, 1.0) > nut.sustainable_intensity(*args)
+    assert nut.sustainable_intensity(*args) > nut.sustainable_intensity(*args, -1.0)

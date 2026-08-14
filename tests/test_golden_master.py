@@ -94,12 +94,12 @@ GOLDEN_RESULT = [
     (6, 5981.66),
     (12, 6094.34),
     (8, 6114.41),
-    (11, 6217.09),
+    (11, 6215.77),
     (3, 6270.05),
     (5, 6326.14),
     (9, 6330.72),
     (2, 6502.57),
-    (10, 6579.09),
+    (10, 6575.79),
     (4, 6765.28),
     (1, 7053.53),
     (7, 7107.49),
@@ -155,14 +155,27 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   entscheidet jetzt, wer seinen Aufschlag verkraftet, nicht wer ihn
 #:   geschenkt bekommt. Die acht zusätzlichen PLAN-Ereignisse sind die
 #:   neue Begründungszeile im Rennplan — je Fahrer eine.
+#: * Pacing-Disziplin wirkt in beide Richtungen. Oberhalb des
+#:   Mittelwerts kaufte das Attribut bis dahin nichts — ein Fahrer mit
+#:   80 plante wie einer mit 50. Jetzt darf er näher an die eigene
+#:   Grenze planen, und nur die Fahrer über 50 bewegen sich; die
+#:   Ereigniszählung bleibt gleich.
+#: * Pacing-Disziplin wirkt über den Kraftstoff. Der erste Anlauf hatte
+#:   sie auf die Wunschintensität gelegt und damit ins Leere — der
+#:   Rennplan nimmt ``min(wish_if, energy_if)``, und der Energiedeckel
+#:   bindet bei praktisch jedem Fahrer. Jetzt senkt Disziplin den
+#:   Kohlenhydratverbrauch (der ist quadratisch in der Intensität, also
+#:   kostet ungleichmäßiges Fahren echtes Substrat), und das wirkt
+#:   *innerhalb* des Deckels. Auf 40 Stunden ist das viel: Startnummer 6
+#:   gewinnt eine halbe Stunde, 4 gut 25 Minuten.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 146441.89),
-    (5, 146984.61),
-    (8, 150767.30),
-    (3, 152533.05),
-    (1, 161828.09),
-    (4, 162769.83),
-    (6, 166286.61),
+    (7, 146443.12),
+    (5, 146767.18),
+    (8, 150420.18),
+    (3, 152541.20),
+    (1, 161056.92),
+    (4, 161259.14),
+    (6, 164483.32),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche

@@ -46,7 +46,7 @@ hier umgesetzt.
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 513 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 517 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -195,15 +195,24 @@ python -m ultrasim.cli.season show 2027-weltserie      # Kalender + Gesamtwertun
 python -m ultrasim.cli.season close 2027-weltserie     # Fahrer altern lassen
 ```
 
-Drei Strecken liegen bei, je eine pro Distanzklasse:
+Vier Strecken liegen bei:
 
-| ID | Distanz | Höhenmeter | Klasse |
-|---|---|---|---|
-| `voralpen-runde` | 300,5 km | 3114 m | kurz |
-| `hochgebirgs-marathon` | 507,0 km | 7887 m | mittel |
-| `nordroute-langstrecke` | 1230,0 km | 8044 m | ultra |
+| ID | Distanz | Höhenmeter | je km | Klasse |
+|---|---|---|---|---|
+| `voralpen-runde` | 300,5 km | 2674 m | 8,9 m | kurz |
+| `hochgebirgs-marathon` | 507,0 km | 6790 m | 13,4 m | mittel |
+| `flachetappe-nordsee` | 466,0 km | 1075 m | **2,3 m** | mittel |
+| `nordroute-langstrecke` | 1230,0 km | 6120 m | 5,0 m | ultra |
 
-> Diese drei sind **synthetisch erzeugt**, nicht real: Sie entstehen aus
+Zwei der Klasse „mittel" ist Absicht. Der Hochgebirgs-Marathon und die
+Flachetappe sind fast gleich lang und in jeder anderen Hinsicht
+Gegenpole — 13,4 gegen 2,3 Höhenmeter je Kilometer. Nebeneinander in
+derselben Zeile sagt die Sensitivitätsmatrix damit nicht nur, was ein
+Attribut wert ist, sondern *wofür*. Die Flachetappe kam dazu, weil die
+„flachste" Strecke vorher bei 5,0 m/km lag — das ist welliges Land, kein
+Zeitfahrterrain.
+
+> Diese vier sind **synthetisch erzeugt**, nicht real: Sie entstehen aus
 > `tools/make_demo_gpx.py` und dienen dazu, die Importkette und das Spiel
 > ohne Netz und ohne fremde Kartendaten lauffähig zu halten. Jede echte
 > GPX-Datei aus komoot, BRouter, Strava oder einer GPS-Aufzeichnung
@@ -704,7 +713,47 @@ Dauerbänder und DNF-Korridore blieben stehen (9,0 / 17,8 / 39,3 h;
 Die Zeile `pacing_disziplin` war vorher **negativ**: Disziplin kostete
 Zeit. Wer schlecht pact, plant heißer, fährt das ganze Rennen über
 schneller — und wurde nur in 19 % der Fälle dafür bezahlt. Zu heiß zu
-planen war profitabel. Das ist jetzt neutral.
+planen war profitabel.
+
+### Der Energiedeckel schneidet die halbe Planung weg
+
+Der Grund war, dass das Attribut **einseitig** war: `pacing_gap =
+max(0, (50 − pd) / 50)`. Unterhalb des Mittelwerts plante man zu heiß,
+oberhalb passierte gar nichts — ein Fahrer mit 80 plante Punkt für
+Punkt wie einer mit 50, und jeder Punkt darüber war verschenktes
+Potenzial-Budget.
+
+Der naheliegende Weg war, der Oberseite einen Bonus auf die
+Zielintensität zu geben. Er hat **nichts** bewirkt, und zwar bei jeder
+Größe von 2 bis 5 Prozentpunkten. Die Messung sagte dreimal
+dieselbe Zahl, was kein Balancing-Problem ist, sondern ein Hinweis auf
+eine Wand. Sie steht eine Zeile tiefer im Rennplan:
+
+```python
+target_if = clip(min(wish_if, energy_if))
+```
+
+Der Energiedeckel bindet auf allen vier Strecken bei **16 von 16**
+Fahrern (auf der Ultradistanz bei 11 von 16). Jeder Bonus auf die
+*Wunsch*intensität wird davon weggeschnitten, bevor er etwas tun kann.
+Das erklärt auch, warum `erfahrung` auf drei von vier Strecken nicht
+messbar ist und `ausdauer` sehr wohl: Ausdauer hebt zusätzlich den
+Glykogenspeicher und damit den Deckel selbst.
+
+Also wirkt Disziplin jetzt dort, wo sie physiologisch hingehört — beim
+Kraftstoff. Der Kohlenhydratanteil wächst linear mit der Intensität,
+der Verbrauch damit *quadratisch*, und für eine konvexe Funktion ist
+der Mittelwert über schwankende Leistung größer als der Wert am
+Mittel. Wer 250 W konstant tritt, verbrennt weniger Kohlenhydrate als
+wer zwischen 200 und 300 W pendelt, bei identischer mittlerer Leistung.
+Genau das ist Pacing-Disziplin, und als ±6 % auf den KH-Verbrauch wirkt
+sie *innerhalb* des Deckels statt dagegen.
+
+| `pacing_disziplin` | Voralpen | Hochgebirge | Flachetappe | Nordroute |
+|---|---|---|---|---|
+| vorher | · | · | — | **−83 s** |
+| Bonus auf die Zielintensität | · | · | · | · |
+| über den Kraftstoff | **62 s** | **172 s** | **43 s** | **142 s** |
 
 Sichtbar wird das alles im **Attribut-Tuner** im Fahrerdetail: zwei
 Schieberegler, ein Klick, und beide Versionen des Fahrers starten im
@@ -734,7 +783,7 @@ praktisch dasselbe wie eines mit 41.
 ## Tests
 
 ```bash
-pytest -q                    # 513 Tests, rund 190 s
+pytest -q                    # 517 Tests, rund 190 s
 pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 140 s
 ruff check ultrasim tools tests
 ```

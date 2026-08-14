@@ -72,11 +72,34 @@ LANGSTRECKE: list[tuple[float, float]] = [
     (76.0, 0.2),
 ]
 
+#: Flachetappe, rund 470 km an der Küste – die einzige Strecke im
+#: Bündel, auf der Kletterstärke schlicht nichts nützt.
+#:
+#: Sie ist entstanden, weil eine Messung eine Lücke aufgedeckt hat. Der
+#: Zeitfahr-Spezialist gewann auf keiner der drei anderen Strecken, und
+#: der erste Verdacht war, dass ihm schlicht das Heimterrain fehlt: Die
+#: „flachste" hatte 5,0 m/km, das ist welliges Land und keine
+#: Zeitfahrstrecke. Der Verdacht hat sich nicht bestätigt — die Ursache
+#: lag woanders —, aber die Lücke war echt und ist geblieben.
+#:
+#: Unter 1,5 m/km. Zum Vergleich: Die Nordroute liegt bei 5,0, die
+#: Voralpen-Runde bei 8,9 und der Hochgebirgs-Marathon bei 13,4. Die
+#: einzige nennenswerte Erhebung ist eine Deichauffahrt in der Mitte,
+#: damit die Anstiegserkennung und die Radwahl überhaupt etwas zu
+#: entscheiden bekommen.
+FLACHETAPPE: list[tuple[float, float]] = [
+    (48.0, 0.2), (35.0, -0.3), (52.0, 0.15), (28.0, 0.6), (31.0, -0.5),
+    (44.0, 0.25), (26.0, -0.4),
+    (6.0, 2.4), (5.0, -2.6),          # die einzige Welle: rund 145 hm
+    (57.0, 0.2), (33.0, -0.25), (41.0, 0.3), (24.0, -0.45), (36.0, 0.1),
+]
+
 PRESETS: dict[str, tuple[str, list[tuple[float, float]], tuple[float, float, float]]] = {
     # Name -> (Anzeigename, Profil, (lat, lon, Starthöhe))
     "voralpen": ("Voralpen-Runde (Demo)", VORALPEN, (47.8214, 11.4526, 584.0)),
     "hochgebirge": ("Hochgebirgs-Marathon (Demo)", HOCHGEBIRGE, (46.5197, 9.8383, 812.0)),
     "langstrecke": ("Nordroute Langstrecke (Demo)", LANGSTRECKE, (52.3759, 9.7320, 58.0)),
+    "flachetappe": ("Flachetappe Nordsee (Demo)", FLACHETAPPE, (53.5511, 8.5865, 6.0)),
 }
 
 #: Kehren an steilen Stellen. Eine Peilungsschwingung von ±0,26 rad

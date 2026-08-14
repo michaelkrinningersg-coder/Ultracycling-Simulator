@@ -146,7 +146,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--routes", nargs="+", default=list(DEFAULT_ROUTES))
     parser.add_argument("--runs", type=int, default=6, help="Rennen je Strecke")
     parser.add_argument("--riders", type=int, default=40)
-    parser.add_argument("--per-archetype", type=int, default=4)
+    parser.add_argument(
+        "--per-archetype",
+        type=int,
+        default=20,
+        help=(
+            "Fahrer je Archetyp. Stand lange bei 4 — das sind 24 Stichproben "
+            "je Typ und ein Standardfehler von knapp zwei Plätzen, aus dem "
+            "zweimal ein Befund abgelesen wurde, den die größere Stichprobe "
+            "umgedreht hat."
+        ),
+    )
     parser.add_argument("--base-riders", type=int, default=16, help="Grundfahrer der Sensitivität")
     parser.add_argument("--sensitivity-runs", type=int, default=2)
     parser.add_argument(

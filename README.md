@@ -41,7 +41,7 @@ hier umgesetzt.
 | Streckeneditor (M5b) | GPX-Upload im Browser mit Vorschau: Distanz, Höhenmeter geglättet *und* ungeglättet, erkannte Anstiege, abgeleitete Distanzklasse. Splits und Servicepunkte per Drag im Höhenprofil verschiebbar, dazu Tabelle mit Kilometerfeld, Art und Hinzufügen/Löschen. Auf die Platte geht der Import erst, wenn man ihn dort speichert |
 | Fahrer- und Team-Editor (M5b) | Feldtabelle mit Filter nach Name, Team und Archetyp; Fahrerdetail mit allen 25 Attributen als Schieberegler und mitlaufender Potenzial-Budget-Anzeige; Nachgenerieren mit Archetyp, Anzahl und Zielpotenzial; Teams mit Name, Nation, Farbe und Servicedisziplin |
 | Regelkreis (M7b) | Das Strategiemodul der zweiten Stufe aus Abschnitt 7.2: Sparmodus bei leerem Glykogenspeicher, Hitzemodus, Aufholjagd bei Rückstand auf den eigenen Plan, vorgezogener Schlafstopp. Jede Regel mit getrennter Ein- und Ausschaltschwelle, jede Entscheidung mit Begründung im Ereignisstrom und als Chip in der Board-Zeile |
-| Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: Dauerbänder und DNF-Korridor je Strecke, Siegverteilung nach Archetyp bei identischem Potenzial-Budget, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
+| Kalibrierung (M8) | Ein eingecheckter Bericht statt Konsolenausgabe: erwartete Dauer und DNF-Korridor je Strecke, Platzierung nach Archetyp bei identischem Potenzial-Budget **mit Standardfehler**, und eine Matrix, was jedes der 25 Attribute auf jeder Strecke in Sekunden wert ist. Dazu ein zweiter Golden Master über 1000 km, der Schlaf, Notschlaf und Aufgabe abdeckt |
 | Karriere | Saisons in Folge mit gemeinsamem Fahrerpool. Der Jahreswechsel friert erst die Wertung als Kapitel ein und lässt dann altern — umgekehrt stünde in der ewigen Bestenliste das Feld des Folgejahres. Der Kalender wird ins nächste Jahr übernommen statt neu vorgeschlagen: Dieselben Rennen an denselben Terminen machen die Bestenliste erst lesbar. Dazu ewige Bestenliste (Titel vor Punkten) und Lebenslauf je Fahrer |
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
@@ -538,6 +538,43 @@ suchen, die nach dem Schließen des Fensters weg ist.
 Der Bericht beantwortet zwei Fragen, die die Dauerbänder nicht
 beantworten: **Was ist ein einzelnes Attribut wert?** und **passen die
 Archetypen zu den Strecken?**
+
+### Der teuerste Fehler war die Stichprobe, nicht das Balancing
+
+Der Bericht hatte zwei Abteilungen mit sehr ungleicher Sorgfalt. Die
+Attributmatrix prüft jede Zahl gegen drei Standardfehler *und* einen
+Vorzeichentest, bevor sie sie druckt. Die Archetyp-Tabelle daneben
+druckte mittlere Platzierung und Siegzahl aus **vier Fahrern je Typ und
+sechs Rennen** — ohne jede Angabe, wie sicher das ist.
+
+Das sind 24 Stichproben bei einer Streuung von rund einem Viertel der
+Feldgröße, also ein Standardfehler von knapp zwei Plätzen. Zweimal ist
+daraus ein Befund entstanden, den ich hier und im CHANGELOG als gemessen
+ausgewiesen habe und den die größere Stichprobe hinterher umgedreht hat:
+
+| | vier Fahrer je Typ | zwanzig Fahrer je Typ |
+|---|---|---|
+| Draufgänger | „dominiert, 16 von 24 Siegen" | **88,9 von 160** — unterdurchschnittlich |
+| Fettverbrenner | unauffällig, 0 Siege | **46,7** — mit Abstand der stärkste |
+| Diesel | unauffällig | **102,5** — mit Abstand der schwächste |
+
+Die Siegzahl war dabei die schlimmere der beiden Größen: Sechs Rennen
+ergeben sechs Sieger, verteilt auf acht Archetypen. Daraus lässt sich
+grundsätzlich nichts ablesen, egal wie groß das Feld ist. Sie ist
+ersatzlos gestrichen und durch den Anteil der Starts im besten Zehntel
+ersetzt — dieselbe Frage, hundertfache Stichprobe.
+
+Die Lehre ist nicht „mehr rechnen", sondern: **eine Zahl ohne
+Unsicherheit gehört nicht in einen Bericht, aus dem jemand
+Balancing-Entscheidungen ableitet.** Die Archetyp-Tabelle weist jetzt
+±Standardfehler aus, und der Bericht sagt dazu, dass zwei Archetypen
+sich erst unterscheiden, wenn ihre Intervalle sich nicht überlappen.
+
+**Was dabei über das Balancing herauskam**, ist eine andere und
+unbequemere Geschichte: Der Fettverbrenner ist zu stark, weil die
+Ernährungsattribute die Matrix anführen — `magenvertraeglichkeit` ist
+mit 413–969 s der größte Einzelwert der ganzen Tabelle. Das ist bislang
+gemessen und nicht behoben.
 
 **Alle Varianten in einem Rennen.** Naheliegend wäre, je Attribut zwei
 komplette Rennen zu rechnen — bei 25 Attributen, zwei Richtungen und

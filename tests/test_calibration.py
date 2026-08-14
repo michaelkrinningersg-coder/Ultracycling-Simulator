@@ -281,7 +281,7 @@ def test_route_summary_is_ordered_and_plausible(route, small_pool):
     assert summary.winner_h <= summary.median_h <= summary.last_h
     assert 0.0 <= summary.dnf_pct + summary.otl_pct <= 100.0
     assert summary.winner_kmh > summary.field_kmh
-    assert summary.band == cal.DURATION_TARGET_H[route.distance_class]
+    assert summary.band == cal.duration_band(route.distance_km, route.ascent_m)
     assert summary.dnf_target == cal.DNF_TARGET[route.distance_class]
 
 
@@ -347,3 +347,52 @@ def test_the_report_marks_a_missed_dnf_corridor(route, small_pool):
     outside = replace(summary, dnf_pct=42.0, otl_pct=0.0)
     assert not outside.dnf_in_target
     assert "⚠" in "\n".join(report.section_routes([outside]))
+
+
+# ----------------------------------------------------------------------
+# Dauerband: stetig statt in Eimern
+# ----------------------------------------------------------------------
+def test_the_duration_band_grows_with_distance_and_climbing():
+    flat = cal.duration_band(400.0, 500.0)
+    hilly = cal.duration_band(400.0, 6000.0)
+    longer = cal.duration_band(800.0, 500.0)
+    assert hilly[0] > flat[0] and hilly[1] > flat[1], "Höhenmeter kosten Zeit"
+    assert longer[0] > flat[0], "Distanz auch"
+    assert flat[0] < flat[1]
+
+
+def test_climbing_counts_more_than_the_effort_rule():
+    """Für die *Dauer* wiegen 100 hm mehr als einen Flachkilometer.
+
+    ``classify_distance`` rechnet mit 100 hm ≈ 1 km — das ist die
+    Faustregel für den Aufwand und bleibt dort richtig. Hier geht es um
+    die Zeit, und die vier mitgelieferten Strecken zeigen, dass 1 km die
+    Steigung um mehr als den Faktor zwei unterschätzt.
+    """
+    assert cal.ASCENT_KM_PER_100M > 1.5
+    assert cal.equivalent_km(100.0, 1000.0) == pytest.approx(100.0 + 10.0 * cal.ASCENT_KM_PER_100M)
+
+
+def test_a_flat_mid_distance_route_is_no_longer_flagged():
+    """Der Fall, für den die Umstellung gebaut wurde.
+
+    Die Flachetappe (466 km, 1075 hm) fällt als „mittel" in einen Eimer,
+    dessen Band bei 15 h beginnt — und ist in 13,2 h gefahren. Das ⚠ galt
+    der Klasseneinteilung, nicht der Strecke.
+    """
+    lo, hi = cal.duration_band(466.0, 1075.0)
+    assert lo <= 13.2 <= hi
+    # …und die bergige Strecke ähnlicher Länge trotzdem auch.
+    lo2, hi2 = cal.duration_band(507.0, 6790.0)
+    assert lo2 <= 17.8 <= hi2
+    assert lo2 > hi / 2, "die beiden Bänder dürfen nicht dasselbe sein"
+
+
+def test_the_archetype_table_reports_its_own_uncertainty(route, small_pool):
+    teams, _ = small_pool
+    arch_teams, arch_riders = cal.balanced_field(2, seed=5)
+    stats = cal.archetype_stats(route, arch_riders, arch_teams, (11, 12))
+    assert stats
+    for st in stats:
+        assert st.rank_se == st.rank_se, "ohne Standardfehler ist die Zeile nicht lesbar"
+        assert 0.0 <= st.top_decile_pct <= 100.0

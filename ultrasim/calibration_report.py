@@ -32,20 +32,30 @@ def section_routes(summaries: list[cal.RouteSummary]) -> list[str]:
     out = [
         "## 1 · Strecken, Dauerbänder und Ausfälle",
         "",
-        "Der Abgleich mit den beiden Ankern, die das Design-Dokument selbst",
-        "setzt: dem Dauerband je Distanzklasse (Abschnitt 2) und dem",
-        "DNF-Korridor (Abschnitt 6.5).",
+        "Der Abgleich mit den beiden Ankern des Design-Dokuments: der",
+        "erwarteten Dauer (Abschnitt 2) und dem DNF-Korridor (6.5).",
         "",
-        "| Strecke | Klasse | Sieger | Median | Letzter | Feld im Band | DNF+OTL | Ziel | Rangkorrelation |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "Das Dauerband hing bis vor kurzem an der Distanzklasse. Das ging",
+        "an den Rändern zwangsläufig schief, denn „mittel\" reicht von 400",
+        "bis 1200 Äquivalentkilometern und umfasst Rennen von zwölf bis",
+        "fünfundvierzig Stunden — ein einziges Band dafür muss an beiden",
+        "Enden danebenliegen. Jetzt wird es stetig aus Distanz und",
+        "Höhenmetern gerechnet. Die Klassen bleiben, wofür sie da sind:",
+        "Split-Dichte, Schlafplanung und Rennkoeffizient.",
+        "",
+        "| Strecke | Klasse | Sieger | Median | Letzter | Erwartet | Feld im Band | DNF+OTL | Ziel | Rangkorrelation |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for s in summaries:
         lo, hi = s.dnf_target
+        band_lo, band_hi = s.band
         mark = "" if s.dnf_in_target else " ⚠"
+        band_mark = "" if band_lo <= s.winner_h <= band_hi else " ⚠"
         out.append(
             f"| {s.name} ({_fmt(s.distance_km, 0)} km) | {s.distance_class} | "
-            f"{_fmt(s.winner_h, 1, ' h')} | {_fmt(s.median_h, 1, ' h')} | "
-            f"{_fmt(s.last_h, 1, ' h')} | {_fmt(s.inside_band_pct, 0, ' %')} | "
+            f"{_fmt(s.winner_h, 1, ' h')}{band_mark} | {_fmt(s.median_h, 1, ' h')} | "
+            f"{_fmt(s.last_h, 1, ' h')} | {band_lo:.1f}–{band_hi:.1f} h | "
+            f"{_fmt(s.inside_band_pct, 0, ' %')} | "
             f"{_fmt(s.dnf_pct + s.otl_pct, 1, ' %')}{mark} | "
             f"{lo * 100:.0f}–{hi * 100:.0f} % | {_fmt(s.rank_corr, 2)} |"
         )
@@ -68,7 +78,19 @@ def section_archetypes(rows: list[tuple[cal.RouteSummary, list[cal.ArchetypeStat
         "es unterscheidet sich nur, wie das Budget verteilt ist, und was der",
         "Archetyp an Körperbau mitbringt. Damit misst die Tabelle nicht, wer",
         "die besseren Fahrer bekommen hat, sondern wer zur Strecke passt.",
-        "Angegeben ist die mittlere Platzierung; in Klammern die Siege.",
+        "",
+        "Angegeben ist die mittlere Platzierung ± Standardfehler und in",
+        "Klammern der Anteil der Starts im besten Zehntel des Feldes.",
+        "",
+        "**Zwei Zahlen, die früher hier standen, stehen bewusst nicht mehr",
+        "da.** Die Siegzahl ist die eine: Sechs Rennen ergeben sechs Sieger,",
+        "verteilt auf acht Archetypen — daraus lässt sich nichts ablesen,",
+        "egal wie groß das Feld ist. Der Standardfehler ist die andere, und",
+        "er hat gefehlt: Mit vier Fahrern je Typ lag er bei knapp zwei",
+        "Plätzen, und es wurde abgelesen, was Rauschen war. Zwei Befunde,",
+        "die auf diesem Weg entstanden sind, hat die größere Stichprobe",
+        "hinterher umgedreht. Zwei Archetypen unterscheiden sich erst dann,",
+        "wenn ihre Intervalle sich nicht überlappen.",
         "",
     ]
     if not rows:
@@ -79,12 +101,15 @@ def section_archetypes(rows: list[tuple[cal.RouteSummary, list[cal.ArchetypeStat
         cells = []
         for _, stats in rows:
             st = stats[i]
-            cells.append(f"{_fmt(st.mean_rank, 1)} ({st.wins})")
+            cells.append(
+                f"{_fmt(st.mean_rank, 1)} ±{_fmt(st.rank_se, 1)} ({_fmt(st.top_decile_pct, 0, ' %')})"
+            )
         out.append(f"| {rows[0][1][i].label} | " + " | ".join(cells) + " |")
+    field = sum(a.starts for a in rows[0][1]) // max(rows[0][0].runs, 1)
     out += [
         "",
-        f"Feldgröße je Rennen: {sum(a.starts for a in rows[0][1]) // max(rows[0][0].runs, 1)} Fahrer, "
-        f"{rows[0][0].runs} Rennen je Strecke.",
+        f"Feldgröße je Rennen: {field} Fahrer, {rows[0][0].runs} Rennen je Strecke. "
+        f"Neutral wäre Platz {(field + 1) / 2:.1f}".replace(".", ",") + ".",
         "",
         "Die Platzierung allein wäre irreführend, denn das gleiche Budget",
         "heißt nicht gleicher Körperbau: Ein Archetyp bringt Größe, Gewicht",

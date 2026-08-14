@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..calibration import DNF_TARGET, DURATION_TARGET_H
+from ..calibration import DNF_TARGET, DURATION_TARGET_H, duration_band
 from ..core import incidents as inc
 from ..core.engine import RaceConfig, simulate_race
 from ..core.events import INCIDENT
@@ -137,19 +137,21 @@ def run(args: argparse.Namespace) -> int:
         print()
 
     # --- Abgleich mit dem Dauerband der Klasse ----------------------
-    lo_h, hi_h = DURATION_TARGET_H.get(route.distance_class, (0.0, 1e9))
+    lo_h, hi_h = duration_band(route.distance_km, route.ascent_m)
     field_h = np.array(all_times) / 3600.0
     inside = float(np.mean((field_h >= lo_h) & (field_h <= hi_h))) * 100.0
     print(
-        f"Dauerband Klasse '{route.distance_class}': {lo_h:.0f}–{hi_h:.0f} h · "
+        f"Erwartete Dauer ({route.distance_km:.0f} km + {route.ascent_m:.0f} hm): "
+        f"{lo_h:.1f}–{hi_h:.1f} h · "
         f"Feld liegt zu {inside:.0f} % darin "
         f"(Sieger {wt.mean() / 3600:.1f} h, Letzter {field_h.max():.1f} h)"
     )
     if wt.mean() / 3600.0 < lo_h:
         print(
-            "  Hinweis: Die Siegerzeit unterschreitet das Band. Bei einer Strecke am "
-            "unteren Rand der Klasse ist das erwartbar – die Klasse wird aus Distanz "
-            "*und* Höhenmetern abgeleitet, das Dauerband gilt für ihre Mitte."
+            "  Hinweis: Die Siegerzeit unterschreitet die erwartete Dauer. Das Band "
+            "kommt aus Distanz plus Höhenmetern (100 hm rechnen wie 2,3 km) – wenn "
+            "es hier nicht passt, ist entweder die Strecke ungewöhnlich oder das "
+            "Balancing hat sich verschoben."
         )
     print()
 

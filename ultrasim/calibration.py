@@ -57,11 +57,70 @@ DNF_TARGET: dict[str, tuple[float, float]] = {
 
 #: Dauerband je Distanzklasse aus Abschnitt 2. Das ist der einzige
 #: Kalibrierungsanker, den das Dokument selbst liefert.
+#:
+#: Es steht noch hier, weil es die Herkunft der Zahlen unten ist —
+#: geprüft wird gegen ``duration_band`` (siehe dort, warum).
 DURATION_TARGET_H: dict[str, tuple[float, float]] = {
     "kurz": (5.0, 15.0),
     "mittel": (15.0, 50.0),
     "ultra": (50.0, 110.0),
 }
+
+#: Höhenmeter als Zuschlag auf die Distanz, für die **Dauer** gerechnet.
+#:
+#: ``classify_distance`` benutzt für die Klasse 100 hm ≈ 1 km. Das ist
+#: die übliche Faustregel für den *Aufwand*, und dafür bleibt sie dort
+#: stehen. Für die Dauer stimmt sie nicht: 100 Höhenmeter an 5 % sind
+#: zwei Kilometer Straße, die man mit halbem Tempo fährt — der
+#: Zeitaufwand entspricht also eher zwei bis drei Flachkilometern.
+#:
+#: Nachgerechnet an den vier mitgelieferten Strecken. Wäre die Regel
+#: richtig, müsste "Stunden je Äquivalentkilometer" auf allen vieren
+#: dieselbe Zahl sein:
+#:
+#:     100 hm ≈ 1,0 km   0,0287 · 0,0277 · 0,0310 · 0,0306   (±11 %)
+#:     100 hm ≈ 2,3 km   0,0260 · 0,0269 · 0,0269 · 0,0289   (±5 %)
+#:
+#: Der Rest der Streuung ist die Ultradistanz, und der gehört dorthin:
+#: Dort kommen Schlafstopps zur Fahrzeit, die keine Steigung erklärt.
+ASCENT_KM_PER_100M = 2.3
+
+#: Stunden je Äquivalentkilometer für den Sieger, aus denselben vier
+#: Läufen gemittelt.
+HOURS_PER_EQUIV_KM = 0.0272
+
+#: Wie weit das Feld vom Siegerwert abweichen darf, bevor der Bericht
+#: die Strecke anmerkt. Nach unten eng, nach oben weit: Schneller als
+#: der Sieger ist niemand, langsamer als er sind alle — der Letzte
+#: braucht auf jeder mitgelieferten Strecke rund die anderthalbfache
+#: Zeit.
+DURATION_BAND = (0.85, 1.75)
+
+
+def equivalent_km(distance_km: float, ascent_m: float) -> float:
+    """Distanz, auf die Dauer umgerechnet."""
+    return distance_km + ascent_m / 100.0 * ASCENT_KM_PER_100M
+
+
+def duration_band(distance_km: float, ascent_m: float) -> tuple[float, float]:
+    """Erwartetes Dauerband einer Strecke, stetig statt in Eimern.
+
+    Bis hierher kam das Band aus der Distanzklasse, und das ging an den
+    Rändern zwangsläufig schief: Die Klasse „mittel" reicht von 400 bis
+    1200 Äquivalentkilometern und umfasst damit Rennen von zwölf bis
+    fünfundvierzig Stunden. Ein einziges Band für diesen ganzen Eimer
+    muss an beiden Enden danebenliegen — die Flachetappe (466 km, kaum
+    Höhenmeter, 13,2 h) fiel unter die 15-Stunden-Grenze und bekam ein
+    ⚠, obwohl mit ihr nichts nicht stimmte.
+
+    Die Klassen bleiben, wofür das Design-Dokument sie vorsieht:
+    Split-Dichte, Schlafplanung, Servicepunkt-Abstände und
+    Rennkoeffizient. Nur die *Prüfung* hängt nicht mehr an ihnen.
+    """
+    mid = equivalent_km(distance_km, ascent_m) * HOURS_PER_EQUIV_KM
+    lo, hi = DURATION_BAND
+    return mid * lo, mid * hi
+
 
 #: Attributschritt der Sensitivitätsmessung. Die Archetypen streuen mit
 #: rund 11 Punkten, zehn Punkte sind also ungefähr eine
@@ -129,7 +188,7 @@ class RouteSummary:
 
     @property
     def band(self) -> tuple[float, float]:
-        return DURATION_TARGET_H.get(self.distance_class, (0.0, math.inf))
+        return duration_band(self.distance_km, self.ascent_m)
 
     @property
     def dnf_target(self) -> tuple[float, float]:
@@ -170,7 +229,7 @@ def route_summary(
             corr.append(float(np.corrcoef(_ranks(-pot), _ranks(t))[0, 1]))
 
     field_h = np.array(times) / 3600.0
-    lo_h, hi_h = DURATION_TARGET_H.get(route.distance_class, (0.0, math.inf))
+    lo_h, hi_h = duration_band(route.distance_km, route.ascent_m)
     return RouteSummary(
         name=route.name,
         distance_km=route.distance_km,
@@ -425,9 +484,27 @@ class ArchetypeStat:
     mean_rank: float
     mean_potential: float
     dnf_pct: float
+    #: Standardfehler der mittleren Platzierung.
+    #:
+    #: Die wichtigste Zahl dieser Tabelle, und sie hat lange gefehlt. Mit
+    #: vier Fahrern je Typ und sechs Rennen sind das 24 Stichproben bei
+    #: einer Streuung von rund einem Viertel der Feldgröße — der
+    #: Standardfehler lag damit bei knapp zwei Plätzen, und aus der
+    #: Tabelle wurde abgelesen, was Rauschen war. Zweimal ist auf diesem
+    #: Weg ein Befund entstanden, den die größere Stichprobe umgedreht
+    #: hat.
+    rank_se: float = math.nan
+    #: Anteil der Starts, die im besten Zehntel des Feldes landen.
+    #:
+    #: Steht anstelle der Siegzahl. Sechs Rennen ergeben sechs Sieger,
+    #: verteilt auf acht Archetypen — daraus lässt sich grundsätzlich
+    #: nichts ablesen, egal wie viele Fahrer starten. Das beste Zehntel
+    #: hat dieselbe Aussage („wer kommt vorn an?"), aber die
+    #: hundertfache Stichprobe.
     #: Körperbau bei gleichem Budget. Ohne diese drei Zahlen liest sich
     #: die Platzierungstabelle wie eine Aussage über Attribute, obwohl
     #: der Archetyp auch Größe, Gewicht und damit W/kg mitbringt.
+    top_decile_pct: float = math.nan
     mean_wkg: float = 0.0
     mean_ftp_w: float = 0.0
     mean_area_m2: float = 0.0
@@ -470,7 +547,7 @@ def archetype_stats(
     teams: Sequence[Team],
     seeds: Sequence[int],
 ) -> list[ArchetypeStat]:
-    """Zählt Siege, Podien und mittlere Platzierung je Archetyp."""
+    """Mittlere Platzierung je Archetyp, mit Standardfehler."""
     by_id = {r.id: r for r in riders}
     starts: dict[str, int] = {k: 0 for k in ARCHETYPES}
     wins = dict(starts)
@@ -497,6 +574,10 @@ def archetype_stats(
             if pos <= 3:
                 podiums[key] += 1
 
+    # Das beste Zehntel des *Feldes*, nicht der Zieleinläufe: Sonst
+    # verschiebt sich die Schwelle mit der Ausfallquote.
+    top_cut = max(1.0, len(riders) * 0.10)
+
     out: list[ArchetypeStat] = []
     for key in ARCHETYPES:
         group = [r for r in riders if r.archetype == key]
@@ -508,6 +589,16 @@ def archetype_stats(
                 wins=wins[key],
                 podiums=podiums[key],
                 mean_rank=float(np.mean(ranks[key])) if ranks[key] else math.nan,
+                rank_se=(
+                    float(np.std(ranks[key], ddof=1) / math.sqrt(len(ranks[key])))
+                    if len(ranks[key]) > 1
+                    else math.nan
+                ),
+                top_decile_pct=(
+                    float(np.mean(np.array(ranks[key]) <= top_cut)) * 100.0
+                    if ranks[key]
+                    else math.nan
+                ),
                 mean_potential=float(np.mean([r.potential for r in group] or [math.nan])),
                 dnf_pct=dnf[key] / max(starts[key], 1) * 100.0,
                 mean_wkg=float(np.mean([r.wkg for r in group] or [math.nan])),

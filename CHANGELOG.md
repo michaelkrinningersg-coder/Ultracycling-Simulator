@@ -22,7 +22,9 @@ dabei zu.
   Kategorien, Splits und Servicepunkte.
 - **Physik** mit Roll-, Steigungs-, Luft- und Beschleunigungswiderstand,
   1-s-Euler-Integration, höhenabhängiger Luftdichte, Kurvenlimit und
-  CdA aus Körpermaßen.
+  CdA aus Körpermaßen. Der Rollwiderstand hängt an Oberfläche, Reifen,
+  Tempo und Systemmasse, inklusive der Impedanz — dem Anteil, der als
+  Schwingung verlorengeht.
 - **Fahrer** aus acht Archetypen mit gemeinsamem Potenzial-Budget, 25
   Attributen, Saison-/Tages-/Abschnittsform, W′ und Langzeitermüdung.
 - **Energiehaushalt** mit Glykogenspeicher, Substratverteilung,
@@ -43,7 +45,10 @@ dabei zu.
 ### Oberfläche
 
 - **Live-Telemetrie** mit Höhenprofil, Board, virtueller Rangliste,
-  Ereignis-Ticker und Zeitraffer von 1× bis 1000×.
+  Ereignis-Ticker und sieben Zeitrafferstufen von 1× bis 1000×. Uhr und
+  Rückstand zählen zwischen zwei Frames mit, statt im Takt der Frames
+  zu springen; eine eigene Spalte zeigt die Meter bis zur nächsten
+  Zeitmessung.
 - **Auswertung**: Warum-Panel, das die Form in ihre Faktoren zerlegt,
   Splitzeiten-Matrix und ein Rennbericht in einem Satz je Fahrer.
 - **Editoren** für Strecken, Fahrer, Teams, Saisonkalender und Karriere.
@@ -60,39 +65,63 @@ dabei zu.
 
 - Kommandozeile für Pool, Rennen, Ergebnis, Saison und Kalibrierung.
 - **Kalibrierungsbericht** ([`docs/KALIBRIERUNG.md`](docs/KALIBRIERUNG.md)):
-  Dauerbänder, DNF-Korridore, Siegverteilung nach Archetyp und eine
-  Matrix, was jedes Attribut auf jeder Strecke in Sekunden wert ist.
-- 517 Tests, darunter zwei Golden Master (90 Minuten und 40 Stunden).
+  Erwartete Dauer, DNF-Korridore, Platzierung nach Archetyp mit
+  Standardfehler und eine Matrix, was jedes Attribut auf jeder Strecke
+  in Sekunden wert ist.
+- 525 Tests, darunter zwei Golden Master (90 Minuten und 40 Stunden).
 
 ### Vier Strecken liegen bei
 
 Alle synthetisch erzeugt, damit das Programm ohne Netz und ohne fremde
 Kartendaten läuft:
 
-| Strecke | Distanz | Höhenmeter | je km |
-|---|---|---|---|
-| Voralpen-Runde | 300 km | 2674 m | 8,9 m |
-| Hochgebirgs-Marathon | 507 km | 6790 m | 13,4 m |
-| Flachetappe Nordsee | 466 km | 1075 m | 2,3 m |
-| Nordroute Langstrecke | 1230 km | 6120 m | 5,0 m |
+| Strecke | Distanz | Höhenmeter | je km | Oberfläche |
+|---|---|---|---|---|
+| Voralpen-Runde | 300 km | 2674 m | 8,9 m | 37 % Schotter, rauer Belag, Pflaster |
+| Hochgebirgs-Marathon | 507 km | 6790 m | 13,4 m | Asphalt |
+| Flachetappe Nordsee | 466 km | 1075 m | 2,3 m | Asphalt |
+| Nordroute Langstrecke | 1230 km | 6120 m | 5,0 m | Asphalt |
 
 ### Bekannte Einschränkungen
 
 Diese Punkte sind gemessen, nicht vermutet — sie stehen so im
 Kalibrierungsbericht:
 
-- Der **Zeitfahr-Spezialist** gewinnt auf keiner Strecke, auch nicht auf
-  der flachen. Ein Teil seines Potenzial-Budgets steckt in Attributen,
-  die messbar nichts bewirken.
-- Der **Draufgänger** holt überproportional viele Siege. Das ist zum
-  Teil gewollt (hohe Streuung gehört zum Archetyp), zum Teil noch nicht
-  ausbalanciert.
-- Fünf Attribute sind **in keinem Lauf messbar**:
-  `spritzigkeit`, `mentale_widerstandsfaehigkeit`, `risikobereitschaft`,
-  `navigationssicherheit`, `materialpflege`. Bei
-  `risikobereitschaft` ist das Absicht — sie ist zweischneidig angelegt.
-  `oberflaechenkompetenz` wirkt nicht, weil keine Strecke Schotter kennt.
-- Die **Dauerbänder** hängen an der Distanzklasse. Eine flache
-  466-km-Strecke ist in 13 h gefahren, eine bergige 507-km-Strecke
-  braucht 18 h — beide gelten als „mittel", und das Band kann nicht
-  beides abdecken.
+- Die **Archetypen sind nicht ausbalanciert**, und zwar deutlicher als
+  die frühere Fassung dieser Liste behauptet hat. Gemessen mit 160
+  Fahrern über zwölf Rennen je Strecke (mittlere Platzierung, neutral
+  wäre 80,5):
+
+  | Archetyp | Flachetappe | Hochgebirge |
+  |---|---|---|
+  | Fettverbrenner | 46,7 | 44,0 |
+  | Kletterer | 66,9 | 49,2 |
+  | Zeitfahr-Spezialist | 75,2 | 85,9 |
+  | Diesel / Ultra-Maschine | 102,5 | 103,6 |
+
+  Der **Fettverbrenner** ist zu stark, weil die Ernährungsattribute die
+  Sensitivitätsmatrix anführen: `magenvertraeglichkeit` ist mit
+  413–969 s der größte Einzelwert der ganzen Tabelle. Der **Diesel**
+  ist mit Abstand zu schwach, der **Zeitfahr-Spezialist** liegt überall
+  unter dem Schnitt.
+
+- Vier Attribute sind **in keinem Lauf messbar**: `spritzigkeit`,
+  `mentale_widerstandsfaehigkeit`, `navigationssicherheit`,
+  `materialpflege`. Bei `risikobereitschaft` ist die Null Absicht — sie
+  ist zweischneidig angelegt, und der Bericht weist beide Seiten
+  getrennt aus.
+
+Zwei Punkte, die in einer früheren Fassung dieser Liste standen, sind
+inzwischen erledigt oder waren falsch:
+
+- „Der Draufgänger holt überproportional viele Siege" war ein
+  **Messfehler**. Er stammte aus einer Archetyp-Tabelle mit vier
+  Fahrern je Typ und sechs Rennen je Strecke — 24 Stichproben bei einer
+  Streuung von rund einem Viertel der Feldgröße. Mit ausreichender
+  Stichprobe liegt der Draufgänger bei 88,9 und 87,5, also klar
+  unterdurchschnittlich. Der Bericht weist seitdem Standardfehler aus
+  und hat die Siegspalte durch den Anteil im besten Zehntel ersetzt.
+- Die **Dauerbänder** hingen an der Distanzklasse, und ein Eimer von
+  400 bis 1200 Äquivalentkilometern umfasst Rennen von zwölf bis
+  fünfundvierzig Stunden. Das Band kommt jetzt stetig aus Distanz und
+  Höhenmetern.

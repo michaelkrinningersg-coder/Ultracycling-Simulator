@@ -349,6 +349,7 @@ def build_report(
     stamp: str,
     parameters: str,
     weather: tuple[Route, dict[str, list[cal.AttributeEffect]]] | None = None,
+    partial: bool = False,
 ) -> str:
     head = [
         "# Kalibrierung",
@@ -360,9 +361,23 @@ def build_report(
         f"Stand: {stamp} · {parameters}",
         "",
     ]
-    body = section_routes(summaries)
-    body += section_archetypes(archetypes)
-    body += section_sensitivity(routes, effects, weather[1] if weather else None)
+    if partial:
+        # Hinter den ganzen Absatz, nicht mitten hinein.
+        head[5:5] = [
+            "",
+            "> ⚠ **Teillauf.** Es wurden nur die unten stehenden Abschnitte",
+            "> gerechnet; die übrigen fehlen. Diese Datei ist zum Hinsehen",
+            "> während einer Balancing-Runde gedacht und **nicht** als Ersatz",
+            "> für den vollständigen Bericht.",
+            "",
+        ]
+    body: list[str] = []
+    if summaries:
+        body += section_routes(summaries)
+    if archetypes:
+        body += section_archetypes(archetypes)
+    if effects:
+        body += section_sensitivity(routes, effects, weather[1] if weather else None)
     if weather is not None:
         body += section_weather(*weather)
     return "\n".join(head + body).rstrip() + "\n"

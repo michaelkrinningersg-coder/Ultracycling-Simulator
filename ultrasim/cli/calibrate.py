@@ -35,6 +35,9 @@ from ..data.store import Store
 from ..geo.route import Route
 from . import use_safe_console
 
+#: Der eingecheckte Bericht. Ein Teillauf darf ihn nicht überschreiben.
+DEFAULT_OUT = Path("docs/KALIBRIERUNG.md")
+
 #: Reihenfolge der Strecken im Bericht: kurz, mittel, mittel-flach, lang.
 #:
 #: Zwei Strecken der Klasse „mittel" ist kein Versehen. Der
@@ -50,7 +53,27 @@ DEFAULT_ROUTES = (
 )
 
 
+#: Die vier Abschnitte des Berichts, einzeln anwählbar.
+SECTIONS = ("strecken", "archetypen", "sensitivitaet", "wetter")
+
+
 def run(args: argparse.Namespace) -> int:
+    want = set(args.only or SECTIONS)
+    unknown = want - set(SECTIONS)
+    if unknown:
+        print(f"Unbekannter Abschnitt: {', '.join(sorted(unknown))}", file=sys.stderr)
+        print(f"Möglich: {', '.join(SECTIONS)}", file=sys.stderr)
+        return 2
+    partial = want != set(SECTIONS)
+    if partial and args.out == DEFAULT_OUT:
+        print(
+            "Ein Teillauf darf den eingecheckten Bericht nicht überschreiben — "
+            "sonst verliert er stillschweigend die übrigen Abschnitte.\n"
+            f"Bitte ein eigenes Ziel angeben, etwa: --out {DEFAULT_OUT.parent}/teil.md",
+            file=sys.stderr,
+        )
+        return 2
+
     store = Store(args.data)
     routes = [store.load_route(name) for name in args.routes]
     seeds = list(range(args.seed, args.seed + args.runs))
@@ -64,20 +87,32 @@ def run(args: argparse.Namespace) -> int:
     effects: dict[str, list[cal.AttributeEffect]] = {}
 
     for route in routes:
-        print(f"{route.name}: {args.runs} Rennen à {args.riders} Fahrer …", flush=True)
-        summary = cal.route_summary(route, pool, teams, seeds)
-        summaries.append(summary)
+        # Die Streckenübersicht liefert nebenbei die Kopfzeile der
+        # Archetyp-Tabelle (Feldgröße, Läufe) — wer Archetypen will,
+        # braucht sie also mit. Sie ist mit Abstand der billigste
+        # Abschnitt, das fällt nicht ins Gewicht.
+        summary = None
+        if {"strecken", "archetypen"} & want:
+            print(f"{route.name}: {args.runs} Rennen à {args.riders} Fahrer …", flush=True)
+            summary = cal.route_summary(route, pool, teams, seeds)
+            if "strecken" in want:
+                summaries.append(summary)
 
-        print(f"{route.name}: Archetypen, {args.runs} Rennen à {len(arch_riders)} Fahrer …", flush=True)
-        archetypes.append((summary, cal.archetype_stats(route, arch_riders, arch_teams, seeds)))
+        if "archetypen" in want:
+            print(
+                f"{route.name}: Archetypen, {args.runs} Rennen à {len(arch_riders)} Fahrer …",
+                flush=True,
+            )
+            archetypes.append((summary, cal.archetype_stats(route, arch_riders, arch_teams, seeds)))
 
-        base = pool[: args.base_riders]
-        print(
-            f"{route.name}: Sensitivität, {len(sens_seeds)} × "
-            f"{len(base) * (2 * len(ATTRIBUTES) + 1)} Starter …",
-            flush=True,
-        )
-        effects[route.name] = cal.attribute_sensitivity(route, base, teams, sens_seeds)
+        if "sensitivitaet" in want:
+            base = pool[: args.base_riders]
+            print(
+                f"{route.name}: Sensitivität, {len(sens_seeds)} × "
+                f"{len(base) * (2 * len(ATTRIBUTES) + 1)} Starter …",
+                flush=True,
+            )
+            effects[route.name] = cal.attribute_sensitivity(route, base, teams, sens_seeds)
 
     # Die Wetterläufe brauchen nur eine Strecke, aber nicht irgendeine:
     # Es muss die **kürzeste** sein, und das war ein Lehrgeld.
@@ -101,7 +136,7 @@ def run(args: argparse.Namespace) -> int:
     # Wirkung — aber Wirkung, die man messen kann, ist mehr wert als
     # Wirkung, die im Chaos verschwindet.
     weather: tuple[Route, dict[str, list[cal.AttributeEffect]]] | None = None
-    if args.weather and len(routes) > 1:
+    if args.weather and "wetter" in want and len(routes) > 1:
         wx_route = min(routes, key=lambda r: r.distance_m)
         wx_effects: dict[str, list[cal.AttributeEffect]] = {}
         wx_teams, wx_base = generate_pool(args.weather_riders, seed=args.pool_seed + 7)
@@ -117,12 +152,22 @@ def run(args: argparse.Namespace) -> int:
             )
         weather = (wx_route, wx_effects)
 
-    parameters = (
-        f"{args.runs} Rennen je Strecke · Feld {args.riders} Fahrer · "
-        f"Archetypen {args.per_archetype} je Typ mit gleichem Potenzial · "
-        f"Sensitivität {len(sens_seeds)} × {args.base_riders} Grundfahrer, "
-        f"±{cal.DEFAULT_DELTA:.0f} Punkte"
-    )
+    # Nur nennen, was tatsächlich gerechnet wurde: Eine Kopfzeile, die
+    # bei einem Teillauf mit Archetyp-Parametern prahlt, ohne dass die
+    # Tabelle darunter steht, ist schlimmer als gar keine.
+    bits = []
+    if summaries:
+        bits.append(f"{args.runs} Rennen je Strecke · Feld {args.riders} Fahrer")
+    if archetypes:
+        bits.append(f"Archetypen {args.per_archetype} je Typ mit gleichem Potenzial")
+    if effects:
+        bits.append(
+            f"Sensitivität {len(sens_seeds)} × {args.base_riders} Grundfahrer, "
+            f"±{cal.DEFAULT_DELTA:.0f} Punkte"
+        )
+    if weather is not None:
+        bits.append(f"Wetter {args.weather_riders} Grundfahrer")
+    parameters = " · ".join(bits)
     report = build_report(
         summaries,
         archetypes,
@@ -131,6 +176,7 @@ def run(args: argparse.Namespace) -> int:
         args.stamp or date.today().isoformat(),
         parameters,
         weather,
+        partial=partial,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(report, encoding="utf-8")
@@ -142,7 +188,20 @@ def main(argv: list[str] | None = None) -> int:
     use_safe_console()
     parser = argparse.ArgumentParser(prog="python -m ultrasim.cli.calibrate", description=__doc__)
     parser.add_argument("--data", type=Path, default=Path("data"))
-    parser.add_argument("--out", type=Path, default=Path("docs/KALIBRIERUNG.md"))
+    parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--only",
+        action="append",
+        default=None,
+        metavar="ABSCHNITT",
+        help=(
+            "nur diesen Abschnitt rechnen (mehrfach angebbar): "
+            + ", ".join(SECTIONS)
+            + ". Spart in einer Balancing-Runde die Abschnitte, die sich "
+            "gar nicht ändern können — voller Stichprobenumfang, nur eben "
+            "nicht alles. Schreibt nicht in den eingecheckten Bericht."
+        ),
+    )
     parser.add_argument("--routes", nargs="+", default=list(DEFAULT_ROUTES))
     parser.add_argument("--runs", type=int, default=6, help="Rennen je Strecke")
     parser.add_argument("--riders", type=int, default=40)

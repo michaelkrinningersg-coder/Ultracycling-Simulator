@@ -18,6 +18,16 @@ from ultrasim.core.events import DECISION, format_event
 from ultrasim.core.rider import generate_pool
 from ultrasim.core.strategy import build_plan, planned_intake_g_h
 
+#: Dieses Modul rechnet ganze Rennen. Der Marker trennt die innere
+#: Schleife beim Tippen von der Absicherung vor dem Commit:
+#:
+#:     pytest -q -m "not slow"    # rund 30 s
+#:     pytest -q                  # rund 4 min, so wie CI
+#:
+#: Er stand lange an einem einzigen Test und hat damit 28 von 252
+#: Sekunden gespart — ein Versprechen ohne Deckung.
+pytestmark = pytest.mark.slow
+
 
 def _state(n: int = 1) -> np.ndarray:
     return np.zeros((n, len(tac.RULES)), dtype=bool)

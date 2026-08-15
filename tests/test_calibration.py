@@ -396,3 +396,34 @@ def test_the_archetype_table_reports_its_own_uncertainty(route, small_pool):
     for st in stats:
         assert st.rank_se == st.rank_se, "ohne Standardfehler ist die Zeile nicht lesbar"
         assert 0.0 <= st.top_decile_pct <= 100.0
+
+
+# ----------------------------------------------------------------------
+# Teilläufe des Berichts
+# ----------------------------------------------------------------------
+def test_a_partial_run_refuses_to_overwrite_the_checked_in_report(capsys):
+    """Sonst verlöre der Bericht stillschweigend seine übrigen Abschnitte."""
+    from ultrasim.cli import calibrate
+
+    code = calibrate.main(["--only", "archetypen"])
+    assert code == 2
+    assert "überschreiben" in capsys.readouterr().err
+
+
+def test_an_unknown_section_is_named(capsys):
+    from ultrasim.cli import calibrate
+
+    assert calibrate.main(["--only", "gibtsnicht", "--out", "/tmp/x.md"]) == 2
+    err = capsys.readouterr().err
+    assert "gibtsnicht" in err
+    assert "archetypen" in err, "die möglichen Abschnitte gehören in die Fehlermeldung"
+
+
+def test_a_partial_report_says_so_and_omits_what_it_did_not_measure():
+    """Der Warnhinweis ist die halbe Miete — die weggelassene Zeile die andere."""
+    full = report.build_report([], [], [], {}, "2026-01-01", "x", None)
+    part = report.build_report([], [], [], {}, "2026-01-01", "x", None, partial=True)
+    assert "Teillauf" not in full
+    assert "Teillauf" in part
+    # Ohne Messwerte steht auch keine Tabelle da.
+    assert "## 2 · Archetypen" not in part

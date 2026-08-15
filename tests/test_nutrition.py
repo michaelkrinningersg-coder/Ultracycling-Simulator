@@ -11,6 +11,16 @@ from ultrasim.core.engine import RaceConfig, RiderStreams, simulate_race
 from ultrasim.core.events import BONK, STOP_END, STOP_START
 from ultrasim.core.rider import Rider, generate_pool, generate_rider
 
+#: Dieses Modul rechnet ganze Rennen. Der Marker trennt die innere
+#: Schleife beim Tippen von der Absicherung vor dem Commit:
+#:
+#:     pytest -q -m "not slow"    # rund 30 s
+#:     pytest -q                  # rund 4 min, so wie CI
+#:
+#: Er stand lange an einem einzigen Test und hat damit 28 von 252
+#: Sekunden gespart — ein Versprechen ohne Deckung.
+pytestmark = pytest.mark.slow
+
 
 # ----------------------------------------------------------------------
 # Substrat und Speicher

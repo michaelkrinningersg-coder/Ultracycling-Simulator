@@ -46,7 +46,7 @@ hier umgesetzt.
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 517 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 534 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -898,11 +898,43 @@ praktisch dasselbe wie eines mit 41.
 
 ## Tests
 
+### Drei Stufen, nicht eine
+
+Die Werkzeuge sind gestuft, und zwar seit einer Sitzung, in der genau
+das gefehlt hat: Der Kalibrierungsbericht wurde viermal gestartet und
+dreimal von der nächsten Balancing-Änderung entwertet, bevor er fertig
+war. Nicht die Werkzeuge waren zu viel — es gab nur eine Stufe.
+
+| Wann | Was | Dauer |
+|---|---|---|
+| beim Tippen | `ruff check ultrasim tools tests` und `pytest -q -m "not slow"` | **~55 s** |
+| vor dem Commit | `pytest -q` — dasselbe, was CI rechnet | ~4 min |
+| vor einem Balancing-Commit | `python -m ultrasim.cli.calibrate` | ~1 h |
+
 ```bash
-pytest -q                    # 517 Tests, rund 190 s
-pytest -q -m "not slow"      # ohne den Ultra-Golden-Master, rund 140 s
+pytest -q                    # 534 Tests, rund 250 s
+pytest -q -m "not slow"      # 318 Tests ohne Rennsimulation, rund 55 s
 ruff check ultrasim tools tests
 ```
+
+Der `slow`-Marker sitzt an den sieben Modulen, die ganze Rennen rechnen
+(Zwischenfälle, Taktik, Ernährung, Wetter, Schlaf, Saison, Engine) und
+am langen Golden Master. Er stand lange an einem *einzigen* Test und hat
+damit 28 von 252 Sekunden gespart — ein Versprechen ohne Deckung.
+
+**Der Bericht lässt sich abschnittweise rechnen.** Wer nur an den
+Archetypen dreht, braucht Abschnitt 2 und nicht die Attributmatrix:
+
+```bash
+python -m ultrasim.cli.calibrate --only archetypen --out docs/teil.md
+```
+
+Voller Stichprobenumfang, nur eben nicht alles. Bewusst *kein*
+Schnellmodus mit kleinerer Stichprobe — genau der hat in derselben
+Sitzung zweimal zu einem Befund geführt, den die größere Stichprobe
+hinterher umgedreht hat. Ein Teillauf weigert sich außerdem, den
+eingecheckten Bericht zu überschreiben, und trägt oben einen
+Warnhinweis.
 
 Die Tests halten vor allem die Zusicherungen fest, auf denen alles
 andere ruht: dass die Glättung wirkt, dass gleicher Seed gleiches

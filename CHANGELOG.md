@@ -3,6 +3,40 @@
 Das Format folgt lose [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 die Versionierung [SemVer](https://semver.org/lang/de/).
 
+## Unveröffentlicht
+
+### Hinzugefügt
+
+- **Live gerechnete Rennen** — eine bewusste Abweichung von Abschnitt
+  8.2, der Vorberechnung mit anschließender Wiedergabe vorsieht. Bisher
+  war die Reihenfolge rechnen → speichern → abspielen; ein Ultra mit 250
+  Fahrern rechnete knapp eine Minute, bevor das erste Bild stand.
+  `simulate_race` ist jetzt ein Generator, und die Wiedergabeuhr zieht
+  ihn hinter sich her. „Übertragung starten“ auf der Übersicht legt ein
+  Rennen an, das noch gar nicht existiert. Die Wiedergabe bleibt, was
+  sie war — der alte Weg über ein fertiges Rennen funktioniert
+  unverändert.
+  - Alle sieben Zeitrafferstufen bleiben. Die Rechenzeit war nie das
+    Problem: gemessen 1900- bis 5400-fache Echtzeit gegen höchstens
+    1000-fachen Zeitraffer.
+  - Der Zwischenstand wird laufend gesichert — Platzierungen,
+    Splitzeiten und Telemetrie bis zu diesem Punkt, unter derselben
+    Renn-ID und im selben Format wie ein fertig gerechnetes Rennen. Es
+    gibt kein zweites Dateiformat für halbe Rennen.
+  - Dass Live und Stapel dasselbe Rennen liefern, prüft
+    `tests/test_live.py` auf die Hundertstelsekunde. Hinge das Ergebnis
+    daran, ob jemand zugeschaut hat, wäre der Seed keine
+    Reproduzierbarkeit mehr, sondern eine Behauptung.
+
+### Geändert
+
+- Alle JSON-Stammdaten werden **unteilbar** geschrieben (erst daneben,
+  dann umbenannt) — Rennen, Pool, Saison und Karriere. Seit ein Rennen
+  auch während des Laufens gespeichert wird, überschneidet sich das
+  Schreiben mit dem Lesen; bei Pool und Karriere tat es das schon
+  vorher, weil der Arbeiterthread schreibt, während der Anfragethread
+  liest. Genau daran ist im CI einmal ein Test gescheitert.
+
 ## v0.1.0 — 2026-08-14
 
 Die erste veröffentlichte Fassung. Sie deckt den Umfang ab, den

@@ -4,16 +4,39 @@
 {% block body %}
 <div class="page">
 
+  {% if routes and pool_exists %}
+  <div class="panel">
+    <div class="panel-title"><span>Live rechnen</span><span class="faint">Abweichung von Abschnitt 8.2</span></div>
+    <p class="dim" style="max-width:70ch;margin-bottom:.6rem">
+      Ein Rennen, das erst entsteht, während man zusieht: Es wird nichts
+      vorberechnet, der erste Tick fällt beim Aufruf der Seite. Zeitraffer,
+      Pause und Rücksprung funktionieren wie gewohnt — nur ein Sprung nach
+      vorn kostet die Rechenzeit, die er überspringt. Der Zwischenstand
+      wird laufend gesichert, mit Platzierungen und Telemetrie.
+    </p>
+    <form method="post" action="/race/live" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+      <select name="route_id" required>
+        {% for route in routes %}
+        <option value="{{ route.id }}">{{ route.name }} · {{ '%.0f'|format(route.distance_km) }} km</option>
+        {% endfor %}
+      </select>
+      <label class="dim">Starter <input type="number" name="riders" value="40" min="2" max="250" style="width:5rem"></label>
+      <label class="dim">Seed <input type="number" name="seed" value="42" style="width:6rem"></label>
+      <button class="primary" type="submit">Übertragung starten</button>
+    </form>
+  </div>
+  {% endif %}
+
   <div class="panel">
     <div class="panel-title"><span>Gerechnete Rennen</span><span class="faint">{{ races|length }}</span></div>
     {% if races %}
     <div class="cards">
       {% for race in races %}
       <div class="card">
-        <h2>{{ race.name }}</h2>
+        <h2>{{ race.name }}{% if race.live %} <span class="badge running">live</span>{% endif %}</h2>
         <div class="meta">
           {{ race.route_name }} · {{ race.n_entries }} Starter · Seed {{ race.seed }}<br>
-          Siegerzeit {{ race.winner_time_s|hms }}
+          {% if race.live %}läuft gerade{% else %}Siegerzeit {{ race.winner_time_s|hms }}{% endif %}
         </div>
         <div class="actions">
           <a href="/race/{{ race.race_id }}"><button class="primary">Live ansehen</button></a>
@@ -89,7 +112,8 @@ python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</
       Verpflegung, Glykogen und Schlaf, Wetter, Wind und Tag-Nacht-Zyklus,
       den Ereigniskatalog samt Aufgabe sowie Saisonkalender, Wertung und
       Fahrerentwicklung — dazu die Live-Telemetrie mit Höhenprofil und
-      Playback bis 1000×.
+      Playback bis 1000×, wahlweise über ein fertig gerechnetes Rennen
+      oder über eines, das erst beim Zusehen entsteht.
       Dazu die Editoren: <a href="/routes">Strecken</a> mit GPX-Import und
       verschiebbaren Splits, <a href="/pool">Fahrer und Teams</a>, und der
       <a href="/seasons">Kalender</a>.

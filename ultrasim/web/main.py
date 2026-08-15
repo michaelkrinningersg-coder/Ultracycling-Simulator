@@ -27,6 +27,7 @@ from ..core.engine import RaceResult
 from ..data.store import Store
 from ..geo.route import Route
 from .jobs import JobRunner
+from .livesim import LiveRegistry, LiveRoom
 from .playback import PlaybackRegistry, RaceView
 
 BASE_DIR = Path(__file__).parent
@@ -39,6 +40,10 @@ class AppState:
         self.store = Store(data_root)
         self.playback = PlaybackRegistry()
         self.jobs = JobRunner()
+        #: Rennen, die gerade entstehen (Abschnitt 8.2). Sie liegen vor
+        #: dem Plattencache: Solange ein Rennen live läuft, ist der
+        #: Speicher der Wahrheitsstand und die Datei nur die Sicherung.
+        self.live = LiveRegistry()
         #: Importierte, aber noch nicht gespeicherte Strecken (M5b).
         #: Bewusst nur im Speicher: Ein Entwurf ist eine Vorschau, keine
         #: Datenlage. Wer den Server neu startet, lädt die GPX-Datei neu –
@@ -54,7 +59,13 @@ class AppState:
         Telemetrie eines Ultra-Rennens sind zweistellige Megabyte – die
         bei jedem Frame neu von der Platte zu lesen wäre grober Unfug,
         drei Rennen gleichzeitig im Speicher zu halten aber auch.
+
+        Ein live laufendes Rennen sticht den Plattencache: Auf der Platte
+        liegt bestenfalls der Stand der letzten Sicherung.
         """
+        room = self.live.get(race_id)
+        if room is not None:
+            return room.bundle()
         if race_id in self._views:
             self._views.move_to_end(race_id)
             return self._views[race_id]
@@ -68,6 +79,18 @@ class AppState:
 
     def invalidate(self, race_id: str) -> None:
         self._views.pop(race_id, None)
+
+    def advance(self, race_id: str, t_wall: float) -> LiveRoom | None:
+        """Ein laufendes Rennen bis zur Wanduhrzeit nachrechnen.
+
+        Für ein gespeichertes Rennen ein No-op — die Aufrufer in
+        ``api.py`` müssen deshalb nicht wissen, welche Art Rennen sie
+        gerade bedienen.
+        """
+        room = self.live.get(race_id)
+        if room is not None:
+            room.advance(t_wall)
+        return room
 
     def add_draft(self, token: str, route: Route, report: object) -> None:
         self.drafts[token] = (route, report)

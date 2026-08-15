@@ -198,6 +198,12 @@ td { padding: .18rem .35rem; border-bottom: 1px solid #1a2131; }
 .badge.kurz { border-color: #3f8f5a; color: #7fd6a0; }
 .badge.mittel { border-color: #b48a2a; color: var(--accent); }
 .badge.ultra { border-color: #b0453f; color: #ff8f88; }
+/* Ein Rennen, das gerade gerechnet wird. Der Punkt pulst, weil ein
+   statisches "live" nach Beschriftung aussieht und nicht nach Zustand. */
+.badge.running { border-color: #b0453f; color: #ff8f88; letter-spacing: .06em; text-transform: uppercase; }
+.badge.running::before { content: "●"; margin-right: .25rem; animation: livepulse 1.6s ease-in-out infinite; }
+@keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .badge.running::before { animation: none; } }
 
 .spoiler { border: 1px dashed #4a3a12; background: #1c1608; color: var(--accent); padding: .4rem .6rem; border-radius: var(--radius); font-size: .8rem; }
 

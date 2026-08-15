@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ...core import narrative
+from ...core.engine import RaceConfig
 from ...core.rider import ACTIVE_ATTRIBUTES, ATTRIBUTE_LABELS, ATTRIBUTES
+from ..livesim import LiveRoom
 
 router = APIRouter()
 
@@ -19,21 +21,89 @@ def _tpl(request: Request):
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
     state = request.app.state.ultrasim
+    races = state.store.list_races()
+    # Ein laufendes Rennen sticht seine Datei: Auf der Platte steht der
+    # Stand der letzten Sicherung, im Speicher der von jetzt.
+    rooms = {race_id: state.live.get(race_id) for race_id in state.live.ids()}
+    races = [r for r in races if r["race_id"] not in rooms]
+    races = [room.summary() for room in rooms.values() if room] + races
     return _tpl(request).TemplateResponse(
         request,
         "index.html",
         {
             "routes": state.store.list_routes(),
-            "races": state.store.list_races(),
+            "races": races,
             "seasons": state.store.list_seasons(),
             "pool_exists": state.store.pool_exists(),
         },
     )
 
 
+@router.post("/race/live")
+def race_live_start(
+    request: Request,
+    route_id: str = Form(...),
+    riders: int = Form(40),
+    seed: int = Form(42),
+) -> RedirectResponse:
+    """Ein Rennen starten, das erst beim Zusehen entsteht (Abschnitt 8.2).
+
+    Der Unterschied zum Kalenderrennen ist nicht das Ergebnis — dasselbe
+    Feld auf derselben Strecke mit demselben Seed fährt dasselbe Rennen,
+    das ist die tragende Zusicherung von ``core.live``. Der Unterschied
+    ist, wann gerechnet wird: hier gar nicht. Der erste Tick fällt,
+    wenn jemand hinschaut.
+    """
+    state = request.app.state.ultrasim
+    if not state.store.pool_exists():
+        raise HTTPException(400, "Kein Fahrerpool vorhanden — bitte zuerst Fahrer anlegen.")
+    route = state.store.load_route(route_id)
+    teams, pool = state.store.load_pool()
+    n = int(np.clip(riders, 2, len(pool)))
+    field = sorted(pool, key=lambda r: -r.potential)[:n]
+
+    race_id = _free_race_id(state, f"{route_id}-live-{int(seed)}")
+    room = LiveRoom.start(
+        race_id=race_id,
+        route_id=route_id,
+        route=route,
+        riders=field,
+        teams=teams,
+        config=RaceConfig(seed=int(seed), name=f"{route.name} – live"),
+        store=state.store,
+    )
+    state.live.add(room)
+    return RedirectResponse(f"/race/{race_id}", status_code=303)
+
+
+def _free_race_id(state, base: str) -> str:
+    """Einen noch unbelegten Schlüssel finden.
+
+    Zweimal dasselbe live zu starten ist keine Wiederholung, sondern
+    eine zweite Übertragung — die erste darf davon nichts merken.
+    Belegt ist ein Schlüssel deshalb auch dann, wenn dazu noch keine
+    Datei existiert: Ein laufendes Rennen, dessen erste Sicherung noch
+    aussteht, würde sonst stillschweigend ersetzt.
+    """
+
+    def taken(key: str) -> bool:
+        return (state.store.race_dir(key) / "race.json").exists() or state.live.get(
+            key
+        ) is not None
+
+    if not taken(base):
+        return base
+    for i in range(2, 100):
+        if not taken(f"{base}-{i}"):
+            return f"{base}-{i}"
+    return f"{base}-x"
+
+
 @router.get("/race/{race_id}", response_class=HTMLResponse)
 def race_live(request: Request, race_id: str) -> HTMLResponse:
-    result, route, _ = request.app.state.ultrasim.view(race_id)
+    state = request.app.state.ultrasim
+    result, route, _ = state.view(race_id)
+    room = state.live.get(race_id)
     return _tpl(request).TemplateResponse(
         request,
         "race.html",
@@ -44,6 +114,11 @@ def race_live(request: Request, race_id: str) -> HTMLResponse:
             "n_entries": len(result.entries),
             "weather": result.weather,
             "start_interval_s": result.config.resolved_start_interval(route.distance_class),
+            #: Wird das Rennen gerade gerechnet? Die Oberfläche sagt das
+            #: an, weil es zwei Dinge ändert, die der Zuschauer merkt:
+            #: Ein Sprung nach vorn kostet Rechenzeit, und der
+            #: Zeitstrahl ist bis zum Ziel nur geschätzt.
+            "is_live": room is not None and not room.finished,
         },
     )
 

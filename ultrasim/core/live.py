@@ -1,4 +1,4 @@
-"""Ein Rennen live rechnen statt vorab (Abschnitt 8.1).
+"""Ein Rennen live rechnen statt vorab (Abschnitt 8.2).
 
 Bis hierher lief jedes Rennen einmal komplett durch, wurde als
 Telemetrie auf die Platte geschrieben und danach abgespielt. Das ist
@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ..geo.route import Route
-from .engine import RaceConfig, RaceResult, run_race
+from .engine import LiveSnapshot, RaceConfig, RaceResult, run_race
 from .rider import Rider, Team
 
 
@@ -57,6 +57,9 @@ class LiveRace:
     #: Steht, sobald das Rennen durch ist — dann ist ``advance_to`` ein
     #: No-op und alles liegt vor wie bei einem gespeicherten Rennen.
     result: RaceResult | None = None
+    #: Das Fenster in den laufenden Lauf. Steht ab dem ersten Halt, also
+    #: nach dem allerersten ``advance_to``.
+    snapshot: LiveSnapshot | None = None
 
     _gen: Any = None
 
@@ -66,6 +69,17 @@ class LiveRace:
     @property
     def finished(self) -> bool:
         return self.result is not None
+
+    def current(self) -> RaceResult | None:
+        """Der Stand von jetzt als ``RaceResult``.
+
+        Nach dem Ziel das echte Ergebnis, davor ein Zwischenstand in
+        derselben Form. Wer damit arbeitet, muss nicht wissen, welcher
+        von beiden Fällen gerade vorliegt — genau das ist der Zweck.
+        """
+        if self.result is not None:
+            return self.result
+        return self.snapshot.result() if self.snapshot is not None else None
 
     def advance_to(self, t_s: float) -> float:
         """Bis mindestens zur Rennsekunde ``t_s`` rechnen.
@@ -78,7 +92,8 @@ class LiveRace:
             return self.sim_t
         try:
             while self.sim_t < t_s:
-                self.sim_t = float(next(self._gen))
+                self.snapshot = next(self._gen)
+                self.sim_t = self.snapshot.sim_t
         except StopIteration as stop:
             self.result = stop.value
             self._gen = None

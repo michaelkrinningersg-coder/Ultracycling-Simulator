@@ -394,6 +394,159 @@ class RiderStreams:
 # ----------------------------------------------------------------------
 # Simulation
 # ----------------------------------------------------------------------
+@dataclass
+class LiveSnapshot:
+    """Fenster in ein noch laufendes Rennen.
+
+    Der Generator gibt dieses Objekt bei jedem Halt heraus — dasselbe
+    Objekt, nicht jedes Mal ein neues. Was darin steht, ist überwiegend
+    eine **Referenz** auf die Arbeitsdaten der Engine: Der
+    Telemetriepuffer, die Ereignisliste, ``split_times``, ``finish_t``
+    und ``state`` werden indexweise beschrieben und füllen sich damit
+    von selbst weiter, während gerechnet wird.
+
+    Drei Arrays kann man so nicht durchreichen: ``dist``, ``give_up``
+    und ``work_j`` bindet die Tickschleife mit ``np.where`` jedes Mal
+    neu, eine einmal genommene Referenz zeigte danach auf den Stand von
+    vorhin. Sie werden deshalb am Haltepunkt frisch gesetzt — genau wie
+    ``n_samples`` und ``sim_t``, die schlichte Zahlen sind.
+
+    Aus alldem baut ``result()`` ein ``RaceResult``, das aussieht wie
+    das eines fertig gerechneten Rennens. Die Leseschicht der
+    Oberfläche muss deshalb nicht wissen, ob sie ein gespeichertes oder
+    ein laufendes Rennen vor sich hat.
+    """
+
+    #: Die zehn Telemetriekanäle unter ihren ``Telemetry``-Namen. Ein
+    #: Dict statt zehn Feldern, weil ``_grow`` die Puffer verdoppelt und
+    #: dabei neu bindet — die Engine schreibt den neuen Stand hier
+    #: hinein, und wer die Referenz auf das Dict hält, sieht ihn.
+    buffers: dict[str, np.ndarray]
+    factor_buffers: dict[str, np.ndarray]
+    sample_dt_s: int
+    events: list[RaceEvent]
+    split_times_s: np.ndarray
+    finish_t: np.ndarray
+    state: np.ndarray
+    lost_s: np.ndarray
+    dnf_reason: list[str]
+    carry_j: np.ndarray
+    freshness: np.ndarray
+    riders: list[Rider]
+    teams: list[Team]
+    plans: list[Any]
+    conditions: Any
+    weather: Any
+    route_name: str
+    config: RaceConfig
+    #: (entry_id, rider_id, bib, start_offset_s) — steht vor dem Start fest.
+    starters: list[tuple[int, int, int, float]]
+    season_form: np.ndarray
+    day_form: np.ndarray
+    target_if: np.ndarray
+
+    # -- am Haltepunkt nachgezogen ------------------------------------
+    #: Bis hierher ist gerechnet, in Rennsekunden ab dem eigenen Start.
+    sim_t: float = 0.0
+    #: So viele Telemetriespalten sind gefüllt.
+    n_samples: int = 0
+    dist: np.ndarray | None = None
+    give_up: np.ndarray | None = None
+    work_j: np.ndarray | None = None
+
+    # ------------------------------------------------------------------
+    @property
+    def telemetry(self) -> Telemetry:
+        """Die bisher aufgezeichnete Telemetrie — als Sicht, nicht als Kopie.
+
+        Bei 250 Fahrern sind die Puffer zweistellige Megabyte. Sie für
+        jedes Bild zu kopieren wäre der teuerste Teil der ganzen
+        Live-Wiedergabe, und er wäre umsonst: Die Engine schreibt immer
+        in Spalte ``n_samples``, also rechts neben allem, was diese
+        Sicht zeigt.
+        """
+        end = self.n_samples
+        return Telemetry(
+            sample_dt_s=self.sample_dt_s,
+            dist_m=self.buffers["dist_m"][:, :end],
+            v_cms=self.buffers["v_cms"][:, :end],
+            power_w=self.buffers["power_w"][:, :end],
+            form_pct=self.buffers["form_pct"][:, :end],
+            wprime_pct=self.buffers["wprime_pct"][:, :end],
+            glyco_pct=self.buffers["glyco_pct"][:, :end],
+            sleep_pct=self.buffers["sleep_pct"][:, :end],
+            hydration_pct=self.buffers["hydration_pct"][:, :end],
+            bike=self.buffers["bike"][:, :end],
+            state=self.buffers["state"][:, :end],
+            factors={key: buf[:, :end] for key, buf in self.factor_buffers.items()},
+        )
+
+    def entries(self) -> list[RaceEntry]:
+        """Die Starterliste mit dem Stand von jetzt.
+
+        Wer noch unterwegs ist, steht auf ``RUN`` — das ist der einzige
+        Unterschied zur Liste am Rennende. Die Platzierung wird über
+        dieselbe Funktion vergeben wie dort, mit dem bisher besten
+        Zielergebnis als Bezug. Sie ist damit vorläufig: Ein später
+        gestarteter Fahrer kann die Bestzeit noch unterbieten und alles
+        darunter um einen Platz nach hinten schieben. Das ist beim
+        Einzelzeitfahren keine Ungenauigkeit, sondern das Format.
+        """
+        dist = self.dist if self.dist is not None else np.zeros(len(self.starters))
+        give_up = self.give_up if self.give_up is not None else np.zeros(len(self.starters))
+        work_j = self.work_j if self.work_j is not None else self.carry_j
+        out = [
+            RaceEntry(
+                entry_id=i,
+                rider_id=rider_id,
+                bib=bib,
+                start_offset_s=offset,
+                season_form=float(self.season_form[i]),
+                day_form=float(self.day_form[i]),
+                target_if=float(self.target_if[i]),
+                finish_time_s=(
+                    None if np.isnan(self.finish_t[i]) else float(self.finish_t[i])
+                ),
+                status=_live_status(int(self.state[i])),
+                notes=[note for _, note in self.plans[i].notes],
+                dnf_dist_m=None if self.state[i] != STATE_DNF else float(dist[i]),
+                dnf_reason="" if self.state[i] != STATE_DNF else self.dnf_reason[i],
+                lost_s=float(self.lost_s[i]),
+                give_up_score=float(give_up[i]),
+                work_kj=float(work_j[i] - self.carry_j[i]) / 1000.0,
+                freshness=float(self.freshness[i]),
+            )
+            for i, rider_id, bib, offset in self.starters
+        ]
+        _assign_ranks(out, self.config.time_limit_factor)
+        return out
+
+    def result(self) -> RaceResult:
+        """Zwischenstand in der Form eines fertigen Rennens."""
+        return RaceResult(
+            config=self.config,
+            route_name=self.route_name,
+            entries=self.entries(),
+            riders=self.riders,
+            teams=self.teams,
+            split_times_s=self.split_times_s,
+            split_ranks=_split_ranks(self.split_times_s),
+            telemetry=self.telemetry,
+            events=sorted(self.events, key=lambda e: (e.t_s, e.entry_id)),
+            plans=self.plans,
+            conditions=list(self.conditions.records),
+            weather=self.weather,
+        )
+
+
+def _live_status(state: int) -> str:
+    if state == STATE_FINISHED:
+        return "FIN"
+    if state == STATE_DNF:
+        return "DNF"
+    return "RUN"
+
+
 #: Nach so vielen Ticks haelt ``run_race`` an und meldet die erreichte
 #: Rennzeit. 600 Simulationssekunden sind bei 1000-fachem Zeitraffer
 #: 0,6 Sekunden Anzeige — fein genug, um die Wiedergabe zu fuettern, und
@@ -407,7 +560,7 @@ def run_race(
     teams: Iterable[Team],
     config: RaceConfig | None = None,
     progress: Any = None,
-) -> Iterator[float]:
+) -> Iterator[LiveSnapshot]:
     """Rechnet ein Rennen — anhaltbar.
 
     Der Generator meldet unterwegs die erreichte Rennzeit in Sekunden
@@ -746,6 +899,26 @@ def run_race(
     }
     n_samples = 0
 
+    def _buffer_map() -> dict[str, np.ndarray]:
+        """Die zehn Kanäle unter den Namen, die ``Telemetry`` benutzt.
+
+        Die Tickschleife arbeitet weiter mit den einzelnen Namen — sie
+        durch Dict-Zugriffe zu ersetzen wäre in der heißesten Schleife
+        des Programms der falsche Preis für etwas rein Kosmetisches.
+        """
+        return {
+            "dist_m": buf_dist,
+            "v_cms": buf_v,
+            "power_w": buf_p,
+            "form_pct": buf_form,
+            "wprime_pct": buf_wp,
+            "glyco_pct": buf_gly,
+            "sleep_pct": buf_slp,
+            "hydration_pct": buf_hyd,
+            "bike": buf_bike,
+            "state": buf_state,
+        }
+
     def _grow() -> None:
         # Bewusst nicht np.resize: das tilt die Daten in flacher
         # Reihenfolge und würde die Zeilen gegeneinander verschieben.
@@ -764,6 +937,10 @@ def run_race(
             bigger[:, :cap] = buf
             buf_factors[key] = bigger
         cap = new_cap
+        # Der Zuschauer hält eine Referenz auf das Dict, nicht auf die
+        # Arrays. Ohne diese Zeile sähe er ab der ersten Verdopplung den
+        # Stand von vorhin — und das Rennen bliebe für ihn stehen.
+        live.buffers.update(_buffer_map())
 
     def _record() -> None:
         nonlocal n_samples
@@ -955,6 +1132,34 @@ def run_race(
                     },
                 )
             )
+
+    live = LiveSnapshot(
+        buffers=_buffer_map(),
+        factor_buffers=buf_factors,
+        sample_dt_s=sample_dt,
+        events=events,
+        split_times_s=split_times,
+        finish_t=finish_t,
+        state=state,
+        lost_s=lost_s,
+        dnf_reason=dnf_reason,
+        carry_j=carry_j,
+        freshness=f_fresh,
+        riders=field_riders,
+        teams=list(team_map.values()),
+        plans=plans,
+        conditions=conditions,
+        weather=weather,
+        route_name=route.name,
+        config=config,
+        starters=[
+            (i, rider.id, bib, offset)
+            for i, (rider, bib, offset) in enumerate(start_list)
+        ],
+        season_form=f_season,
+        day_form=f_day,
+        target_if=target_if,
+    )
 
     t = 0.0
     for tick in range(max_ticks + 1):
@@ -1622,7 +1827,14 @@ def run_race(
         # der gemeldete Zeitpunkt einem abgeschlossenen Tick entspricht
         # und kein Halbzustand nach draussen gelangt.
         if tick % LIVE_CHUNK_TICKS == 0:
-            yield t
+            live.sim_t = t
+            live.n_samples = n_samples
+            # Die drei Arrays, die die Tickschleife neu bindet statt sie
+            # zu beschreiben. Alles andere trägt die Referenz.
+            live.dist = dist
+            live.give_up = give_up
+            live.work_j = work_j
+            yield live
 
     # Wer nach max_hours noch fährt, gilt als Ausfall.
     unfinished = np.flatnonzero(state < STATE_FINISHED)
@@ -1638,6 +1850,15 @@ def run_race(
     v[:] = 0.0
     power_now[:] = 0.0
     _record()
+
+    # Das Fenster ein letztes Mal nachziehen. Wer den Schnappschuss
+    # behält, statt auf das Ergebnis zu warten, soll dasselbe Rennen
+    # sehen und nicht den Stand vom vorletzten Halt.
+    live.sim_t = t
+    live.n_samples = n_samples
+    live.dist = dist
+    live.give_up = give_up
+    live.work_j = work_j
 
     telemetry = Telemetry(
         sample_dt_s=sample_dt,

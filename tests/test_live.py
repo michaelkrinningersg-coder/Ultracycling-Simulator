@@ -8,6 +8,7 @@ mehr, sondern eine Behauptung.
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from ultrasim.core.engine import RaceConfig, simulate_race
@@ -97,3 +98,88 @@ def test_live_and_batch_agree_on_the_event_stream(route, field):
     assert [(e.type, e.entry_id) for e in batch.events] == [
         (e.type, e.entry_id) for e in live.result.events
     ]
+
+
+# ----------------------------------------------------------------------
+# Der Zwischenstand
+# ----------------------------------------------------------------------
+def test_a_snapshot_looks_like_a_finished_race(route, field):
+    """Der Zwischenstand hat die Form eines Ergebnisses.
+
+    Darauf beruht die ganze Verdrahtung der Oberfläche: Board, Ticker
+    und Rangliste lesen ein ``RaceResult`` und dürfen nicht wissen
+    müssen, ob es fertig ist.
+    """
+    live = _live(route, field)
+    live.advance_to(1800.0)
+    mid = live.current()
+    assert mid is not None
+    assert len(mid.entries) == len(mid.riders)
+    assert mid.telemetry.n_entries == len(mid.entries)
+    assert mid.telemetry.n_samples > 0
+    assert mid.split_ranks.shape == mid.split_times_s.shape
+    # Wer noch unterwegs ist, steht auf RUN und hat keine Zielzeit.
+    running = [e for e in mid.entries if e.status == "RUN"]
+    assert running, "nach einer halben Stunde sollte noch jemand fahren"
+    assert all(e.finish_time_s is None and e.rank is None for e in running)
+
+
+def test_the_snapshot_only_shows_what_has_already_happened(route, field):
+    """Kein Blick nach vorn — auch nicht versehentlich.
+
+    Die Telemetrie ist eine Sicht auf die Puffer der Engine. Wäre sie
+    einen Tick zu breit geschnitten, stünden dort Nullen aus dem noch
+    unbeschriebenen Teil — und die Anzeige zeigte einen Fahrer, der auf
+    Kilometer null steht.
+    """
+    live = _live(route, field)
+    live.advance_to(1800.0)
+    mid = live.current()
+    tel = mid.telemetry
+    reached = tel.dist_m[:, -1]
+    assert (reached > 0).all(), "die letzte Spalte ist noch gar nicht beschrieben"
+    # Und monoton: Wer weiter ist, war vorher näher am Start.
+    assert (np.diff(tel.dist_m.astype(np.int64), axis=1) >= 0).all()
+
+
+def test_the_snapshot_keeps_up_after_the_buffers_double(route, field):
+    """Der Telemetriepuffer verdoppelt sich — und das Fenster zieht mit.
+
+    ``_grow`` legt die Puffer neu an, statt sie zu erweitern; die alten
+    Referenzen zeigen danach auf den Stand von vorhin. Ohne die
+    Nachführung im Schnappschuss bliebe das Rennen für den Zuschauer
+    genau an der Stelle stehen, an der die Verdopplung fällt.
+
+    Der Sekundentakt ist hier kein Selbstzweck: Er ist der kürzeste Weg,
+    die Verdopplung auf einer Teststrecke überhaupt auszulösen. Mit dem
+    üblichen Fünf-Sekunden-Takt passt das ganze Rennen in die erste
+    Reservierung, und der Zweig bliebe ungetestet.
+    """
+    teams, riders = field
+    live = LiveRace(route, list(riders), list(teams), RaceConfig(seed=2024, sample_dt_s=1))
+    live.advance_to(600.0)
+    early = live.current().telemetry
+    assert early.n_samples < 4096, "die Verdopplung soll noch nicht gefallen sein"
+    assert (early.dist_m[:, -1] > 0).all()
+
+    live.advance_to(1e9)
+    assert live.finished
+    late = live.current().telemetry
+    assert late.n_samples > 4096, "der Puffer hätte sich verdoppeln müssen"
+    # Und der Anfang steht noch da, wo er stand: Die Verdopplung kopiert
+    # den alten Inhalt mit, sie beginnt nicht von vorn.
+    assert np.array_equal(late.dist_m[:, : early.n_samples], early.dist_m)
+
+
+def test_the_snapshot_agrees_with_the_finished_race(route, field):
+    """Am Ziel sagen Zwischenstand und Ergebnis dasselbe."""
+    live = _live(route, field)
+    live.advance_to(1e9)
+    assert live.snapshot is not None
+    final = live.result
+    mid = live.snapshot.result()
+    assert [e.status for e in mid.entries] == [e.status for e in final.entries]
+    assert [e.rank for e in mid.entries] == [e.rank for e in final.entries]
+    for a, b in zip(mid.entries, final.entries, strict=True):
+        assert a.finish_time_s == b.finish_time_s
+    assert np.array_equal(mid.telemetry.dist_m, final.telemetry.dist_m)

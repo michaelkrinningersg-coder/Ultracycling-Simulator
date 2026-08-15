@@ -90,6 +90,18 @@ class PlaybackSession:
         self._sync()
         self.sim_t = float(np.clip(sim_t, 0.0, self.horizon_s))
 
+    def set_horizon(self, horizon_s: float) -> None:
+        """Das Ende des Zeitstrahls verschieben.
+
+        Bei einem live gerechneten Rennen steht es erst fest, wenn der
+        letzte im Ziel ist; bis dahin läuft die Wiedergabe gegen eine
+        großzügige Schätzung. Wird sie durch die Wahrheit ersetzt, muss
+        die Uhr mit — sonst stünde sie hinter dem Rennende.
+        """
+        self.horizon_s = float(horizon_s)
+        if self.sim_t > self.horizon_s:
+            self.sim_t = self.horizon_s
+
     def frame_interval_s(self) -> float:
         """Realzeit zwischen zwei Frames.
 

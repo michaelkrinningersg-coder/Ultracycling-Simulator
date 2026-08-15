@@ -46,7 +46,8 @@ hier umgesetzt.
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 534 Tests inklusive zweier Golden-Master |
+| Live-Rennen (M8) | Ein Rennen, das erst entsteht, während man zusieht: `simulate_race` ist ein Generator, den die Wiedergabeuhr hinter sich herzieht. Alle sieben Zeitrafferstufen bleiben — gemessen schafft die Engine 1900- bis 5400-fache Echtzeit, bei 1000× ist also mindestens die doppelte Reserve da. Der Zwischenstand wird laufend gesichert, im selben Format wie ein fertig gerechnetes Rennen. Dass beide Wege dasselbe Rennen liefern, prüft `tests/test_live.py` auf die Hundertstelsekunde |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 553 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -271,18 +272,45 @@ Oberfläche zu starten.
 
 ## Was beim Zuschauen passiert
 
-Das Rennen ist beim Öffnen der Seite bereits vollständig durchgerechnet.
-Ein Playback-Server streamt daraus per Server-Sent Events mit einer
-eigenen Wanduhr. Das fühlt sich nicht nur wie live an, es kann mehr:
-Pause, Zeitraffer bis 1000×, Rücksprung, Sprung zum nächsten Split oder
-zum nächsten Ereignis des Fokusfahrers.
+Ein Rennen kann auf zwei Arten vor dem Zuschauer liegen — die
+Oberfläche ist in beiden Fällen dieselbe.
+
+**Gerechnet und abgespielt.** Das Rennen ist beim Öffnen der Seite
+bereits vollständig durchgerechnet. Ein Playback-Server streamt daraus
+per Server-Sent Events mit einer eigenen Wanduhr. Das fühlt sich nicht
+nur wie live an, es kann mehr: Pause, Zeitraffer bis 1000×, Rücksprung,
+Sprung zum nächsten Split oder zum nächsten Ereignis des Fokusfahrers.
+
+**Live gerechnet.** „Übertragung starten“ auf der Übersicht legt
+stattdessen ein Rennen an, das noch gar nicht existiert. Es entsteht,
+während jemand zusieht: Die Wiedergabeuhr zieht die Simulation hinter
+sich her, und was nicht angesehen wird, wird nicht gerechnet. Alle
+Zeitrafferstufen bleiben — die Engine schafft gemessen zwischen 1900-
+und 5400-facher Echtzeit, bei 1000× ist also mindestens die doppelte
+Reserve da, selbst mit 250 Fahrern auf 1230 km. Nur ein Sprung nach
+vorn kostet, was er überspringt.
+
+Der Zwischenstand wird dabei laufend gesichert — Platzierungen,
+Splitzeiten und Telemetrie bis zu diesem Punkt, unter derselben Renn-ID
+und im selben Format wie ein fertig gerechnetes Rennen. Es gibt kein
+zweites Dateiformat für halbe Rennen: Wer den Server abschießt, findet
+beim nächsten Start ein Rennen vor, dem nur das Ende fehlt.
+
+Dass beide Wege dasselbe Rennen liefern, ist keine Absicht, sondern
+eine geprüfte Zusicherung: `simulate_race` und die Live-Wiedergabe
+laufen durch denselben Generator, und `tests/test_live.py` vergleicht
+Zielzeiten und Ereignisstrom auf die Hundertstelsekunde. Hinge das
+Ergebnis daran, ob jemand zugeschaut hat, wäre der Seed keine
+Reproduzierbarkeit mehr, sondern eine Behauptung.
 
 Die entscheidende Selbstbeschränkung dabei: **Der Client sieht nie Daten
 aus der Zukunft.** Die Uhr gehört dem Server, jede Abfrage wird an ihr
 abgeschnitten, und ein Client, der eine spätere Zeit anfragt, bekommt
 trotzdem nur die Gegenwart. Ohne das würde ein Bug die Endzeiten
 verraten und die ganze Dramaturgie zerstören — `tests/test_playback.py`
-prüft es deshalb ausdrücklich.
+prüft es deshalb ausdrücklich. Beim live gerechneten Rennen ist es
+keine Zusage mehr, sondern eine Tatsache: Was nicht gerechnet ist, kann
+auch nicht verraten werden.
 
 Auf dem Board steht ein Fahrer, der den gewählten Split noch nicht
 erreicht hat, mit seiner **laufenden Uhr** — der Zeit seit seinem Start

@@ -23,6 +23,7 @@ bleibt, falls er je nötig wird.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -131,7 +132,7 @@ class Store:
             "riders": [r.to_dict() for r in riders],
         }
         self.pool_path.parent.mkdir(parents=True, exist_ok=True)
-        self.pool_path.write_text(json.dumps(payload, indent=1, ensure_ascii=False), "utf-8")
+        _write_atomic(self.pool_path, json.dumps(payload, indent=1, ensure_ascii=False))
         return self.pool_path
 
     def load_pool(self) -> tuple[list[Team], list[Rider]]:
@@ -182,9 +183,14 @@ class Store:
             "conditions": [c.to_dict() for c in result.conditions],
             "weather": result.weather.to_dict(),
         }
-        (target / "race.json").write_text(json.dumps(meta, ensure_ascii=False), "utf-8")
+        # Erst danebenschreiben, dann umbenennen. Seit ein Rennen auch
+        # *während* es läuft gespeichert wird, überschneidet sich das
+        # Schreiben mit dem Lesen: Ohne den Umweg über die Nachbardatei
+        # sähe ein Leser die halbe Datei und bekäme einen Syntaxfehler
+        # statt des vorherigen Standes.
+        _write_atomic(target / "race.json", json.dumps(meta, ensure_ascii=False))
 
-        np.savez_compressed(
+        _savez_atomic(
             target / "telemetry.npz",
             sample_dt_s=np.int32(result.telemetry.sample_dt_s),
             dist_m=result.telemetry.dist_m,
@@ -342,7 +348,7 @@ class Store:
     def save_season(self, season: Season) -> Path:
         self.seasons_dir.mkdir(parents=True, exist_ok=True)
         path = self.season_path(season.id)
-        path.write_text(json.dumps(season.to_dict(), ensure_ascii=False, indent=1), "utf-8")
+        _write_atomic(path, json.dumps(season.to_dict(), ensure_ascii=False, indent=1))
         return path
 
     def load_season(self, season_id: str) -> Season:
@@ -390,7 +396,7 @@ class Store:
     def save_career(self, career: Career) -> Path:
         self.careers_dir.mkdir(parents=True, exist_ok=True)
         path = self.career_path(career.id)
-        path.write_text(json.dumps(career.to_dict(), ensure_ascii=False, indent=1), "utf-8")
+        _write_atomic(path, json.dumps(career.to_dict(), ensure_ascii=False, indent=1))
         return path
 
     def load_career(self, career_id: str) -> Career:
@@ -427,6 +433,36 @@ class Store:
         path = self.career_path(career_id)
         if path.exists():
             path.unlink()
+
+
+# ----------------------------------------------------------------------
+# Unteilbar schreiben
+# ----------------------------------------------------------------------
+def _write_atomic(path: Path, text: str) -> None:
+    """Datei ersetzen, ohne dass ein Leser je die halbe sieht.
+
+    Alle JSON-Stammdaten gehen diesen Weg, nicht nur die Renndatei. Die
+    Web-App schreibt aus einem Arbeiterthread und liest aus dem
+    Anfragethread — das trifft Pool, Saison und Karriere genauso. Ein
+    Leser, der dabei die halbe Datei erwischt, bekam bisher einen
+    Syntaxfehler statt des vorherigen Standes; im CI hat das genau
+    einmal zugeschlagen, und einmal genügt.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, "utf-8")
+    os.replace(tmp, path)
+
+
+def _savez_atomic(path: Path, **arrays: Any) -> None:
+    """Dasselbe für die Telemetrie.
+
+    ``np.savez_compressed`` hängt ``.npz`` an, wenn der Name nicht schon
+    darauf endet — deshalb heißt die Nachbardatei ``…npz.tmp.npz`` und
+    nicht ``…npz.tmp``.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp.npz")
+    np.savez_compressed(tmp, **arrays)
+    os.replace(tmp, path)
 
 
 # ----------------------------------------------------------------------

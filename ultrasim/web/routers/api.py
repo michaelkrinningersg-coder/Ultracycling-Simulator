@@ -60,6 +60,30 @@ def _session(request: Request, token: str) -> PlaybackSession:
     return session
 
 
+def _live_view(request: Request, session: PlaybackSession) -> tuple[Any, Any, RaceView]:
+    """Sitzung auf den Stand bringen und die Leseschicht holen.
+
+    Bei einem gespeicherten Rennen ist das ``state.view(...)`` und sonst
+    nichts. Bei einem live gerechneten kommen zwei Schritte davor:
+
+    1. Den Zeitstrahl auf die aktuelle Schätzung setzen, *bevor* die Uhr
+       gelesen wird — sonst schneidet ``now()`` an einem Horizont ab,
+       der noch von vorhin stammt.
+    2. Bis zur so gelesenen Wanduhrzeit rechnen. Erst danach existieren
+       die Daten, die das Bild gleich zeigt.
+
+    Danach steht der Zeitstrahl gegebenenfalls fest (das Rennen ist im
+    Ziel) und wird ein zweites Mal gesetzt, diesmal nach unten.
+    """
+    state = _state(request)
+    room = state.live.get(session.race_id)
+    if room is not None:
+        session.set_horizon(room.horizon_s)
+        room.advance(session.now())
+        session.set_horizon(room.horizon_s)
+    return state.view(session.race_id)
+
+
 # ----------------------------------------------------------------------
 # Statische Renn- und Streckendaten
 # ----------------------------------------------------------------------
@@ -134,8 +158,21 @@ def startlist(request: Request, race_id: str) -> JSONResponse:
 def create_session(request: Request, race_id: str) -> JSONResponse:
     state = _state(request)
     result, _, _ = state.view(race_id)
+    room = state.live.get(race_id)
     state.playback.prune()
-    token, session = state.playback.create(race_id, result.last_finish_wallclock_s)
+    horizon = room.horizon_s if room is not None else result.last_finish_wallclock_s
+    token, session = state.playback.create(race_id, horizon)
+    if room is not None and not room.finished:
+        # Live gibt es nichts zu überspringen: Der erste Starter rollt
+        # jetzt, und vor ihm ist niemand unterwegs. Der Fokus liegt
+        # deshalb auf ihm statt auf dem Favoriten — der steht noch
+        # stundenlang im Startbereich, und ihn zu zeigen hieße, die
+        # Übertragung mit einem Standbild zu eröffnen.
+        session.focus_entry = min(
+            range(len(result.entries)), key=lambda i: result.entries[i].start_offset_s
+        )
+        session.sim_t = 0.0
+        return JSONResponse({"token": token, "session": session.to_dict(), "live": True})
     # Der Fokus liegt anfangs auf dem Fahrer mit der höchsten Startnummer –
     # beim Zeitfahren also auf dem gesetzten Favoriten.
     session.focus_entry = max(range(len(result.entries)), key=lambda i: result.entries[i].bib)
@@ -146,13 +183,13 @@ def create_session(request: Request, race_id: str) -> JSONResponse:
     # wenn er rollt — vor ihm ist das halbe Feld schon unterwegs, und
     # das Board hat Zeiten, in die er sich einordnen kann.
     session.sim_t = float(result.entries[session.focus_entry].start_offset_s)
-    return JSONResponse({"token": token, "session": session.to_dict()})
+    return JSONResponse({"token": token, "session": session.to_dict(), "live": False})
 
 
 @router.post("/playback/{token}/control")
 async def control(request: Request, token: str) -> JSONResponse:
     session = _session(request, token)
-    _, _, view = _state(request).view(session.race_id)
+    _, _, view = _live_view(request, session)
     body: dict[str, Any] = await request.json()
     action = body.get("action")
     value = body.get("value")
@@ -193,6 +230,11 @@ async def control(request: Request, token: str) -> JSONResponse:
             session.seek(target)
     else:
         raise HTTPException(400, f"Unbekannte Aktion: {action}")
+    # Ein Sprung nach vorn verlangt beim Live-Rennen Rechenzeit, bevor
+    # dort etwas zu sehen ist. Sie hier zu bezahlen statt beim nächsten
+    # Bild heißt: Der Knopf antwortet erst, wenn er auch etwas bewirkt
+    # hat — und der Zeitstrahl in der Antwort stimmt schon.
+    _live_view(request, session)
     return JSONResponse(session.to_dict())
 
 
@@ -320,7 +362,7 @@ def session_clock(result, own_time_s: float) -> str:
 @router.get("/playback/{token}/frame")
 def frame(request: Request, token: str) -> JSONResponse:
     session = _session(request, token)
-    _, _, view = _state(request).view(session.race_id)
+    _, _, view = _live_view(request, session)
     return JSONResponse(build_frame(view, session))
 
 
@@ -332,7 +374,7 @@ async def stream(request: Request, token: str) -> StreamingResponse:
     prinzipbedingt nichts aus der Zukunft enthalten.
     """
     session = _session(request, token)
-    _, _, view = _state(request).view(session.race_id)
+    state = _state(request)
 
     async def generator():
         last_t = session.now()
@@ -340,12 +382,30 @@ async def stream(request: Request, token: str) -> StreamingResponse:
             while True:
                 if await request.is_disconnected():
                     break
+                # Je Bild neu geholt statt einmal vorab: Bei einem live
+                # gerechneten Rennen ist die Leseschicht von vorhin
+                # buchstäblich von vorhin — sie kennt die letzten zehn
+                # Minuten Rennen noch nicht.
+                #
+                # Und in einem Thread, nicht hier: Ein Zeitraffer von
+                # 1000x bei vollem Feld sind rund eine halbe Sekunde
+                # Rechenzeit je Bild. Die im Ereignis-Loop zu
+                # verbringen hieße, den ganzen Server so lange
+                # anzuhalten — samt aller anderen Zuschauer.
+                _, _, view = await asyncio.to_thread(_live_view, request, session)
                 payload = build_frame(view, session, t_from=last_t)
                 last_t = payload["t_wall"]
                 yield f"event: frame\ndata: {dumps(payload)}\n\n"
                 await asyncio.sleep(session.frame_interval_s())
         except asyncio.CancelledError:  # pragma: no cover - Verbindungsabbruch
             raise
+        finally:
+            # Wer das Fenster schließt, soll kein Rennen weiterrechnen
+            # lassen. Der Stand von jetzt geht dabei auf die Platte —
+            # das nächste Aufrufen der Seite setzt dort wieder an.
+            room = state.live.get(session.race_id)
+            if room is not None:
+                room.save()
 
     return StreamingResponse(
         generator(),

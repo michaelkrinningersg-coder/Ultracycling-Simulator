@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ race_name }} – Live{% endblock %}
-{% block subtitle %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km ·
+{% block subtitle %}{% if is_live %}<span class="badge running">live</span> · {% endif %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km ·
   {{ route.ascent_m|round|int }} hm · {{ n_entries }} Starter ·
   {{ weather.label }} ({{ weather.base_temp_c|round|int }} °C,
   Wind {{ weather.wind_speed_ms|round|int }} m/s){% endblock %}

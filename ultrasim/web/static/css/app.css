@@ -207,6 +207,18 @@ td { padding: .18rem .35rem; border-bottom: 1px solid #1a2131; }
 
 .spoiler { border: 1px dashed #4a3a12; background: #1c1608; color: var(--accent); padding: .4rem .6rem; border-radius: var(--radius); font-size: .8rem; }
 
+/* ---------- Ultrameister ----------
+   Der Titel bekommt einmal im Jahr eine eigene Fläche. Sie steht ganz
+   oben auf der Saisonseite und erscheint erst, wenn der letzte Termin
+   gefahren ist — vorher ist die Rangliste ein Zwischenstand. */
+.titlepanel { border-color: var(--accent); background: linear-gradient(180deg, #1e1a0c, var(--bg-panel) 70%); }
+.champion { display: flex; align-items: center; gap: 1rem; }
+.champion .laurel { font-size: 2.6rem; line-height: 1; }
+.champion-name { font-size: 1.5rem; font-weight: 700; color: var(--accent); letter-spacing: .01em; }
+.champion-figures { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: .3rem; color: var(--fg-dim); font-size: .85rem; }
+.champion-figures strong { color: var(--fg); font-family: var(--mono); font-size: 1rem; }
+tr.champion-row td { background: #241f0d; color: var(--accent); }
+
 .attrgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .3rem .9rem; }
 .attr { display: grid; grid-template-columns: 7.5rem 1fr 2.2rem; align-items: center; gap: .4rem; font-size: .78rem; }
 .attr .bar { height: .5rem; background: var(--bg-panel-2); border-radius: 999px; overflow: hidden; }

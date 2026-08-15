@@ -1,6 +1,6 @@
 """Saison auf der Kommandozeile (Abschnitte 11 und 14).
 
-    python -m ultrasim.cli.season new 2027 --races 10
+    python -m ultrasim.cli.season new 2027 --weltserie
     python -m ultrasim.cli.season show 2027-weltserie
     python -m ultrasim.cli.season run 2027-weltserie --all
     python -m ultrasim.cli.season close 2027-weltserie
@@ -42,7 +42,9 @@ def cmd_new(args: argparse.Namespace) -> int:
         return 2
 
     season = Season(id=season_id, name=name, year=args.year)
-    if args.races > 0:
+    if args.weltserie:
+        season.races = runner.weltserie_calendar(store, args.year)
+    elif args.races > 0:
         season.races = runner.suggest_calendar(store, args.year, args.races)
     store.save_season(season)
     print(f"Saison '{season_id}' angelegt: {len(season.races)} Termine")
@@ -69,6 +71,13 @@ def cmd_show(args: argparse.Namespace) -> int:
             f"{row.rank:>3} {row.name:26s} {row.team_name:24s} "
             f"{row.points:>7.0f} {row.wins:>3} {row.podiums:>3} {row.starts:>3}"
         )
+    # Der Titel steht erst, wenn der letzte Termin gefahren ist — vorher
+    # ist die Tabelle ein Zwischenstand.
+    if season.races and not runner.pending_races(season):
+        best = table[0]
+        print()
+        print(f"ULTRAMEISTER {season.year}: {best.name} ({best.team_name}), "
+              f"{best.points:.0f} Punkte, {best.wins} Siege")
     return 0
 
 
@@ -161,6 +170,11 @@ def main(argv: list[str] | None = None) -> int:
     new.add_argument("--name", default=None)
     new.add_argument("--id", default=None)
     new.add_argument("--races", type=int, default=10, help="Kalendervorschlag, 0 = leer")
+    new.add_argument(
+        "--weltserie",
+        action="store_true",
+        help="Standardkalender: zehn Rennen von 400 bis 2500 km (statt --races)",
+    )
     new.add_argument("--force", action="store_true")
     new.set_defaults(func=cmd_new)
 

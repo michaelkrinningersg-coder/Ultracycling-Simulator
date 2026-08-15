@@ -6,7 +6,9 @@ import numpy as np
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from ... import season_runner as runner
 from ...core import narrative
+from ...core import season as sn
 from ...core.engine import RaceConfig
 from ...core.rider import ACTIVE_ATTRIBUTES, ATTRIBUTE_LABELS, ATTRIBUTES
 from ..livesim import LiveRoom
@@ -164,7 +166,30 @@ def _split_matrix(result, route, view, finished: list) -> dict:
 
 @router.get("/race/{race_id}/results", response_class=HTMLResponse)
 def race_results(request: Request, race_id: str) -> HTMLResponse:
-    result, route, view = request.app.state.ultrasim.view(race_id)
+    state = request.app.state.ultrasim
+    result, route, view = state.view(race_id)
+
+    # Gehört das Rennen zu einem Kalendertermin? Dann steht neben jeder
+    # Zeit auch, was sie in der Saison wert war. Ohne das ist die
+    # Ergebnisliste ein Endpunkt; mit ihr ist sie eine Zwischenstation,
+    # und genau das ist ein Saisonrennen.
+    season_points: dict[int, float] = {}
+    season_link = None
+    found = runner.season_of_race(state.store, race_id)
+    if found is not None:
+        season, calendar_race = found
+        coefficient = runner.coefficients(state.store, season).get(calendar_race.id, 1.0)
+        season_points = sn.score_race(
+            result.entries, coefficient, season.points_head or sn.POINTS_HEAD
+        )
+        season_link = {
+            "id": season.id,
+            "name": season.name,
+            "year": season.year,
+            "race_name": calendar_race.name,
+            "coefficient": coefficient,
+        }
+
     finished = sorted(
         (e for e in result.entries if e.finish_time_s is not None),
         key=lambda e: e.finish_time_s,  # type: ignore[arg-type,return-value]
@@ -184,6 +209,7 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
                 "team": team,
                 "gap": None if best is None else entry.finish_time_s - best,
                 "report": reports[entry.entry_id].text,
+                "points": season_points.get(entry.rider_id),
             }
         )
     # Wer am weitesten kam, steht oben – so liest sich die Liste als
@@ -209,6 +235,7 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
             "route": route,
             "rows": rows,
             "dnf": dnf,
+            "season_link": season_link,
             "compute_seconds": result.compute_seconds,
             "matrix": _split_matrix(result, route, view, finished),
             "avg_speed": (

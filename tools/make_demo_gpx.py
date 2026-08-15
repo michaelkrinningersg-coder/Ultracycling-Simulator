@@ -105,12 +105,201 @@ FLACHETAPPE: list[tuple[float, float]] = [
     (57.0, 0.2), (33.0, -0.25), (41.0, 0.3), (24.0, -0.45), (36.0, 0.1),
 ]
 
+# ----------------------------------------------------------------------
+# Die Weltserie: zehn Strecken von 400 bis 2500 km
+# ----------------------------------------------------------------------
+# Die vier Strecken oben sind von Hand geschrieben, Zeile für Zeile. Für
+# zehn weitere geht das nicht mehr: Eine 2500-km-Strecke bräuchte gut
+# hundert Zeilen Zahlen, und niemand — ich eingeschlossen — könnte einer
+# solchen Tabelle ansehen, ob sie das Gelände beschreibt, das sie
+# beschreiben soll.
+#
+# Deshalb hier ein zweiter Weg: **Motive statt Tabellen.** Ein Motiv ist
+# ein Geländestück von wenigen Kilometern — ein flaches Zwischenstück,
+# eine Welle, ein Pass. Jedes gibt es in mehreren Ausprägungen, die im
+# Wechsel eingesetzt werden; ohne das entstünde ein exakt periodisches
+# Profil, auf dem jeder Anstieg der gleiche ist.
+#
+# Der Charakter einer Strecke steht damit in einer Zeile: „zwölfmal
+# flach, dazwischen je zwei Wellen" liest man, „(28.0, 0.3), (16.0,
+# -0.4), …" nicht.
+
+Block = list[tuple[float, float]]
+
+#: Flaches Zwischenstück, rund 65 km. Nicht wirklich flach — echtes
+#: Flachland hat Senken und Kuppen, und ein Profil mit exakt 0 %
+#: Steigung fährt sich in der Simulation anders als eines, das um die
+#: Null pendelt.
+FLAT: list[Block] = [
+    [(28.0, 0.3), (16.0, -0.4), (22.0, 0.2)],
+    [(34.0, -0.2), (19.0, 0.5), (18.0, -0.3)],
+    [(25.0, 0.4), (21.0, -0.5), (30.0, 0.1)],
+]
+
+#: Küstenflach, rund 55 km. Noch eine Stufe glatter als ``FLAT`` — hier
+#: nützt Kletterstärke wirklich nichts.
+COAST: list[Block] = [
+    [(31.0, 0.12), (24.0, -0.15)],
+    [(27.0, -0.1), (29.0, 0.14)],
+    [(22.0, 0.18), (33.0, -0.12)],
+]
+
+#: Welliges Hügelland, rund 30 km mit ~250 hm. Der Rhythmus, der über
+#: Stunden zermürbt, ohne je ein Anstieg zu sein.
+HILLS: list[Block] = [
+    [(11.0, 1.6), (9.0, -1.9), (12.0, 0.7), (8.0, -0.9)],
+    [(9.0, 2.1), (11.0, -1.7), (10.0, 0.5), (9.0, -0.6)],
+    [(13.0, 1.4), (8.0, -2.2), (11.0, 0.8), (8.0, -0.7)],
+]
+
+#: Kurze steile Rampe mit Abfahrt, rund 9 km mit ~300 hm. Das
+#: Ardennen-Motiv: zu kurz zum Einteilen, zu steil zum Durchfahren.
+KICKER: list[Block] = [
+    [(2.6, 8.4), (1.9, -9.6), (4.2, 0.4)],
+    [(1.8, 11.2), (2.4, -8.1), (3.6, -0.3)],
+    [(3.2, 7.1), (2.1, -10.4), (4.8, 0.5)],
+    [(1.4, 13.5), (2.8, -6.9), (5.1, 0.2)],
+]
+
+#: Mittelgebirgsanstieg, rund 26 km mit ~700 hm.
+CLIMB_MID: list[Block] = [
+    [(9.5, 6.4), (8.0, -7.4), (8.0, 0.4)],
+    [(11.0, 5.8), (9.0, -6.9), (7.0, -0.3)],
+    [(8.0, 7.2), (10.0, -5.6), (9.0, 0.5)],
+]
+
+#: Hochgebirgspass, rund 38 km mit ~1300 hm — mit Steilstück in den
+#: Kehren. Ohne das Stück über 12 % gibt es kein Gelände, auf dem ein
+#: Fahrer anaerob fährt, und W′ steht das ganze Rennen bei 100 %.
+PASS: list[Block] = [
+    [(17.0, 7.1), (2.2, 13.0), (1.8, 8.5), (17.0, -8.4)],
+    [(12.0, 7.4), (1.6, 15.0), (2.4, 9.0), (16.0, -9.1), (4.0, 0.3)],
+    [(19.5, 6.6), (2.0, 12.2), (2.0, 8.8), (20.0, -7.6)],
+    [(15.0, 7.8), (1.5, 14.2), (2.5, 8.2), (18.0, -8.0), (3.0, -0.4)],
+]
+
+#: Langgezogener Anstieg ohne Steilstück, rund 45 km mit ~1400 hm. Der
+#: Pass, den man sitzend fährt — die Gegenprobe zum Kehrenpass.
+PASS_LONG: list[Block] = [
+    [(24.0, 6.2), (19.0, -7.2), (4.0, 0.2)],
+    [(28.0, 5.4), (21.0, -6.6), (2.0, -0.3)],
+    [(22.0, 6.8), (23.0, -6.1), (3.0, 0.4)],
+]
+
+
+def weave(motif: list[Block], times: int, offset: int = 0) -> Block:
+    """Ein Motiv mehrfach einsetzen, die Ausprägungen im Wechsel."""
+    out: Block = []
+    for i in range(times):
+        out.extend(motif[(offset + i) % len(motif)])
+    return out
+
+
+#: Die zehn Strecken der Weltserie. Ihre Länge steht **nicht** vorher
+#: fest: Sie ergibt sich daraus, wie viele Motive aneinandergesetzt
+#: werden. Ein Profil hinterher auf eine runde Zahl zu strecken wäre
+#: bequem, würde aber genau das Gelände verbiegen, das die Motive
+#: beschreiben — aus einer 2 km langen 15-%-Rampe würde auf der
+#: 2500-km-Strecke eine 12 km lange, und die gibt es nirgends.
+
+#: 396 km, 1,2 hm/km. Reines Zeitfahren am Meer: keine Steigung, die der
+#: Rede wert wäre, dafür Wind aus jeder Richtung. Die eine kurze Rampe
+#: ist Absicht — ohne sie hätten Anstiegserkennung und Radwahl auf der
+#: ganzen Strecke nichts zu entscheiden.
+ATLANTIK = weave(COAST, 4) + weave(KICKER, 1, 3) + weave(COAST, 3, 1)
+
+#: 458 km, 12,9 hm/km. Zweiundzwanzig kurze Rampen, keine davon lang
+#: genug für einen Rhythmus. Das Gegenstück zum Atlantik: Hier zählt
+#: nicht, wie lange jemand an der Schwelle fährt, sondern wie oft er
+#: darüber hinausgeht und wieder herunterkommt.
+ARDENNEN = (
+    weave(FLAT, 1) + weave(KICKER, 11) + weave(HILLS, 2) + weave(KICKER, 11, 2)
+    + weave(HILLS, 1, 1) + weave(FLAT, 1, 2)
+)
+
+#: 573 km, 14,9 hm/km, Start auf 1050 m. Vier Kehrenpässe, Scheitel über
+#: 2300 m — die einzige Strecke im Kalender, auf der die Höhe wirklich
+#: Leistung kostet.
+DOLOMITEN = (
+    weave(FLAT, 2) + weave(PASS, 4) + weave(HILLS, 2) + weave(CLIMB_MID, 2)
+    + weave(FLAT, 2, 1)
+)
+
+#: 641 km, 5,3 hm/km. Welliges Mittelgebirge, zur Hälfte Schotter — die
+#: Strecke, auf der die Reifenwahl kein Detail ist, sondern *die*
+#: Entscheidung. Steigung gibt es wenig, Untergrund umso mehr.
+KARPATEN = (
+    weave(HILLS, 3) + weave(CLIMB_MID, 1) + weave(HILLS, 3, 1)
+    + weave(CLIMB_MID, 1, 2) + weave(FLAT, 5)
+)
+
+#: 864 km, 8,5 hm/km. Hügelland mit Pflaster und weißen Schotterstraßen:
+#: ständig wellig, selten steil, und der Untergrund wechselt dauernd.
+TOSKANA = (
+    weave(HILLS, 6) + weave(KICKER, 6) + weave(HILLS, 5, 1)
+    + weave(CLIMB_MID, 3) + weave(HILLS, 4, 2) + weave(FLAT, 2)
+)
+
+#: 980 km, 2,1 hm/km. Flach und lang genug für zwei volle Nächte auf dem
+#: Rad. Hier entscheidet nicht die Steigung, sondern wer schläft.
+OSTSEE = (
+    weave(COAST, 6) + weave(HILLS, 3) + weave(FLAT, 4, 1) + weave(HILLS, 2, 1)
+    + weave(COAST, 3, 2)
+)
+
+#: 1212 km, 12,9 hm/km. Bergultra: neun große Anstiege über zwölfhundert
+#: Kilometer, mit Nächten dazwischen. Klettern *und* durchhalten — die
+#: Strecke, die beides zugleich verlangt.
+PYRENAEEN = (
+    weave(FLAT, 4) + weave(PASS, 3) + weave(HILLS, 3) + weave(PASS_LONG, 2)
+    + weave(FLAT, 3, 1) + weave(PASS, 3, 1) + weave(CLIMB_MID, 2)
+    + weave(FLAT, 3, 2)
+)
+
+#: 1463 km, 2,1 hm/km, Start auf 1080 m. Hochebene: kaum Steigung, aber
+#: durchgehend über tausend Meter und auf rauem Belag. Dieselbe
+#: Steigungsdichte wie die Ostsee-Nachtfahrt, anderthalbmal so lang und
+#: mit dem Untergrund als Dauerabgabe — die Strecke für Monotonie.
+STEPPE = (
+    weave(FLAT, 7) + weave(HILLS, 2) + weave(FLAT, 7, 1) + weave(HILLS, 1, 2)
+    + weave(FLAT, 5, 2)
+)
+
+#: 1924 km, 10,0 hm/km. Alpenüberquerung: lange flache Anfahrt, dann
+#: zehn Pässe am Stück, dann wieder flach. Die Strecke, die beide
+#: Hälften eines Fahrers nacheinander abfragt.
+ALPEN = (
+    weave(FLAT, 8) + weave(HILLS, 3) + weave(PASS, 4) + weave(PASS_LONG, 2)
+    + weave(PASS, 4, 2) + weave(HILLS, 3, 1) + weave(FLAT, 10, 1)
+)
+
+#: 2469 km, 7,4 hm/km. Die längste Strecke des Kalenders und die
+#: einzige, die alles enthält: Flachland, Hügel, Kehrenpässe, lange
+#: Anstiege. Über hundert Stunden im Sattel, drei bis vier Nächte.
+TRANSKONTINENTAL = (
+    weave(FLAT, 8) + weave(HILLS, 4) + weave(PASS, 3) + weave(FLAT, 7, 1)
+    + weave(CLIMB_MID, 3) + weave(HILLS, 3, 2) + weave(PASS_LONG, 2)
+    + weave(PASS, 2, 3) + weave(FLAT, 9, 2) + weave(HILLS, 3, 1)
+)
+
+
 PRESETS: dict[str, tuple[str, list[tuple[float, float]], tuple[float, float, float]]] = {
     # Name -> (Anzeigename, Profil, (lat, lon, Starthöhe))
     "voralpen": ("Voralpen-Runde (Demo)", VORALPEN, (47.8214, 11.4526, 584.0)),
     "hochgebirge": ("Hochgebirgs-Marathon (Demo)", HOCHGEBIRGE, (46.5197, 9.8383, 812.0)),
     "langstrecke": ("Nordroute Langstrecke (Demo)", LANGSTRECKE, (52.3759, 9.7320, 58.0)),
     "flachetappe": ("Flachetappe Nordsee (Demo)", FLACHETAPPE, (53.5511, 8.5865, 6.0)),
+    # --- die Weltserie ------------------------------------------------
+    "atlantik": ("Atlantik-Zeitfahren", ATLANTIK, (47.2184, -2.2100, 8.0)),
+    "ardennen": ("Ardennen-Wellenritt", ARDENNEN, (50.3500, 5.8500, 224.0)),
+    "dolomiten": ("Dolomiten-Vierpässe", DOLOMITEN, (46.5405, 11.8600, 1050.0)),
+    "karpaten": ("Karpaten-Schotterrunde", KARPATEN, (45.6000, 25.4000, 620.0)),
+    "toskana": ("Toskana-Hügelmarathon", TOSKANA, (43.3200, 11.3300, 290.0)),
+    "ostsee": ("Ostsee-Nachtfahrt", OSTSEE, (54.4000, 12.5000, 4.0)),
+    "pyrenaeen": ("Pyrenäen-Traverse", PYRENAEEN, (42.8000, 0.6000, 480.0)),
+    "steppe": ("Steppenroute Anatolien", STEPPE, (39.0000, 33.5000, 1080.0)),
+    "alpen": ("Alpenüberquerung", ALPEN, (47.2600, 11.3900, 570.0)),
+    "transkontinental": ("Transkontinental", TRANSKONTINENTAL, (48.2000, 16.3700, 170.0)),
 }
 
 #: Kehren an steilen Stellen. Eine Peilungsschwingung von ±0,26 rad

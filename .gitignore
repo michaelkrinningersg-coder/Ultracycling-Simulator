@@ -22,3 +22,8 @@ data/seasons/
 # Die Demo-GPX-Dateien nicht: 5 MB, die aus einem Seed in einer Sekunde
 # neu entstehen (python tools/make_demo_gpx.py --all).
 data/gpx/
+
+# Die GPX-Zwischenstufe nicht: Sie ist Eingabe des Importers, nicht
+# Ergebnis. Aus tools/make_demo_gpx.py entsteht sie jederzeit neu, und
+# 29 MB Textdatei neben 2 MB fertigen Strecken wären reiner Ballast.
+data/gpx/

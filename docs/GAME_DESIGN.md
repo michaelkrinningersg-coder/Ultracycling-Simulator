@@ -825,6 +825,23 @@ Da der Nutzer nicht fährt, ist das Bauen die Interaktion.
 - DNF: 0 Punkte, aber Ermüdungs- und Formfolgen bleiben
 - Gesamtrangliste über die Saison, Tiebreak: Anzahl Siege, dann bessere Einzelplatzierung
 
+### 11.1 Die Ultra-Weltserie (umgesetzt)
+
+Der Standardkalender: zehn Rennen von 396 bis 2469 km, in steigender
+Distanz. Der Sieger der Gesamtwertung ist **Ultrameister** des Jahres.
+
+- Zehn *Anforderungen*, nicht zehn Längen: flaches Zeitfahren,
+  Rampenrennen, Kehrenpässe, Schotter, Pflasterhügel, Nachtfahrt,
+  Bergultra, Monotonie auf der Hochebene, Alpenquerung, alles zusammen
+- Termine liegen dort, wo das **Erholungsfenster** des vorherigen
+  Rennens endet — das füllt die Saison von Ende Februar bis Mitte
+  Oktober; mehr als zehn Rennen dieser Art passen nicht in ein Jahr
+- Der Rennkoeffizient reicht damit von 1,02 bis 2,72: Ein Sieg auf der
+  längsten Strecke wiegt zweieinhalb auf der kürzesten. Der Titel heißt
+  Ultrameister, also sollen die Ultras ihn entscheiden
+- Der Titel wird erst nach dem letzten Termin vergeben; ein verworfenes
+  Ergebnis nimmt ihn wieder weg
+
 ---
 
 ## 12. Datenmodell (Entwurf)

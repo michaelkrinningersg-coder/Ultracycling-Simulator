@@ -111,6 +111,41 @@ def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
     return race_id
 
 
+def ensure_weltserie(root: Path, year: int | None = None, verbose: bool = True) -> str | None:
+    """Beim ersten Start den Standardkalender bereitlegen — ungerechnet.
+
+    Das Demo-Rennen darüber beantwortet „wie sieht das aus?". Diese
+    Funktion beantwortet die nächste Frage: „und was mache ich damit?"
+    Ohne sie steht der Nutzer vor einem leeren Kalender-Editor und muss
+    zehn Termine von Hand anlegen, bevor überhaupt etwas passiert.
+
+    Gerechnet wird hier **nichts**. Die zehn Rennen sind zusammen gut
+    elftausend Kilometer; sie beim Programmstart durchzurechnen hieße,
+    den Nutzer eine Viertelstunde vor einem Ladebalken warten zu lassen,
+    bevor er das Programm zum ersten Mal gesehen hat. Der Kalender liegt
+    da, und der erste Termin ist einen Klick entfernt.
+    """
+    from datetime import date
+
+    from . import season_runner as runner
+    from .core.season import Season
+    from .data.store import Store
+
+    store = Store(root)
+    if store.list_seasons():
+        return None
+
+    year = year or date.today().year + 1
+    season = Season(id=f"{year}-weltserie", name="Ultra-Weltserie", year=year)
+    season.races = runner.weltserie_calendar(store, year)
+    if not season.races:
+        return None
+    store.save_season(season)
+    if verbose:
+        print(f"Standardkalender bereitgestellt: {len(season.races)} Rennen ({year}).")
+    return season.id
+
+
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover - Startpfad
     import argparse
     import threading
@@ -129,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - Startpfad
     os.environ["ULTRASIM_DATA"] = str(root)
     if not args.no_demo:
         ensure_demo_race(root)
+    ensure_weltserie(root)
 
     from .web.main import create_app
 

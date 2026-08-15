@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ race_name }} – Ergebnis{% endblock %}
 {% block subtitle %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km · {{ route.ascent_m|round|int }} hm{% endblock %}
-{% block topbar %}<a href="/race/{{ race_id }}">◂ Live-Ansicht</a>{% endblock %}
+{% block topbar %}<a href="/race/{{ race_id }}">◂ Live-Ansicht</a>
+{% if season_link %}<a href="/season/{{ season_link.id }}">{{ season_link.name }} {{ season_link.year }} ▸</a>{% endif %}{% endblock %}
 
 {% block body %}
 <div class="page">
@@ -12,10 +13,21 @@
         {{ rows|length }} im Ziel · Ø Sieger {{ avg_speed }} km/h · gerechnet in {{ '%.1f'|format(compute_seconds) }} s
       </span>
     </div>
+    {% if season_link %}
+    <p class="dim" style="margin-bottom:.6rem">
+      Termin der <a href="/season/{{ season_link.id }}">{{ season_link.name }} {{ season_link.year }}</a> ·
+      Rennkoeffizient <span class="mono warn">{{ '%.2f'|format(season_link.coefficient) }}</span> —
+      die Punkte für Platz 1 bis 10 (100, 80, 65, 55, 48, 42, 37, 33, 30, 28) werden damit
+      multipliziert, ein Sieg ist hier also
+      <span class="mono">{{ (100 * season_link.coefficient)|round(0)|int }}</span> Punkte wert.
+      <a href="/season/{{ season_link.id }}">Zur Gesamtwertung ▸</a>
+    </p>
+    {% endif %}
     <table>
       <thead>
         <tr><th class="right">Rg</th><th class="right">Nr</th><th>Fahrer</th><th>Nat</th><th>Team</th>
             <th>Archetyp</th><th class="right">Zeit</th><th class="right">Rückstand</th>
+            {% if season_link %}<th class="right">Punkte</th>{% endif %}
             <th class="right">Ziel-IF</th><th class="right">Tagesform</th><th></th></tr>
       </thead>
       <tbody>
@@ -29,6 +41,10 @@
           <td class="faint">{{ row.rider.archetype }}</td>
           <td class="right mono">{{ row.entry.finish_time_s|hms }}</td>
           <td class="right mono {% if row.gap %}bad{% endif %}">{% if row.gap %}{{ row.gap|gap }}{% endif %}</td>
+          {% if season_link %}
+          <td class="right mono {% if row.points %}warn{% else %}faint{% endif %}">
+            {{ '%.0f'|format(row.points or 0) }}</td>
+          {% endif %}
           <td class="right mono faint">{{ '%.2f'|format(row.entry.target_if) }}</td>
           <td class="right mono faint">{{ '%.3f'|format(row.entry.day_form) }}</td>
           <td><a href="/race/{{ race_id }}/rider/{{ row.entry.entry_id }}">Detail</a></td>

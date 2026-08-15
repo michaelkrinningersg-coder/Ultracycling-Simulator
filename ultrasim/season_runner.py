@@ -15,6 +15,7 @@ data verbindet und von beiden Oberflächen benutzt wird.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from datetime import date
@@ -275,6 +276,25 @@ def race_id_for(season: sn.Season, calendar_race: sn.CalendarRace) -> str:
     return f"{season.id}-{calendar_race.id}"
 
 
+def season_of_race(store: Store, race_id: str) -> tuple[sn.Season, sn.CalendarRace] | None:
+    """Zu welchem Kalendertermin gehört dieses Rennen?
+
+    Gesucht wird über ``race_id``, nicht über den Namen: Ein Rennen kann
+    umbenannt werden, der Verweis im Kalender bleibt. Ein Rennen, das
+    außerhalb einer Saison gerechnet wurde, hat keinen Termin — dann
+    ``None``, und die Ergebnisseite zeigt eben keine Punkte.
+    """
+    for entry in store.list_seasons():
+        try:
+            season = store.load_season(entry["id"])
+        except (FileNotFoundError, KeyError, ValueError):
+            continue
+        for calendar_race in season.races:
+            if calendar_race.race_id == race_id:
+                return season, calendar_race
+    return None
+
+
 def run_calendar_race(
     store: Store,
     season: sn.Season,
@@ -378,6 +398,87 @@ def close_season(
 # ----------------------------------------------------------------------
 # Kalender erzeugen
 # ----------------------------------------------------------------------
+#: Die **Ultra-Weltserie**: zehn Rennen von 400 bis 2500 km, in der
+#: Reihenfolge, in der sie gefahren werden.
+#:
+#: Die Reihenfolge ist steigende Distanz, und das ist eine Entscheidung.
+#: Sie könnte auch gemischt sein — dann wären die Termine austauschbar
+#: und die Saison eine Liste. So ist sie ein Verlauf: Der Auftakt ist
+#: ein Zeitfahren, das an einem Tag entschieden ist, das Finale hat 2469
+#: Kilometer und vier Nächte. Wer im März führt, hat noch nichts
+#: gewonnen; wer im Oktober führt, ist Ultrameister.
+#:
+#: Zehn verschiedene Anforderungen, nicht zehn Längen: flaches
+#: Zeitfahren, Rampenrennen, Kehrenpässe, Schotter, Pflasterhügel,
+#: Nachtfahrt, Bergultra, Monotonie auf der Hochebene, Alpenquerung,
+#: und am Ende alles zusammen.
+WELTSERIE: tuple[tuple[str, str], ...] = (
+    ("atlantik-zeitfahren", "Atlantik-Zeitfahren"),
+    ("ardennen-wellenritt", "Ardennen-Wellenritt"),
+    ("dolomiten-vierpaesse", "Dolomiten-Vierpässe"),
+    ("karpaten-schotterrunde", "Karpaten-Schotterrunde"),
+    ("toskana-huegelmarathon", "Toskana-Hügelmarathon"),
+    ("ostsee-nachtfahrt", "Ostsee-Nachtfahrt"),
+    ("pyrenaeen-traverse", "Pyrenäen-Traverse"),
+    ("steppenroute-anatolien", "Steppenroute Anatolien"),
+    ("alpenueberquerung", "Alpenüberquerung"),
+    ("transkontinental", "Transkontinental"),
+)
+
+#: Erster Termin der Weltserie. Sie braucht fast das ganze Jahr: Die
+#: Erholungsfenster der zehn Rennen summieren sich auf rund 240 Tage,
+#: und das ist keine Vorgabe, sondern das Ergebnis — 2469 Kilometer
+#: kosten einen Durchschnittsfahrer gut vier Wochen.
+WELTSERIE_START = (2, 25)  # 25. Februar
+
+#: Puffer über das Erholungsfenster hinaus, in Tagen. Ohne ihn läge
+#: jeder Termin exakt auf der 98-%-Grenze und der Kalender wäre
+#: rechnerisch fahrbar, praktisch aber auf Kante genäht.
+CALENDAR_BUFFER_DAYS = 2
+
+
+def _gap_after(route: dict[str, Any]) -> int:
+    """Wie viele Tage nach diesem Rennen der nächste Termin liegen darf.
+
+    Nicht aus der Distanzklasse, sondern aus dem Erholungsfenster: Der
+    Eimer „ultra" reicht von 1000 bis 2500 km, und das ist der
+    Unterschied zwischen drei und viereinhalb Wochen Pause.
+    """
+    work = estimated_work_kj(route["distance_km"], route["ascent_m"])
+    needed = sn.recovery_days(work, NOMINAL_CAPACITY_KJ)
+    return int(math.ceil(needed)) + CALENDAR_BUFFER_DAYS
+
+
+def weltserie_calendar(
+    store: Store, year: int, n_riders: int = 250, first_day: date | None = None
+) -> list[sn.CalendarRace]:
+    """Der Standardkalender: zehn Rennen von 400 bis 2500 km.
+
+    Fehlt eine der zehn Strecken, fällt sie still heraus statt den
+    ganzen Kalender zu verweigern — wer eine gelöscht hat, bekommt neun
+    Termine und sieht selbst, welcher fehlt.
+    """
+    routes = {r["id"]: r for r in store.list_routes()}
+    day = first_day or date(year, *WELTSERIE_START)
+    out: list[sn.CalendarRace] = []
+    for i, (route_id, name) in enumerate(WELTSERIE):
+        route = routes.get(route_id)
+        if route is None:
+            continue
+        out.append(
+            sn.CalendarRace(
+                id=f"{len(out) + 1:02d}-{slugify(name)}",
+                name=name,
+                route_id=route_id,
+                day=day,
+                n_riders=n_riders,
+                seed=2000 + i,
+            )
+        )
+        day = _plus_days(day, _gap_after(route))
+    return out
+
+
 def suggest_calendar(
     store: Store, year: int, n_races: int = 10, first_day: date | None = None
 ) -> list[sn.CalendarRace]:
@@ -409,9 +510,9 @@ def suggest_calendar(
         )
         # Nach einem langen Rennen mehr Abstand: sonst ist der Kalender
         # von vornherein unfahrbar und jeder Vorschlag muss korrigiert
-        # werden, bevor er benutzbar ist.
-        gap = {"kurz": 14, "mittel": 21, "ultra": 35}.get(route["distance_class"], 21)
-        day = _plus_days(day, gap)
+        # werden, bevor er benutzbar ist. Das Erholungsfenster ist dafür
+        # die richtige Größe — die Distanzklasse ist zu grob.
+        day = _plus_days(day, _gap_after(route))
     return out
 
 
@@ -430,8 +531,10 @@ __all__ = [
     "race_id_for",
     "race_summaries",
     "run_calendar_race",
+    "season_of_race",
     "season_records",
     "slugify",
     "standings",
     "suggest_calendar",
+    "weltserie_calendar",
 ]

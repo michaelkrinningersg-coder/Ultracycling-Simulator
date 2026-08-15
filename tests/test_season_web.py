@@ -336,13 +336,25 @@ def test_the_development_page_works_before_any_season_change(client):
 # Dienstschicht
 # ----------------------------------------------------------------------
 def test_suggested_calendar_leaves_more_room_after_long_races(app_store):
+    """Die Pause kommt aus dem Erholungsfenster, nicht aus der Klasse.
+
+    Vorher stand hier eine feste Untergrenze von vierzehn Tagen. Die war
+    nie eine Aussage über den Kalender, sondern über eine Tabelle mit
+    drei Einträgen — und die Distanzklasse „ultra" reicht von 1000 bis
+    2500 km, also von drei bis viereinhalb Wochen Erholung. Geprüft wird
+    deshalb das, worauf es ankommt: dass ein längeres Rennen mehr Luft
+    hinterlässt als ein kürzeres.
+    """
     calendar = runner.suggest_calendar(app_store, 2030, n_races=4)
     assert len(calendar) == 4
-    gaps = [
-        (b.day - a.day).days for a, b in zip(calendar, calendar[1:], strict=False)
-    ]
-    assert all(gap >= 14 for gap in gaps)
     assert len({r.id for r in calendar}) == 4
+    gaps = [(b.day - a.day).days for a, b in zip(calendar, calendar[1:], strict=False)]
+    assert all(gap > 0 for gap in gaps), "Termine dürfen sich nicht überholen"
+
+    kurz = {"distance_km": 200.0, "ascent_m": 1500.0}
+    lang = {"distance_km": 1200.0, "ascent_m": 12000.0}
+    sehr_lang = {"distance_km": 2500.0, "ascent_m": 18000.0}
+    assert runner._gap_after(kurz) < runner._gap_after(lang) < runner._gap_after(sehr_lang)
 
 
 def test_carry_only_looks_backwards(app_store):

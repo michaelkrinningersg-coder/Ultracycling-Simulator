@@ -66,16 +66,24 @@ def season_create(
     request: Request,
     name: str = Form(...),
     year: int = Form(...),
-    n_races: int = Form(0),
+    calendar: str = Form("0"),
 ) -> RedirectResponse:
+    """Saison anlegen, wahlweise mit fertigem Kalender.
+
+    ``calendar`` ist entweder ``weltserie`` für den Standardkalender oder
+    eine Zahl: so viele Termine aus den vorhandenen Strecken, ``0`` für
+    einen leeren Kalender.
+    """
     state = _state(request)
     season_id = runner.slugify(f"{year}-{name}", fallback=str(year))
     if state.store.season_path(season_id).exists():
         raise HTTPException(status_code=409, detail=f"Saison '{season_id}' gibt es schon")
 
     season = Season(id=season_id, name=name.strip() or f"Saison {year}", year=int(year))
-    if n_races > 0:
-        season.races = runner.suggest_calendar(state.store, int(year), int(n_races))
+    if calendar == "weltserie":
+        season.races = runner.weltserie_calendar(state.store, int(year))
+    elif calendar.isdigit() and int(calendar) > 0:
+        season.races = runner.suggest_calendar(state.store, int(year), int(calendar))
     state.store.save_season(season)
     return _back(season_id)
 
@@ -133,6 +141,14 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
         )
         previous = calendar_race.day
 
+    standings = runner.standings(store, season)
+    pending = runner.pending_races(season)
+    # Der Titel steht erst, wenn der letzte Termin gefahren ist. Vorher
+    # ist die Rangliste ein Zwischenstand, und den Führenden schon
+    # „Ultrameister" zu nennen wäre genau die Vorwegnahme, die dieses
+    # Programm sonst überall vermeidet.
+    champion = standings[0] if (season.races and not pending and standings) else None
+
     return _tpl(request).TemplateResponse(
         request,
         "season.html",
@@ -141,8 +157,10 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "rows": rows,
             "routes": store.list_routes(),
             "presets": sorted(PRESETS),
-            "standings": runner.standings(store, season),
-            "pending": len(runner.pending_races(season)),
+            "standings": standings,
+            "champion": champion,
+            "runner_up": standings[1] if champion and len(standings) > 1 else None,
+            "pending": len(pending),
             "pool_exists": store.pool_exists(),
             "jobs": [j.to_dict() for j in state.jobs.list_jobs(season_id)[:8]],
             "busy": state.jobs.active_for(season_id) is not None,

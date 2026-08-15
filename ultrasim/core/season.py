@@ -56,7 +56,22 @@ ASCENT_TO_FLAT_KM = 0.027
 #: wert, nicht viermal. Sonst entscheidet ein einziger Ultra die Saison
 #: und die kurzen Rennen sind Dekoration.
 COEFFICIENT_EXPONENT = 0.5
-COEFFICIENT_CLIP = (0.6, 2.2)
+#: Die Grenzen sind ein Notnagel gegen absurde Eingaben, kein
+#: Wertungsinstrument — und lange waren sie beides, weil es die Strecken
+#: nicht gab, an denen der Unterschied auffällt.
+#:
+#: Mit der Weltserie gibt es sie. Bei einer Obergrenze von 2,2 waren die
+#: Alpenüberquerung (1924 km, 18.900 hm) und die Transkontinental
+#: (2469 km, 18.200 hm) exakt gleich viel wert: Beide lagen über der
+#: Kappung, und damit entschied nicht die Formel, sondern der Deckel.
+#: Das längste Rennen des Kalenders war das erste, dem die Wertung seine
+#: Länge nicht mehr angerechnet hat.
+#:
+#: 2,9 lässt die Transkontinental mit 2,72 gerade durch. Die Spanne über
+#: den Kalender reicht damit von 1,02 (Atlantik-Zeitfahren) bis 2,72 —
+#: ein Sieg auf der längsten Strecke wiegt zweieinhalb Siege auf der
+#: kürzesten. Genau das soll ein Titel bedeuten, der Ultrameister heißt.
+COEFFICIENT_CLIP = (0.6, 2.9)
 
 
 def effort_km(distance_km: float, ascent_m: float) -> float:

@@ -7,6 +7,33 @@
 {% block body %}
 <div class="page" x-data="seasonJobs('{{ season.id }}', {{ busy|lower }})">
 
+  {% if champion %}
+  <!-- Der Titel ------------------------------------------------- -->
+  <div class="panel titlepanel">
+    <div class="panel-title"><span>Ultrameister {{ season.year }}</span>
+      <span class="faint">{{ rows|length }} Rennen gefahren</span></div>
+    <div class="champion">
+      <div class="laurel">🏆</div>
+      <div>
+        <div class="champion-name">{{ champion.name }}</div>
+        <div class="dim">{{ champion.nation }} · {{ champion.team_name }}</div>
+        <div class="champion-figures">
+          <span><strong>{{ '%.0f'|format(champion.points) }}</strong> Punkte</span>
+          <span>{{ champion.wins }} Siege</span>
+          <span>{{ champion.podiums }} Podien</span>
+          <span>{{ champion.finishes }} von {{ champion.starts }} im Ziel</span>
+        </div>
+        {% if runner_up %}
+        <div class="dim" style="margin-top:.35rem">
+          Vorsprung auf {{ runner_up.name }}:
+          <span class="mono">{{ '%.0f'|format(champion.points - runner_up.points) }}</span> Punkte
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if not pool_exists %}
   <div class="panel"><p class="bad">Kein Fahrerpool vorhanden — Rennen lassen sich nicht rechnen.
     <span class="mono">python -m ultrasim.cli.simulate pool --riders 250</span></p></div>
@@ -236,7 +263,7 @@
       </thead>
       <tbody>
         {% for row in standings[:40] %}
-        <tr>
+        <tr class="{% if champion and row.rank == 1 %}champion-row{% endif %}">
           <td class="right mono rank">{{ row.rank }}</td>
           <td>{{ row.name }}</td>
           <td class="faint">{{ row.nation }}</td>

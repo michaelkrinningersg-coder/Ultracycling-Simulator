@@ -7,6 +7,29 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
+- **Die Ultra-Weltserie**: zehn neue Strecken von 396 bis 2469 km und
+  ein Standardkalender darüber. Zehn verschiedene Anforderungen, nicht
+  zehn Längen — flaches Zeitfahren, Rampenrennen, Kehrenpässe, Schotter,
+  Pflasterhügel, Nachtfahrt, Bergultra, Monotonie auf der Hochebene,
+  Alpenquerung, und am Ende alles zusammen.
+  - Die Termine stehen dort, wo das **Erholungsfenster** des vorherigen
+    Rennens endet, nicht auf runden Abständen. Das füllt die Saison von
+    Ende Februar bis Mitte Oktober; mehr als zehn Rennen dieser Art
+    passen nicht in ein Jahr. Dieselbe Regel gilt jetzt auch für den
+    allgemeinen Kalendervorschlag — vorher kam die Pause aus der
+    Distanzklasse, und der Eimer „ultra" reicht von 1000 bis 2500 km.
+  - Der Kalender liegt beim ersten Start fertig da, **ungerechnet**. Ihn
+    vorzurechnen hieße, den Nutzer eine Viertelstunde vor einem
+    Ladebalken warten zu lassen, bevor er das Programm gesehen hat.
+  - Die Profile entstehen aus **Motiven** statt aus handgeschriebenen
+    Tabellen: ein flaches Zwischenstück, eine Welle, ein Kehrenpass,
+    jeweils in mehreren Ausprägungen im Wechsel. Eine 2500-km-Strecke
+    als Zahlentabelle wäre nicht mehr überprüfbar.
+- **Ultrameister**: Wer nach dem letzten Termin die Gesamtwertung
+  anführt, bekommt den Titel — und zwar erst dann. Ein verworfenes
+  Ergebnis nimmt ihn wieder weg; ein Titel über einem Kalender mit einem
+  offenen Termin bezöge sich auf nichts.
+
 - **Live gerechnete Rennen** — eine bewusste Abweichung von Abschnitt
   8.2, der Vorberechnung mit anschließender Wiedergabe vorsieht. Bisher
   war die Reihenfolge rechnen → speichern → abspielen; ein Ultra mit 250
@@ -28,8 +51,30 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
     daran, ob jemand zugeschaut hat, wäre der Seed keine
     Reproduzierbarkeit mehr, sondern eine Behauptung.
 
+### Behoben
+
+- Der **Simulationshorizont** war auf bergigen Strecken eine sportliche
+  Regel statt einer Rechengrenze. Er kam aus der Distanz allein
+  (`km / 11`), die Wertungsgrenze aus der Siegerzeit (`× 1,4`) — auf den
+  Dolomiten-Vierpässen lag der Horizont damit bei 52 Stunden und die
+  Zeitgrenze erst bei 54. Die Simulation hörte vor der Wertung auf:
+  **116 von 250 Fahrern** schieden mit „Zeitrahmen überschritten" aus,
+  die Hälfte davon jenseits Kilometer 455 von 573. Sie waren nicht zu
+  langsam für das Rennen, sondern für die Uhr des Programms. Der
+  Horizont rechnet jetzt mit der Äquivalentdistanz; im selben Rennen
+  bleiben 12 Ausfälle und 3 OTL. Auf flachen Strecken ändert sich fast
+  nichts, die Golden Master stehen unverändert.
+
 ### Geändert
 
+- Die Obergrenze des **Rennkoeffizienten** steigt von 2,2 auf 2,9. Sie
+  war als Notnagel gegen absurde Eingaben gedacht, hat mit der Weltserie
+  aber angefangen zu werten: Alpenüberquerung (1924 km) und
+  Transkontinental (2469 km) lagen beide darüber und waren damit exakt
+  gleich viel wert. Das längste Rennen des Kalenders war das erste, dem
+  die Wertung seine Länge nicht mehr angerechnet hat. Die Spanne reicht
+  jetzt von 1,02 bis 2,72 — ein Sieg auf der längsten Strecke wiegt
+  zweieinhalb auf der kürzesten.
 - Alle JSON-Stammdaten werden **unteilbar** geschrieben (erst daneben,
   dann umbenannt) — Rennen, Pool, Saison und Karriere. Seit ein Rennen
   auch während des Laufens gespeichert wird, überschneidet sich das

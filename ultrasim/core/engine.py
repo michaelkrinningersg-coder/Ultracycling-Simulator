@@ -73,6 +73,14 @@ SAMPLE_DT_S: dict[str, int] = {"kurz": 5, "mittel": 15, "ultra": 30}
 #: Wanduhr; im Zeitraffer sind das Minuten.
 START_INTERVAL_S: dict[str, int] = {"kurz": 1800, "mittel": 1800, "ultra": 1800}
 
+#: Langsamstes Äquivalenttempo, das der Simulationshorizont noch
+#: abdeckt. Zusammen mit ``RaceConfig.time_limit_factor`` (1,4) ergibt
+#: sich daraus die Bedingung, die zählt: Der Horizont überlebt die
+#: sportliche Zeitgrenze, solange der Sieger schneller als 11 · 1,4 =
+#: 15,4 km/h Äquivalenttempo fährt. Gemessen ist der langsamste Sieger
+#: im Weltserien-Kalender mit 20,7 km/h unterwegs.
+HORIZON_KMH = 11.0
+
 STATE_RIDING = 0
 STATE_STOPPED = 1
 STATE_FINISHED = 2
@@ -872,7 +880,25 @@ def run_race(
 
     split_times = np.full((n, n_splits), np.nan)
 
-    max_hours = config.max_hours or max(3.0, route.distance_km / 11.0)
+    # Der Simulationshorizont. Wer danach noch fährt, gilt als Ausfall —
+    # er ist deshalb eine Rechengrenze und darf **keine** sportliche
+    # Regel sein. Die sportliche Regel ist ``time_limit_factor``, und die
+    # setzt Fahrer über der Grenze auf OTL, nicht auf DNF.
+    #
+    # Genau das ist er eine Zeit lang gewesen. Elf Kilometer je Stunde
+    # als langsamstes zugelassenes Tempo klingt großzügig, ignoriert aber
+    # die Höhenmeter: Auf einer Strecke mit 14 hm/km lag der Horizont bei
+    # 52 Stunden, die Zeitgrenze aber erst bei 54 — die Simulation hörte
+    # vor der Wertung auf. Gemessen sind auf den Dolomiten-Vierpässen so
+    # 116 von 250 Fahrern als „Zeitrahmen überschritten" ausgeschieden,
+    # die Hälfte davon jenseits Kilometer 455 von 573. Sie waren nicht zu
+    # langsam für das Rennen, sondern für die Uhr des Programms.
+    #
+    # Die Äquivalentdistanz rechnet die Höhenmeter mit ein und stellt den
+    # Kopfraum wieder her: über den ganzen Weltserien-Kalender das
+    # 1,9- bis 3,8-Fache der Siegerzeit statt des 1,35- bis 3,6-Fachen.
+    equiv_km = sn.effort_km(route.distance_km, route.ascent_m)
+    max_hours = config.max_hours or max(3.0, equiv_km / HORIZON_KMH)
     max_ticks = int(max_hours * 3600.0 / dt)
     sample_steps = max(1, int(round(sample_dt / dt)))
 

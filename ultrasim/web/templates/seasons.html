@@ -43,21 +43,29 @@
       <label>Jahr
         <input type="number" name="year" value="{{ this_year + 1 }}" min="1990" max="2999" required>
       </label>
-      <label>Kalendervorschlag
-        <select name="n_races">
+      <label>Kalender
+        <select name="calendar">
+          <option value="weltserie" selected>Ultra-Weltserie · 10 Rennen, 400–2500 km</option>
           <option value="0">leer lassen</option>
-          <option value="6">6 Termine</option>
-          <option value="10" selected>10 Termine</option>
-          <option value="14">14 Termine</option>
+          <option value="6">6 Termine aus allen Strecken</option>
+          <option value="10">10 Termine aus allen Strecken</option>
+          <option value="14">14 Termine aus allen Strecken</option>
         </select>
       </label>
       <button class="primary" type="submit">Anlegen</button>
     </form>
     <p class="dim" style="max-width:78ch;margin-top:.6rem">
-      Der Vorschlag verteilt die vorhandenen Strecken über die Saison und lässt
-      nach langen Rennen mehr Abstand — nach einem Ultra fünf Wochen, nach einem
-      kurzen Rennen zwei. Danach ist jeder Termin einzeln verschiebbar; genau
-      dafür ist der Kalender da.
+      Die <strong>Ultra-Weltserie</strong> ist der Standardkalender: zehn Rennen
+      mit zehn verschiedenen Anforderungen, in steigender Distanz vom
+      396-km-Zeitfahren am Atlantik bis zur Transkontinental über 2469 km. Wer
+      im Oktober führt, ist <strong>Ultrameister</strong>.
+    </p>
+    <p class="dim" style="max-width:78ch">
+      Die Termine stehen dort, wo das Erholungsfenster des vorherigen Rennens
+      endet — nach dem Finale wären das gut vier Wochen, nach dem Auftakt
+      zweieinhalb. Zusammen füllt das die Saison von Ende Februar bis Mitte
+      Oktober fast vollständig aus. Jeder Termin bleibt einzeln verschiebbar;
+      genau dafür ist der Kalender da.
     </p>
     {% endif %}
     {% if not pool_exists %}

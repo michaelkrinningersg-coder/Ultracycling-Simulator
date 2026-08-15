@@ -46,8 +46,9 @@ hier umgesetzt.
 | Kalenderansicht | Jahresband mit dem Erholungsfenster hinter jedem Termin: so lange braucht ein durchschnittlicher Fahrer, bis er wieder bei 98 % Frische ist. Wo der nächste Punkt noch im Balken liegt, startet das Feld angeschlagen — solche Termine sind rot. Gerechnete Rennen liefern die gemessene Arbeit, die übrigen eine Schätzung aus 15 kJ je flachem Kilometer |
 | Auswertung | Warum-Panel: die Form in ihre Faktoren zerlegt, der teuerste zuerst — die Simulation zeichnet Abschnittsform, Ermüdung, Zustände, Hungerast, Schlaf, Wetter und Flüssigkeit als eigene Kanäle auf. Splitzeiten-Matrix Fahrer × Marke mit Rangfarbe, und ein Rennbericht in einem Satz je Fahrer aus Ereignissen und Spliträngen |
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
+| Ultra-Weltserie | Der Standardkalender: zehn Strecken von 396 bis 2469 km mit zehn verschiedenen Anforderungen, in steigender Distanz. Die Termine stehen dort, wo das Erholungsfenster des vorherigen Rennens endet — das füllt die Saison von Ende Februar bis Mitte Oktober. Wer nach dem letzten Rennen führt, ist **Ultrameister**; vorher steht der Titel nicht da |
 | Live-Rennen (M8) | Ein Rennen, das erst entsteht, während man zusieht: `simulate_race` ist ein Generator, den die Wiedergabeuhr hinter sich herzieht. Alle sieben Zeitrafferstufen bleiben — gemessen schafft die Engine 1900- bis 5400-fache Echtzeit, bei 1000× ist also mindestens die doppelte Reserve da. Der Zwischenstand wird laufend gesichert, im selben Format wie ein fertig gerechnetes Rennen. Dass beide Wege dasselbe Rennen liefern, prüft `tests/test_live.py` auf die Hundertstelsekunde |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 553 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 564 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -187,13 +188,95 @@ Oder gleich eine ganze Saison — Kalender im Browser unter
 `/seasons`, dieselben Schritte auf der Kommandozeile:
 
 ```bash
-python -m ultrasim.cli.season new 2027 --name Weltserie --races 10
+python -m ultrasim.cli.season new 2027 --weltserie                # zehn Rennen, 400–2500 km
 python -m ultrasim.cli.season run 2027-weltserie --all
 python -m ultrasim.cli.season show 2027-weltserie      # Kalender + Gesamtwertung
 python -m ultrasim.cli.season close 2027-weltserie     # Fahrer altern lassen
 ```
 
-Vier Strecken liegen bei:
+---
+
+## Die Ultra-Weltserie
+
+Der Standardkalender, und der vorgesehene Weg durch das Programm: zehn
+Rennen mit zehn verschiedenen Anforderungen, in **steigender Distanz**
+vom 396-km-Zeitfahren am Atlantik bis zur Transkontinental über 2469 km.
+Er liegt beim ersten Start fertig da — ungerechnet, aber angelegt — und
+steht im Formular unter `/seasons` als Vorauswahl.
+
+| # | Rennen | Distanz | Höhenmeter | je km | Untergrund | Koeff. |
+|---|---|---|---|---|---|---|
+| 1 | Atlantik-Zeitfahren | 396 km | 864 m | 2,2 m | Asphalt | 1,02 |
+| 2 | Ardennen-Wellenritt | 458 km | 5095 m | 11,1 m | rau, Pflaster | 1,22 |
+| 3 | Dolomiten-Vierpässe | 573 km | 8270 m | **14,4 m** | Asphalt | 1,41 |
+| 4 | Karpaten-Schotterrunde | 641 km | 3359 m | 5,2 m | **41 % Schotter** | 1,35 |
+| 5 | Toskana-Hügelmarathon | 864 km | 6720 m | 7,8 m | Schotter, Pflaster | 1,62 |
+| 6 | Ostsee-Nachtfahrt | 980 km | 2690 m | 2,7 m | Asphalt | 1,62 |
+| 7 | Pyrenäen-Traverse | 1212 km | 15233 m | 12,6 m | Asphalt | 2,01 |
+| 8 | Steppenroute Anatolien | 1463 km | 3601 m | **2,5 m** | rau, ab 1080 m | 1,97 |
+| 9 | Alpenüberquerung | 1924 km | 18943 m | 9,8 m | gemischt | 2,47 |
+| 10 | Transkontinental | 2469 km | 18170 m | 7,4 m | alles | **2,72** |
+
+Die Reihenfolge ist eine Entscheidung. Gemischt wären die Termine
+austauschbar und die Saison eine Liste; so ist sie ein Verlauf. Der
+Auftakt ist an einem Tag entschieden, das Finale hat vier Nächte. Wer im
+März führt, hat nichts gewonnen — wer im Oktober führt, ist
+**Ultrameister**.
+
+Die Termine stehen nicht auf runden Abständen, sondern dort, wo das
+**Erholungsfenster** des vorherigen Rennens endet: die Zeit, die ein
+durchschnittlicher Fahrer bis 98 % Frische braucht. Das sind nach dem
+Auftakt neunzehn Tage und nach dem Finale zweiunddreißig, zusammen
+knapp acht Monate — die Saison ist damit voll, und mehr als zehn Rennen
+dieser Art passen nicht in ein Jahr.
+
+Der **Rennkoeffizient** in der letzten Spalte multipliziert die Punkte:
+Ein Sieg auf der Transkontinental ist 272 Punkte wert, einer am Atlantik
+102. Dass die Spanne so weit reicht, ist neu — bis zur Weltserie war der
+Koeffizient bei 2,2 gekappt, und die beiden längsten Rennen wären damit
+*exakt gleich viel* wert gewesen, 1924 wie 2469 Kilometer. Aufgefallen
+war es nie, weil keine der vier alten Strecken in die Nähe der Kappung
+kam.
+
+### Der Weg durch eine Saison
+
+Zehn Runden desselben Ablaufs, und zwischen zwei Runden ändert sich
+etwas:
+
+1. **Termin auswählen** — auf `/season/<id>` hat jede geplante Zeile
+   einen Knopf „Rechnen". Die Reihenfolge ist nicht frei: Die
+   Restermüdung eines Rennens steht erst fest, wenn das vorherige
+   gerechnet ist, und der Arbeiter geht die Schlange deshalb strikt
+   nach Termin durch.
+2. **Simulation** — läuft im Hintergrund mit Fortschrittsbalken. Ein
+   Ultra dauert Minuten; dafür gibt es keinen Request.
+3. **Ergebnis mit Punkten** — die Ergebnisliste zeigt neben jeder Zeit,
+   was sie in der Saison wert war: Platzpunkte × Rennkoeffizient. Ohne
+   diese Spalte wäre sie ein Endpunkt statt einer Zwischenstation.
+4. **Gesamtwertung** — Punkte, Siege, Podien, Starts. Gleichstand
+   entscheidet sich über Siege, dann über die bessere
+   Einzelplatzierung.
+5. **Nächster Termin** — mit der Restermüdung des vorherigen in den
+   Beinen. Wer den Kalender eng legt, merkt es hier.
+
+Nach dem letzten Termin steht der **Ultrameister** über der Tabelle —
+und zwar erst dann. Wer ein Ergebnis wieder verwirft, nimmt ihm den
+Titel; ein Titel über einem Kalender mit einem offenen Termin bezöge
+sich auf nichts.
+
+Auf der Kommandozeile ist es derselbe Ablauf und dieselbe
+Dienstschicht:
+
+```bash
+python -m ultrasim.cli.season new 2031 --weltserie
+python -m ultrasim.cli.season run 2031-weltserie --race 01-atlantik-zeitfahren
+python -m ultrasim.cli.season show 2031-weltserie     # Wertung nach Rennen 1
+...
+python -m ultrasim.cli.season run 2031-weltserie --all
+python -m ultrasim.cli.season show 2031-weltserie     # ULTRAMEISTER 2031: …
+```
+
+### Und die vier alten Strecken?
 
 | ID | Distanz | Höhenmeter | je km | Klasse |
 |---|---|---|---|---|
@@ -202,13 +285,14 @@ Vier Strecken liegen bei:
 | `flachetappe-nordsee` | 466,0 km | 1075 m | **2,3 m** | mittel |
 | `nordroute-langstrecke` | 1230,0 km | 6120 m | 5,0 m | ultra |
 
-Zwei der Klasse „mittel" ist Absicht. Der Hochgebirgs-Marathon und die
+Sie bleiben, weil an ihnen kalibriert wird: Der Bericht in
+[`docs/KALIBRIERUNG.md`](docs/KALIBRIERUNG.md) misst auf genau diesen
+vieren, und sie zu tauschen hieße, jede Zahl darin neu zu erheben. Zwei
+der Klasse „mittel" ist dabei Absicht — der Hochgebirgs-Marathon und die
 Flachetappe sind fast gleich lang und in jeder anderen Hinsicht
-Gegenpole — 13,4 gegen 2,3 Höhenmeter je Kilometer. Nebeneinander in
+Gegenpole, 13,4 gegen 2,3 Höhenmeter je Kilometer. Nebeneinander in
 derselben Zeile sagt die Sensitivitätsmatrix damit nicht nur, was ein
-Attribut wert ist, sondern *wofür*. Die Flachetappe kam dazu, weil die
-„flachste" Strecke vorher bei 5,0 m/km lag — das ist welliges Land, kein
-Zeitfahrterrain.
+Attribut wert ist, sondern *wofür*.
 
 > Diese vier sind **synthetisch erzeugt**, nicht real: Sie entstehen aus
 > `tools/make_demo_gpx.py` und dienen dazu, die Importkette und das Spiel
@@ -258,7 +342,7 @@ python -m ultrasim.cli.simulate result voralpen-runde-42  # Ergebnisliste
 python -m ultrasim.cli.simulate rider  voralpen-runde-42 --bib 29
 python -m ultrasim.cli.balance --route voralpen-runde --runs 20
 
-python -m ultrasim.cli.season new 2027 --races 10        # Saison anlegen
+python -m ultrasim.cli.season new 2027 --weltserie       # Standardkalender
 python -m ultrasim.cli.season run 2027-weltserie --all   # Kalender rechnen
 python -m ultrasim.cli.season show 2027-weltserie        # Wertung ansehen
 python -m ultrasim.cli.season close 2027-weltserie       # Saisonwechsel

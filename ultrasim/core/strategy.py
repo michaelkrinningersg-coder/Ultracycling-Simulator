@@ -49,6 +49,43 @@ CLIMB_BOOST_BASE = 0.16
 CLIMB_BOOST_PER_BERG = 0.10
 CLIMB_BOOST_REF_GRADE = 0.10
 
+#: Steilrampen werden anaerob gefahren — und bis hierher gar nicht.
+#:
+#: Gemessen stand W′ in jedem Rennen, auf jeder Strecke und zu jedem
+#: Zeitpunkt bei **100 %**. Der Anteil der Zeit unter 95 % war exakt
+#: null. Die anaerobe Kapazität war damit eine tote Kernmechanik, und
+#: ``spritzigkeit`` — das Attribut, das sie von 12 auf 26 kJ skaliert —
+#: dementsprechend wirkungslos.
+#:
+#: Der Grund steckt in der Kette der Faktoren: Die Zielleistung ist
+#: ``FTP · target_if · boost_norm · (1 + ramp·boost)``, und das erreicht
+#: auf der Mitteldistanz höchstens 0,86 und auf der kurzen 0,99. Über
+#: die Schwelle kam niemand, also entlud sich nichts, also griff auch
+#: der ``W_PRIME_GUARD`` nie, der bei 20 % Restkapazität das Überziehen
+#: beenden soll.
+#:
+#: Der Aufschlag oben ist an der *geplanten* Intensität aufgehängt und
+#: damit immer ein Anteil davon. Eine kurze Steilrampe ist aber gerade
+#: keine Frage des aerobin Budgets: Man fährt sie über der Schwelle und
+#: bezahlt sie aus W′. Deshalb ein zweiter Term, der an der **Schwelle**
+#: hängt statt am Plan — er greift erst ab acht Prozent, ist bei
+#: vierzehn voll ausgefahren, und der bestehende Wächter bremst ihn,
+#: sobald der Tank leer ist. Wer ihn früh ausgibt, hat ihn an der
+#: nächsten Rampe nicht: W′ füllt sich mit 400 s Zeitkonstante.
+ANAEROBIC_ONSET_GRADE = 0.08
+ANAEROBIC_FULL_GRADE = 0.14
+#: Wie weit über die Schwelle es an der vollen Rampe geht.
+ANAEROBIC_OVER = 0.12
+#: Wie stark Spritzigkeit das aufweitet (±60 % des Aufschlags).
+ANAEROBIC_SPRITZ_SPAN = 0.60
+
+
+def anaerobic_ramp(grade: np.ndarray) -> np.ndarray:
+    """Wie sehr eine Rampe zum Überziehen einlädt: 0 bei 8 %, 1 ab 14 %."""
+    span = ANAEROBIC_FULL_GRADE - ANAEROBIC_ONSET_GRADE
+    return np.clip((np.asarray(grade) - ANAEROBIC_ONSET_GRADE) / span, 0.0, 1.0)
+
+
 #: Basisdauer eines Radwechsels am Servicepunkt (Abschnitt 6.4).
 BIKE_CHANGE_BASE_S = 45.0
 BIKE_CHANGE_SD_S = 15.0

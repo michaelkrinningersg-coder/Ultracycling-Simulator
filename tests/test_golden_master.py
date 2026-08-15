@@ -91,18 +91,18 @@ GOLDEN_ROUTE = {
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
-    (12, 5971.39),
-    (6, 6002.87),
-    (8, 6133.09),
-    (9, 6194.08),
-    (11, 6235.80),
+    (12, 5971.40),
+    (6, 6002.79),
+    (8, 6132.21),
+    (9, 6194.03),
+    (11, 6234.83),
     (3, 6290.08),
-    (5, 6345.32),
+    (5, 6344.45),
     (2, 6523.86),
-    (10, 6596.00),
-    (4, 6601.15),
-    (7, 6964.80),
-    (1, 7077.46),
+    (10, 6593.50),
+    (4, 6600.13),
+    (7, 6964.77),
+    (1, 7078.52),
 ]
 
 TOLERANCE_S = 0.5
@@ -180,6 +180,17 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   der andere trug mit ``wkg_bias=-0.20`` eine Leistungsstrafe
 #:   außerhalb des Potenzial-Budgets. Beides sind Eingriffe am Generator,
 #:   also ändert sich jeder erzeugte Fahrer und damit das ganze Feld.
+#: * W′ bindet endlich. Bis hierher stand die anaerobe Kapazität in
+#:   jedem gemessenen Rennen auf 100 % — der Anteil der Zeit unter 95 %
+#:   war exakt null, und ``spritzigkeit`` damit wirkungslos. Zwei
+#:   Ursachen: Die Zielleistung kam nie über die Schwelle (0,86 · FTP
+#:   auf der Mitteldistanz), und keine Strecke hatte eine Rampe über
+#:   10,8 %. Jetzt gibt es einen zweiten, an der *Schwelle* aufgehängten
+#:   Term ab acht Prozent Steigung, und der Hochgebirgs-Marathon hat
+#:   Rampen mit 13 und 15 %. Auf der Teststrecke hier wirkt nur der
+#:   erste Teil — sie bleibt unter zehn Prozent —, das Feld verschiebt
+#:   sich trotzdem, weil der Streckenimport dieselbe Strecke neu
+#:   segmentiert.
 #:   Dazu die gemeinsame Ursache der beiden: Der **Preis** eines
 #:   Attributs im Potenzial-Budget hatte nichts mit seiner gemessenen
 #:   Wirkung zu tun. ``fettverbrennung`` kostete 0,8 und wirkt bis zu
@@ -192,13 +203,13 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Offsets und der Körperbau: ``fettverbrennung`` von 24 auf 15 und
 #:   der Diesel von ``wkg_bias=-0.20`` auf 0 bei +4 cm Körpergröße.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 147407.67),
-    (8, 151069.51),
-    (5, 151720.62),
-    (3, 153680.17),
-    (4, 162378.01),
-    (1, 163182.08),
-    (6, 167036.86),
+    (7, 147408.92),
+    (8, 151068.89),
+    (5, 151724.69),
+    (3, 153672.32),
+    (4, 162370.82),
+    (1, 163160.25),
+    (6, 167012.62),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche

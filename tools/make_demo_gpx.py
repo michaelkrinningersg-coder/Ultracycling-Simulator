@@ -47,13 +47,24 @@ VORALPEN: list[tuple[float, float]] = [
 #: Hochgebirge, rund 600 km mit vier großen Pässen – die Strecke, auf der
 #: sich Kletterer und Zeitfahrer wirklich unterscheiden und auf der die
 #: Radwahl je Abschnitt nicht mehr eindeutig ist.
+#: Die Steilrampen in Pass 2 und 3 sind nicht Dekoration, sondern
+#: nachgerüstet. Vorher lag die maximale Steigung des gesamten Bündels
+#: bei 10,8 % und das 99,9-Perzentil unter 10 % — es gab schlicht kein
+#: Gelände, auf dem ein Fahrer anaerob fährt. Entsprechend stand W′ in
+#: jedem gemessenen Rennen bei 100 %, und ``spritzigkeit`` wirkte nicht.
+#:
+#: Echte Alpenpässe haben solche Stücke: Mortirolo und Zoncolan gehen
+#: über 18 %, und auch ein gewöhnlicher Pass hat Kehren mit 12 bis 14 %.
+#: Die Rampen hier sind mit 13 und 15 % am unteren Rand davon und
+#: bewusst kurz — ein ganzer Pass in dieser Neigung wäre keine Strecke,
+#: sondern eine Behauptung.
 HOCHGEBIRGE: list[tuple[float, float]] = [
     (34.0, 0.4), (22.0, 1.8), (16.0, -1.0),
     (18.5, 7.1), (14.0, -8.0),          # Pass 1: ~1310 hm
     (26.0, 0.7), (14.0, 2.4), (12.0, -1.6),
-    (21.0, 7.8), (17.0, -8.6),          # Pass 2: ~1640 hm
+    (17.0, 7.0), (2.2, 13.0), (1.8, 8.5), (17.0, -8.6),   # Pass 2 mit Steilstück
     (31.0, 0.3), (18.0, 1.5), (13.0, -1.1),
-    (16.5, 8.4), (13.0, -9.4),          # Pass 3: ~1390 hm, steil
+    (12.0, 7.4), (1.6, 15.0), (2.4, 9.0), (13.0, -9.4),   # Pass 3, die steilste Rampe
     (28.0, 0.6), (22.0, -0.5),
     (24.0, 6.2), (19.0, -7.2),          # Pass 4: ~1490 hm, lang und gleichmäßig
     (37.0, 0.4), (26.0, 1.1), (21.0, -1.3), (44.0, 0.2),

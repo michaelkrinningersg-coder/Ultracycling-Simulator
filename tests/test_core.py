@@ -536,3 +536,84 @@ def test_a_real_pass_is_ridden_on_the_road_bike(route_medium):
     ]
     assert clear, "Die Fixture soll einen richtigen Pass enthalten"
     assert all(s.bike == ph.BIKE_ROAD for s in clear)
+
+
+# ----------------------------------------------------------------------
+# Steilrampen: W' muss überhaupt binden
+# ----------------------------------------------------------------------
+def test_the_anaerobic_ramp_only_starts_where_it_is_steep():
+    """Unterhalb von acht Prozent darf gar nichts passieren.
+
+    Der Term wird additiv eingemischt und nicht per Maximum gegen die
+    Schwelle gerechnet — sonst höbe er jeden Fahrer im Flachen auf FTP.
+    Diese Null ist also keine Formalität, sondern die Zusicherung.
+    """
+    grades = np.array([0.0, 0.04, st.ANAEROBIC_ONSET_GRADE, 0.11, st.ANAEROBIC_FULL_GRADE, 0.20])
+    ramp = st.anaerobic_ramp(grades)
+    assert ramp[0] == 0.0 and ramp[1] == 0.0 and ramp[2] == 0.0
+    assert 0.0 < ramp[3] < 1.0
+    assert ramp[4] == 1.0 and ramp[5] == 1.0, "oben sättigt er, statt ins Absurde zu laufen"
+
+
+def test_the_anaerobic_ramp_rises_monotonically():
+    grades = np.linspace(0.0, 0.20, 40)
+    ramp = st.anaerobic_ramp(grades)
+    assert np.all(np.diff(ramp) >= 0.0)
+
+
+def _with_steep_ramps(base):
+    """Dieselbe Strecke, aber mit drei Rampen à 15 %.
+
+    Die Rampe wird hier gebaut und nicht aus ``data/`` geladen: Ein Test,
+    der an einer mitgelieferten Streckendatei hängt, prüft am Ende die
+    Datei und nicht die Mechanik.
+    """
+    n = base.n_points
+    ele = np.zeros(n, dtype=np.float64)
+    step = base.raster_m
+    for start_km in (10.0, 25.0, 40.0):
+        lo = int(start_km * 1000 / step)
+        up = lo + int(1500 / step)          # 1,5 km hinauf
+        down = up + int(1500 / step)        # und wieder hinunter
+        ele[lo:up] = np.arange(up - lo) * step * 0.15
+        top = ele[up - 1]
+        ele[up:down] = top - np.arange(down - up) * step * 0.15
+        ele[down:] = 0.0
+    return replace(base, ele_dm=(ele * 10.0).astype(np.int32))
+
+
+def test_w_prime_actually_discharges_on_a_steep_route(route):
+    """Die Mechanik war gemessen tot, und das darf sie nicht wieder werden.
+
+    Vor diesem Test stand W′ in jedem Rennen, auf jeder Strecke und zu
+    jedem Zeitpunkt bei 100 % — der Anteil der Zeit unter 95 % war exakt
+    null. Zwei Ursachen: Die Zielleistung kam nie über die Schwelle, und
+    keine mitgelieferte Strecke hatte eine Rampe über 10,8 %. Wer eine
+    der beiden zurückdreht, macht ``spritzigkeit`` wieder wirkungslos,
+    und dieser Test sagt es sofort.
+    """
+    from ultrasim.core.engine import RaceConfig, simulate_race
+
+    steep = _with_steep_ramps(route)
+    assert steep.grade.max() > st.ANAEROBIC_FULL_GRADE, "die Testrampe ist nicht steil genug"
+
+    teams, riders = generate_pool(8, n_teams=2, seed=77)
+    result = simulate_race(steep, riders, teams, RaceConfig(seed=2024))
+    values = result.telemetry.wprime_pct.astype(np.float64)[result.telemetry.state == 0]
+    assert values.size, "ohne fahrende Fahrer sagt der Test nichts"
+    assert values.min() < 90.0, "W′ entlädt sich nirgends — der Rampenterm greift nicht"
+    assert values.min() > 5.0, "W′ läuft leer, statt vom Wächter gebremst zu werden"
+
+
+def test_a_route_without_ramps_leaves_w_prime_alone(route):
+    """Die Kehrseite: Ohne Steilstück darf nichts anaerob werden.
+
+    Sonst wäre der Rampenterm ein verkappter Grundbonus für alle.
+    """
+    from ultrasim.core.engine import RaceConfig, simulate_race
+
+    assert route.grade.max() < st.ANAEROBIC_ONSET_GRADE + 0.02
+    teams, riders = generate_pool(8, n_teams=2, seed=77)
+    result = simulate_race(route, riders, teams, RaceConfig(seed=2024))
+    values = result.telemetry.wprime_pct.astype(np.float64)[result.telemetry.state == 0]
+    assert values.min() > 95.0

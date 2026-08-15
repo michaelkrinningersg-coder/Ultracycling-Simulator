@@ -449,6 +449,12 @@ def simulate_race(
     flat_norm = np.array([r.attr_norm("flach") for r in field_riders])
     boost = np.array([p.climb_boost for p in plans])
     boost_norm = np.array([p.boost_norm for p in plans])
+    #: Wie weit ein Fahrer an der vollen Steilrampe über die Schwelle
+    #: geht. Spritzigkeit weitet das auf — sie füllt auch den Tank, aus
+    #: dem es bezahlt wird.
+    anaerobic_over = 1.0 + st.ANAEROBIC_OVER * (
+        1.0 + st.ANAEROBIC_SPRITZ_SPAN * np.array([r.attr_norm("spritzigkeit") for r in field_riders])
+    )
     tyre = np.array([p.tyre for p in plans], dtype=np.int64)
     tyre_crr_f = np.array([ph.TYRES[n]["crr_factor"] for n in ph.TYRE_NAMES])[tyre]
     tyre_stiff = np.array([ph.TYRES[n]["stiffness"] for n in ph.TYRE_NAMES])[tyre]
@@ -550,6 +556,7 @@ def simulate_race(
     curv_pt = curv_seg[seg_idx_pt] if len(curv_seg) else np.full(route.n_points, 1.0)
     # Kurvenlimit ohne Fahreranteil vorrechnen: sqrt(µ·g·r) hängt nur an
     # der Strecke, der Fahreranteil ist ein Faktor.
+    steep_ramp_pt = st.anaerobic_ramp(grade_pt)
     radius_pt = ph.corner_radius_m(curv_pt)
     vcorner_pt = np.sqrt(ph.MU_DRY * ph.G * radius_pt)
     corner_skill = 1.0 + 0.12 * skill_norm + 0.08 * risk_norm
@@ -1263,6 +1270,14 @@ def simulate_race(
             # ``boost_norm`` bezahlt den Anstiegsaufschlag im Flachen ab,
             # damit die mittlere Intensität die geplante bleibt.
             p_target = ftp_eff_if * boost_norm * (1.0 + ramp_pt[idx] * boost)
+
+            # Steilrampe: über die Schwelle, bezahlt aus W'. Additiv
+            # gemischt statt per Maximum, damit unterhalb von acht
+            # Prozent garantiert nichts passiert — ein ``max`` gegen
+            # ``ftp_eff`` würde sonst jeden Fahrer im Flachen auf die
+            # Schwelle heben.
+            ramp_target = ftp_eff * anaerobic_over
+            p_target = p_target + steep_ramp_pt[idx] * np.maximum(ramp_target - p_target, 0.0)
             p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
 
             # W'-Wächter: bei leerem Tank wird an Rampen nicht mehr

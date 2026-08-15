@@ -22,7 +22,7 @@ Die absolute Startzeit kommt erst beim Playback dazu.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, ClassVar
@@ -394,14 +394,39 @@ class RiderStreams:
 # ----------------------------------------------------------------------
 # Simulation
 # ----------------------------------------------------------------------
-def simulate_race(
+#: Nach so vielen Ticks haelt ``run_race`` an und meldet die erreichte
+#: Rennzeit. 600 Simulationssekunden sind bei 1000-fachem Zeitraffer
+#: 0,6 Sekunden Anzeige — fein genug, um die Wiedergabe zu fuettern, und
+#: grob genug, dass der Generatorwechsel nicht ins Gewicht faellt.
+LIVE_CHUNK_TICKS = 600
+
+
+def run_race(
     route: Route,
     riders: Sequence[Rider],
     teams: Iterable[Team],
     config: RaceConfig | None = None,
     progress: Any = None,
-) -> RaceResult:
-    """Rechnet ein komplettes Rennen durch."""
+) -> Iterator[float]:
+    """Rechnet ein Rennen — anhaltbar.
+
+    Der Generator meldet unterwegs die erreichte Rennzeit in Sekunden
+    und liefert am Ende das fertige ``RaceResult`` als Rueckgabewert
+    (in Python landet der in ``StopIteration.value``; ``simulate_race``
+    unten holt ihn ab, eine Live-Wiedergabe kann stattdessen nur so
+    weit ziehen, wie ihre Uhr steht).
+
+    **Warum ein Generator und keine Zustandsklasse.** Diese Funktion
+    haelt gut 290 lokale Namen — ueberwiegend Arrays ueber das Feld —,
+    und sie in eine Datenklasse zu heben hiesse, jede einzelne
+    Referenz umzuschreiben. Ein Generator ist bereits genau das:
+    eine Funktion, die anhaelt und deren lokale Variablen dabei
+    stehenbleiben. Der ganze Umbau ist deshalb ein ``yield`` in der
+    Tickschleife und die Huelle darunter; der Rechenweg ist Zeile fuer
+    Zeile derselbe. Dass er das *bleibt*, sichern die beiden Golden
+    Master ab: Sie vergleichen Zielzeiten auf eine halbe Sekunde, und
+    eine unfaithful Extraktion haette sie sofort bewegt.
+    """
     t_start = time.perf_counter()
     config = config or RaceConfig()
     riders = list(riders)
@@ -1593,6 +1618,12 @@ def simulate_race(
         if progress is not None and tick % 20000 == 0:
             progress(tick, max_ticks, int((state == STATE_FINISHED).sum()), n)
 
+        # Hier haelt der Generator an. Am Ende der Tickschleife, damit
+        # der gemeldete Zeitpunkt einem abgeschlossenen Tick entspricht
+        # und kein Halbzustand nach draussen gelangt.
+        if tick % LIVE_CHUNK_TICKS == 0:
+            yield t
+
     # Wer nach max_hours noch fährt, gilt als Ausfall.
     unfinished = np.flatnonzero(state < STATE_FINISHED)
     for i in unfinished:
@@ -1665,6 +1696,27 @@ def simulate_race(
         weather=weather,
         compute_seconds=time.perf_counter() - t_start,
     )
+
+
+def simulate_race(
+    route: Route,
+    riders: Sequence[Rider],
+    teams: Iterable[Team],
+    config: RaceConfig | None = None,
+    progress: Any = None,
+) -> RaceResult:
+    """Rechnet ein komplettes Rennen durch.
+
+    Die Stapelvariante: zieht ``run_race`` bis zum Ende durch und gibt
+    das Ergebnis zurueck. Alles, was nicht zuschaut — Saison, Karriere,
+    Kalibrierung, Tests — benutzt weiterhin diese Form.
+    """
+    gen = run_race(route, riders, teams, config, progress)
+    try:
+        while True:
+            next(gen)
+    except StopIteration as stop:
+        return stop.value
 
 
 def _assign_ranks(entries: list[RaceEntry], time_limit_factor: float) -> None:

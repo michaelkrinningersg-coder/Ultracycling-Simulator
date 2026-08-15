@@ -416,3 +416,69 @@ details.why[open] > summary::before { content: "▾ "; }
 .why-row .fill.loss { background: var(--bad); }
 .why-row .fill.gain { background: var(--good); }
 .why-row .v { text-align: right; }
+
+/* ---------------------------------------------------------------------
+   Mini-Flaggen
+   ---------------------------------------------------------------------
+   Gezeichnet statt geladen, und bewusst nicht als Emoji: Windows
+   rendert die Regionalindikatoren (🇩🇪) nicht als Flagge, sondern als
+   zwei Buchstaben — und ausgeliefert wird eine Windows-EXE. Ein
+   Bildersatz wäre die Alternative, aber zwölf Nationen sind mit
+   Farbverläufen billiger zu haben als zwölf Dateien, die in die EXE
+   müssen.
+
+   Zwei davon sind Näherungen. Der Union Jack und die Stars and Stripes
+   lassen sich mit Verläufen nicht ehrlich bauen; bei 15 Pixeln Breite
+   sieht man ohnehin nur die Farbverteilung, und genau die stimmt. */
+.flag {
+  display: inline-block;
+  width: .95rem;
+  height: .65rem;
+  border-radius: 1px;
+  margin-right: .35rem;
+  vertical-align: -1px;
+  background: #444;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / .35);
+  flex: none;
+}
+.flag-GER { background: linear-gradient(#000 33.3%, #dd0000 33.3% 66.6%, #ffce00 66.6%); }
+.flag-AUT { background: linear-gradient(#ed2939 33.3%, #fff 33.3% 66.6%, #ed2939 66.6%); }
+.flag-ITA { background: linear-gradient(90deg, #008c45 33.3%, #f4f5f0 33.3% 66.6%, #cd212a 66.6%); }
+.flag-FRA { background: linear-gradient(90deg, #002395 33.3%, #fff 33.3% 66.6%, #ed2939 66.6%); }
+.flag-BEL { background: linear-gradient(90deg, #000 33.3%, #fae042 33.3% 66.6%, #ed2939 66.6%); }
+.flag-NED { background: linear-gradient(#ae1c28 33.3%, #fff 33.3% 66.6%, #21468b 66.6%); }
+.flag-ESP { background: linear-gradient(#aa151b 25%, #f1bf00 25% 75%, #aa151b 75%); }
+.flag-POL { background: linear-gradient(#fff 50%, #dc143c 50%); }
+/* Schweiz und Dänemark: Kreuz aus zwei gekreuzten Verläufen. */
+.flag-SUI {
+  background:
+    linear-gradient(#fff, #fff) 50% 50% / 34% 100% no-repeat,
+    linear-gradient(#fff, #fff) 50% 50% / 100% 34% no-repeat,
+    #d52b1e;
+}
+.flag-DEN {
+  background:
+    linear-gradient(#fff, #fff) 38% 50% / 20% 100% no-repeat,
+    linear-gradient(#fff, #fff) 50% 50% / 100% 22% no-repeat,
+    #c8102e;
+}
+.flag-GBR {
+  background:
+    linear-gradient(#fff, #fff) 50% 50% / 100% 30% no-repeat,
+    linear-gradient(#fff, #fff) 50% 50% / 26% 100% no-repeat,
+    linear-gradient(#c8102e, #c8102e) 50% 50% / 100% 16% no-repeat,
+    linear-gradient(#c8102e, #c8102e) 50% 50% / 13% 100% no-repeat,
+    #012169;
+}
+.flag-USA {
+  background:
+    repeating-linear-gradient(#b31942 0 20%, #fff 20% 40%),
+    #fff;
+  position: relative;
+}
+.flag-USA::before {
+  content: "";
+  position: absolute;
+  inset: 0 60% 45% 0;
+  background: #0a3161;
+}

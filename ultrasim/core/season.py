@@ -27,13 +27,51 @@ from typing import Any
 # ----------------------------------------------------------------------
 # Punkte (Abschnitt 11)
 # ----------------------------------------------------------------------
-#: Punkte für die ersten zehn Ränge, danach −2 je Rang bis 0.
+#: Punkte für die ersten zehn Ränge. Der Kopf ist unverändert steil —
+#: ein Sieg ist mehr wert als die Plätze fünf bis zehn zusammen.
 POINTS_HEAD: tuple[int, ...] = (100, 80, 65, 55, 48, 42, 37, 33, 30, 28)
-POINTS_STEP = 2
+
+#: Bis zu diesem Rang gibt es Punkte, danach null.
+#:
+#: Vorher lief der Schwanz mit −2 je Rang aus und war bei Rang 23 bei
+#: null. Bei 250 Startern hieß das: **91 % des Feldes fahren um
+#: nichts.** Wer als Vierzigster ins Ziel kommt, hat dieselbe
+#: Saisonbilanz wie einer, der nach zwanzig Kilometern aufgegeben hat —
+#: und das ist für einen Simulator, dessen halbes Modell davon handelt,
+#: *anzukommen*, die falsche Aussage.
+POINTS_LAST_RANK = 150
+
+#: Was der Hundertfünfzigste noch bekommt. Ein Punkt und nicht null:
+#: Die Grenze soll spürbar sein, nicht bloß rechnerisch existieren.
+POINTS_TAIL_MIN = 1.0
 
 
-def points_for_rank(rank: int | None, head: tuple[int, ...] = POINTS_HEAD) -> int:
+def points_for_rank(
+    rank: int | None,
+    head: tuple[int, ...] | list[int] = POINTS_HEAD,
+    last_rank: int = POINTS_LAST_RANK,
+) -> int:
     """Rohpunkte für eine Platzierung, ohne Rennkoeffizient.
+
+    Hinter dem Kopf läuft der Schwanz **exponentiell** aus: Jeder
+    weitere Platz ist um denselben *Anteil* weniger wert, vom
+    Anschlusswert des Kopfes bis auf einen Punkt bei ``last_rank``.
+
+    Warum nicht linear? 140 Ränge auf ganze Punkte abzubilden heißt in
+    jedem Fall Plateaus — die Frage ist, wie lang sie werden. Eine
+    Gerade von 28 Punkten auf Rang 10 bis auf null bei Rang 150 fiele
+    in Fünftelpunkten und legte rund zwanzig aufeinanderfolgende Ränge
+    auf denselben Wert; die Wertung könnte den Fünfzigsten nicht mehr
+    vom Siebzigsten unterscheiden. Exponentiell bleiben die Plateaus im
+    vorderen Schwanz zwei bis vier Ränge lang und laufen erst hinten
+    zusammen, wo die Abstände ohnehin nichts mehr entscheiden:
+
+        Rang  11  20  30  50  80 100 120 150
+        Punkte 27  22  17  11   5   3   2   1
+
+    Wo zwei Ränge doch denselben Wert bekommen, trennt sie die
+    Gesamtwertung über den Tiebreak — Siege, dann die bessere
+    Einzelplatzierung.
 
     ``None`` bedeutet keine Wertung — Aufgabe oder Zeitlimit. Beides gibt
     null Punkte; die Ermüdung des Versuchs bleibt trotzdem (Abschnitt 11).
@@ -41,8 +79,17 @@ def points_for_rank(rank: int | None, head: tuple[int, ...] = POINTS_HEAD) -> in
     if rank is None or rank < 1:
         return 0
     if rank <= len(head):
-        return head[rank - 1]
-    return max(head[-1] - POINTS_STEP * (rank - len(head)), 0)
+        return int(head[rank - 1])
+    if rank > last_rank:
+        return 0
+    span = last_rank - len(head)
+    anchor = float(head[-1]) if head else 0.0
+    if span <= 0 or anchor <= POINTS_TAIL_MIN:
+        # Kopf reicht schon bis zur Grenze, oder er endet so tief, dass
+        # kein Schwanz mehr dazwischenpasst.
+        return 0
+    share = (rank - len(head)) / span
+    return int(round(anchor * (POINTS_TAIL_MIN / anchor) ** share))
 
 
 #: Bezugsgröße des Rennkoeffizienten: ein 400-km-Rennen mit moderatem

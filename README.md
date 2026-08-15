@@ -34,7 +34,7 @@ hier umgesetzt.
 | Wetter (M6.1) | Zweischichtiges Modell: die Ortsschicht (Höhe, Exposition, lokaler Wind) hängt an der Position, die Zeitschicht (Tagesgang, Sonnenstand, Regenphasen) an der Fahrer-Eigenzeit. Wind wirkt richtungsabhängig aus Segment-Peilung und Windrichtung, Seitenwind über die Frontfläche. Dazu Hydration mit Schweißrate aus Intensität, Temperatur und Luftfeuchte |
 | Zwischenfälle (M6.2) | Der Ereigniskatalog aus Abschnitt 6.5: Panne, mechanischer Defekt, Lichtausfall, Verfahren, Sturz, Magenprobleme, Hitzeeinbruch, Sperrung. Gezogen als Poisson-Prozess entlang der Strecke, angenommen erst beim Erreichen — so gehen Nässe, Dunkelheit und Müdigkeit ein, ohne dass pro Tick gewürfelt wird |
 | Aufgabe (M6.2) | Vier Wege zum DNF: schwerer Sturz, schwerer Defekt ohne Ersatz, Zeitlimit und ein kumulativer Aufgabe-Score aus verlorener Zeit × Ermüdung × Magenzustand, gedämpft durch mentale Widerstandsfähigkeit |
-| Saison (M7) | Kalender mit Terminen, Startfeld, Wetter und Seed je Rennen; Punkte nach Platzierung × Rennkoeffizient aus Länge und Höhenmetern; Gesamtrangliste mit dreistufigem Tiebreak (Punkte, Siege, bessere Einzelplatzierung) |
+| Saison (M7) | Kalender mit Terminen, Startfeld, Wetter und Seed je Rennen; Punkte nach Platzierung × Rennkoeffizient aus Länge und Höhenmetern, bis Rang 150; Gesamtrangliste mit dreistufigem Tiebreak (Punkte, Siege, bessere Einzelplatzierung) |
 | Kalender-Editor (M7) | Der erste Editor im Browser: Saison anlegen, Termine hinzufügen, verschieben und löschen, Rennen einzeln oder am Stück rechnen lassen. Die Rechnung läuft im Hintergrund mit Fortschrittsanzeige — ein Ultra dauert Minuten, dafür gibt es keinen Request |
 | Restermüdung (M7) | Ein Rennen wirkt ins nächste: Die Rennarbeit klingt exponentiell ab (Zeitkonstante aus dem Attribut Regeneration) und wirkt über zwei Wege — als bereits geleistete Arbeit im Ermüdungszähler und als Frischefaktor auf die haltbare Leistung |
 | Fahrerentwicklung (M7) | Beim Saisonwechsel altern alle Fahrer: Leistungskurve nach Alter mit Scheitel um 31, Erfahrung wächst mit Rennen und Kilometern, Potenzial driftet, Rücktritte ab 34 mit Nachwuchs als Ersatz |
@@ -267,6 +267,13 @@ etwas:
 4. **Gesamtwertung** — Punkte, Siege, Podien, Starts. Gleichstand
    entscheidet sich über Siege, dann über die bessere
    Einzelplatzierung.
+
+   Punkte gibt es bis **Rang 150**: 100 für den Sieg, dann der
+   dokumentierte Kopf bis 28 für Rang 10, danach exponentiell auslaufend
+   — 22 für Rang 20, 11 für Rang 50, 3 für Rang 100, 1 für Rang 150. In
+   der gerechneten Weltserie haben damit 232 von 250 Fahrern Punkte.
+   Ein Sieg bleibt trotzdem mehr wert als sieben vierzigste Plätze; der
+   Kopf entscheidet den Titel, der Schwanz sortiert das Feld.
 5. **Nächster Termin** — mit der Restermüdung des vorherigen in den
    Beinen. Wer den Kalender eng legt, merkt es hier.
 

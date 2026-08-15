@@ -278,7 +278,9 @@
       </tbody>
     </table>
     <p class="dim" style="margin-top:.5rem">
-      Punkteschema: {{ points_head|join(', ') }}, danach −2 je Rang bis 0.
+      Punkteschema: {{ points_head|join(', ') }} für die ersten {{ points_head|length }},
+      danach exponentiell auslaufend bis auf einen Punkt für Rang {{ points_last_rank }}.
+      Ab Rang {{ points_last_rank + 1 }} gibt es nichts mehr.
     </p>
     {% else %}
     <p class="dim">Noch kein Rennen der Saison gerechnet.</p>

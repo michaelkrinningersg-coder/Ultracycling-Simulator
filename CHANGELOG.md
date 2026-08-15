@@ -67,6 +67,24 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geändert
 
+- **Punkte bis Rang 150** statt bis Rang 23. Der alte Schwanz lief mit
+  −2 je Rang aus und war nach dreizehn Plätzen bei null; bei 250
+  Startern fuhren damit 91 % des Feldes um nichts, und ein Vierzigster
+  im Ziel stand in der Saisonbilanz da wie einer, der nach zwanzig
+  Kilometern aufgegeben hat. Für einen Simulator, dessen halbes Modell
+  vom Ankommen handelt, war das die falsche Aussage.
+
+  Der Kopf bleibt unverändert (100, 80, 65 … 28); dahinter läuft der
+  Schwanz **exponentiell** aus — 27 auf Rang 11, 22 auf Rang 20, 11 auf
+  Rang 50, 3 auf Rang 100, 1 auf Rang 150. Eine Gerade wäre in
+  Fünftelpunkten gefallen und hätte zwanzig aufeinanderfolgende Ränge
+  auf denselben Wert gelegt.
+
+  Gemessen an der gerechneten Weltserie: **232 von 250 Fahrern** haben
+  jetzt Punkte statt gut dreißig. Der Titel wandert dadurch nicht — ein
+  Sieg bleibt mit 100 Punkten mehr wert als sieben vierzigste Plätze —,
+  aber die Rangliste dahinter sortiert sich neu: Ein Fahrer mit zehn
+  Zielankünften ohne Podium steht jetzt auf Rang 3.
 - Die **Arbeitsschätzung** für die Kalenderplanung hat zwei Terme statt
   einem. Der alte Wert (15,0 kJ je Äquivalentkilometer) war an drei
   Strecken mit höchstens 13,4 hm/km erhoben und lag über die zehn neuen

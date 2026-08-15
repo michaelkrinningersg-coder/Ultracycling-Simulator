@@ -28,10 +28,48 @@ pytestmark = pytest.mark.slow
 # Punkte und Koeffizient
 # ----------------------------------------------------------------------
 def test_points_follow_the_documented_table():
-    """Abschnitt 11: 100, 80, 65, 55, 48, 42, 37, 33, 30, 28, dann −2."""
+    """Abschnitt 11: 100, 80, 65, 55, 48, 42, 37, 33, 30, 28 im Kopf."""
     assert [sn.points_for_rank(i) for i in range(1, 11)] == list(sn.POINTS_HEAD)
-    assert sn.points_for_rank(11) == 26
-    assert sn.points_for_rank(12) == 24
+
+
+def test_the_whole_field_races_for_something():
+    """Punkte bis Rang 150.
+
+    Vorher lief der Schwanz mit −2 je Rang aus und war bei Rang 23 bei
+    null — bei 250 Startern fuhren 91 % des Feldes um nichts, und ein
+    Vierzigster im Ziel stand in der Saisonbilanz da wie einer, der nach
+    zwanzig Kilometern aufgegeben hat.
+    """
+    assert sn.points_for_rank(sn.POINTS_LAST_RANK) > 0
+    assert sn.points_for_rank(sn.POINTS_LAST_RANK + 1) == 0
+    assert sn.points_for_rank(150) == 1
+
+
+def test_the_tail_still_separates_the_field():
+    """Der Schwanz darf nicht zu einem einzigen Wert zusammenfallen.
+
+    140 Ränge auf ganze Punkte abzubilden heißt zwangsläufig Plateaus —
+    die Frage ist nur, wie lang sie werden. Eine Gerade von 28 auf null
+    fiele in Fünftelpunkten und legte rund zwanzig aufeinanderfolgende
+    Ränge auf denselben Wert. Exponentiell bleiben sie im vorderen
+    Schwanz kurz und laufen erst hinten zusammen, wo die Abstände
+    ohnehin nichts mehr entscheiden.
+    """
+    assert sn.points_for_rank(50) > sn.points_for_rank(70) > sn.points_for_rank(100)
+
+    def plateau(start: int) -> int:
+        wert = sn.points_for_rank(start)
+        laenge = 0
+        while sn.points_for_rank(start + laenge) == wert:
+            laenge += 1
+        return laenge
+
+    assert plateau(20) <= 4, "im vorderen Schwanz zu grob"
+    assert plateau(50) <= 8
+
+    # Und der Kopf bleibt der Kopf: Ein Sieg wiegt mehr als die Plätze
+    # fünfzig bis hundert zusammen.
+    assert sn.points_for_rank(1) > sum(sn.points_for_rank(r) for r in range(50, 101)) / 4
 
 
 def test_points_never_go_negative():
@@ -46,8 +84,19 @@ def test_no_points_without_a_rank():
 
 
 def test_points_are_monotonic():
-    values = [sn.points_for_rank(i) for i in range(1, 60)]
+    values = [sn.points_for_rank(i) for i in range(1, 200)]
     assert values == sorted(values, reverse=True)
+
+
+def test_a_short_head_still_gets_a_tail():
+    """Eine Saison mit eigenem Punkteschema darf nicht durchfallen."""
+    kurz = (50, 30, 20)
+    assert sn.points_for_rank(3, head=kurz) == 20
+    assert sn.points_for_rank(10, head=kurz) < 20
+    assert sn.points_for_rank(sn.POINTS_LAST_RANK, head=kurz) > 0
+    assert sn.points_for_rank(sn.POINTS_LAST_RANK + 1, head=kurz) == 0
+    werte = [sn.points_for_rank(r, head=kurz) for r in range(1, 200)]
+    assert werte == sorted(werte, reverse=True)
 
 
 def test_coefficient_grows_with_the_race_but_not_linearly():

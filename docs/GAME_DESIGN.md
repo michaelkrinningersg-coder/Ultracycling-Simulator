@@ -819,7 +819,10 @@ Da der Nutzer nicht fährt, ist das Bauen die Interaktion.
 
 ## 11. Wertung
 
-- Rennpunkte nach Platzierung (Vorschlag: 100, 80, 65, 55, 48, 42, 37, 33, 30, 28, dann −2 je Rang bis 0)
+- Rennpunkte nach Platzierung (100, 80, 65, 55, 48, 42, 37, 33, 30, 28
+  für die ersten zehn, danach exponentiell auslaufend bis auf einen Punkt
+  für Rang 150). Der ursprüngliche Vorschlag „dann −2 je Rang bis 0" endete
+  bei Rang 23 — bei 250 Startern fuhren damit 91 % des Feldes um nichts
 - Rennkoeffizient nach Streckenlänge/Höhenmetern
 - Optional: Bergwertung und Zwischensprintwertung
 - DNF: 0 Punkte, aber Ermüdungs- und Formfolgen bleiben

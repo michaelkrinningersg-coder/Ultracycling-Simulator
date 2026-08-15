@@ -165,6 +165,7 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "jobs": [j.to_dict() for j in state.jobs.list_jobs(season_id)[:8]],
             "busy": state.jobs.active_for(season_id) is not None,
             "points_head": season.points_head or list(sn.POINTS_HEAD),
+            "points_last_rank": sn.POINTS_LAST_RANK,
             "plan": runner.calendar_plan(store, season),
             "career": careers.career_of_season(store, season_id),
         },

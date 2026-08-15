@@ -188,6 +188,7 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
             "year": season.year,
             "race_name": calendar_race.name,
             "coefficient": coefficient,
+            "last_rank": sn.POINTS_LAST_RANK,
         }
 
     finished = sorted(

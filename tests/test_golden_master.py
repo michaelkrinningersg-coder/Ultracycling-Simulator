@@ -91,18 +91,18 @@ GOLDEN_ROUTE = {
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
 GOLDEN_RESULT = [
-    (12, 5971.40),
-    (6, 6002.79),
-    (8, 6132.21),
-    (9, 6194.03),
-    (11, 6234.83),
-    (3, 6290.08),
-    (5, 6344.45),
-    (2, 6523.86),
-    (10, 6593.50),
-    (4, 6600.13),
-    (7, 6964.77),
-    (1, 7078.52),
+    (12, 5941.53),
+    (6, 5973.89),
+    (8, 6103.95),
+    (9, 6168.44),
+    (11, 6206.94),
+    (3, 6263.53),
+    (5, 6320.78),
+    (2, 6498.97),
+    (10, 6569.60),
+    (4, 6579.27),
+    (7, 6937.30),
+    (1, 7063.39),
 ]
 
 TOLERANCE_S = 0.5
@@ -191,6 +191,15 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   erste Teil — sie bleibt unter zehn Prozent —, das Feld verschiebt
 #:   sich trotzdem, weil der Streckenimport dieselbe Strecke neu
 #:   segmentiert.
+#: * Trittfrequenz und Entfaltung. Der pauschale Steilabzug des
+#:   Zeitfahrrads (4 % ab sechs Prozent Steigung, gleich hoch bei
+#:   sieben wie bei fünfzehn) ist weg; stattdessen hat jedes Rad eine
+#:   Entfaltungsspanne, und der Verlust folgt daraus. An mäßiger
+#:   Steigung ist er null — dort tritt man auch mit 42×28 noch 79
+#:   Umdrehungen —, an einer 15-%-Rampe sind es 58 Umdrehungen und
+#:   knapp vier Prozent. Deshalb die drei BIKE_CHANGE auf dieser
+#:   welligen Strecke, wo vorher keiner stattfand: Das Zeitfahrrad
+#:   lohnt sich an Wellen wieder, an Rampen nicht.
 #:   Dazu die gemeinsame Ursache der beiden: Der **Preis** eines
 #:   Attributs im Potenzial-Budget hatte nichts mit seiner gemessenen
 #:   Wirkung zu tun. ``fettverbrennung`` kostete 0,8 und wirkt bis zu
@@ -203,13 +212,13 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Offsets und der Körperbau: ``fettverbrennung`` von 24 auf 15 und
 #:   der Diesel von ``wkg_bias=-0.20`` auf 0 bei +4 cm Körpergröße.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 147408.92),
-    (8, 151068.89),
-    (5, 151724.69),
-    (3, 153672.32),
-    (4, 162370.82),
-    (1, 163160.25),
-    (6, 167012.62),
+    (7, 147605.24),
+    (8, 151532.94),
+    (5, 151825.23),
+    (3, 154014.66),
+    (4, 162709.93),
+    (1, 166067.78),
+    (6, 167462.86),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
@@ -217,6 +226,7 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
 GOLDEN_LONG_EVENTS: dict[str, int] = {
+    "BIKE_CHANGE": 3,
     "CONDITION_END": 36,
     "CONDITION_START": 44,
     "DECISION": 10,

@@ -592,7 +592,6 @@ def simulate_race(
     # Steigungstrigonometrie und Rampenanteil hängen nur an der Strecke.
     cos_pt, sin_pt = ph.slope_trig(grade_pt)
     ramp_pt = np.clip(grade_pt, 0.0, st.CLIMB_BOOST_REF_GRADE) / st.CLIMB_BOOST_REF_GRADE
-    steep_pt = grade_pt > 0.06
 
     # ---------------- Splits und Servicepunkte -----------------------
     split_dist = np.array([s.dist_m for s in route.splits], dtype=np.float64)
@@ -689,7 +688,9 @@ def simulate_race(
 
     bike_mass = np.array([ph.BIKES[name]["mass_kg"] for name in ph.BIKE_NAMES])
     bike_cda_f = np.array([ph.BIKES[name]["cda_factor"] for name in ph.BIKE_NAMES])
-    bike_steep = np.array([ph.BIKES[name]["steep_penalty"] for name in ph.BIKE_NAMES])
+    bike_dev_min = np.array([ph.BIKES[name]["dev_min_m"] for name in ph.BIKE_NAMES])
+    bike_dev_max = np.array([ph.BIKES[name]["dev_max_m"] for name in ph.BIKE_NAMES])
+    berg_norm = np.array([r.attr_norm("berg") for r in field_riders])
 
     split_times = np.full((n, n_splits), np.nan)
 
@@ -1278,13 +1279,22 @@ def simulate_race(
             # Schwelle heben.
             ramp_target = ftp_eff * anaerobic_over
             p_target = p_target + steep_ramp_pt[idx] * np.maximum(ramp_target - p_target, 0.0)
-            p_target = p_target * (1.0 - bike_steep[bike] * steep_pt[idx])
+            # Der frühere pauschale Steilabzug des Zeitfahrrads steht
+            # nicht mehr hier: Er folgt weiter unten aus der Entfaltung.
 
             # W'-Wächter: bei leerem Tank wird an Rampen nicht mehr
             # überzogen (Regelkreis aus Abschnitt 7.2).
             guard = wprime < fat.W_PRIME_GUARD * wprime_cap
             p_target = np.where(guard, np.minimum(p_target, ftp_eff), p_target)
-            p_eff = p_target * ph.downhill_power_taper(v)
+
+            # --- Trittfrequenz ---------------------------------------
+            # Der Gang folgt dem Tempo, solange die Kassette reicht.
+            # Zwei Enden kosten: oben das Leerdrehen (das ersetzt den
+            # alten Abfahrtsdeckel und gilt jetzt je Rad), unten das
+            # Mahlen mit hoher Pedalkraft.
+            rpm = ph.cadence_rpm(v, bike_dev_min[bike], bike_dev_max[bike])
+            grind = ph.grind_factor(rpm, berg_norm)
+            p_eff = p_target * ph.downhill_power_taper(v, bike_dev_max[bike]) * grind
 
             # --- Physik ----------------------------------------------
             mass = weight + bike_mass[bike] + tyre_mass + ph.SUPPORTED_LUGGAGE_KG
@@ -1328,7 +1338,13 @@ def simulate_race(
             )
             dist_new = dist + v_new * dt
 
-            wprime_new = fat.w_prime_step(wprime, wprime_cap, p_eff, ftp_eff, dt)
+            # Mahlen rekrutiert anaerob: Bei halber Trittfrequenz steht
+            # die doppelte Pedalkraft an, und die holt sich der Körper
+            # aus derselben Kasse wie eine Rampe. Die Schwelle sinkt
+            # deshalb um denselben Faktor, um den der Wirkungsgrad
+            # nachgibt — damit zieht ein zäher Gang W′, auch wenn die
+            # Leistung nominell unter FTP liegt.
+            wprime_new = fat.w_prime_step(wprime, wprime_cap, p_eff, ftp_eff * grind, dt)
 
             dist_prev = dist.copy()
             v = np.where(running, v_new, v)

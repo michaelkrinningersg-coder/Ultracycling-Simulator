@@ -138,9 +138,20 @@ K_POSITION: dict[str, float] = {
 }
 
 #: Rad-Kenngrößen (Abschnitt 6.4).
+#:
+#: ``dev_min_m``/``dev_max_m`` sind die Entfaltung in Metern je
+#: Kurbelumdrehung im kleinsten und größten Gang — bei 700×28 (2,10 m
+#: Abrollumfang) entspricht das einer Kompaktkurbel 50/34 mit 11–34 am
+#: Rennrad und 54/42 mit 11–28 am Zeitfahrrad.
+#:
+#: Sie ersetzen den früheren ``steep_penalty``: Der war eine Stufe von
+#: 4 % ab sechs Prozent Steigung, gleich hoch bei sieben wie bei
+#: fünfzehn. Aus der Entfaltung folgt stattdessen stetig, wie zäh es
+#: wird — auf einer 15-%-Rampe bei 11 km/h tritt man am Rennrad 87 und
+#: am Zeitfahrrad 58 Umdrehungen.
 BIKES: dict[str, dict[str, float]] = {
-    "road": {"mass_kg": 7.5, "cda_factor": 1.00, "steep_penalty": 0.0},
-    "tt": {"mass_kg": 9.0, "cda_factor": 0.80, "steep_penalty": 0.04},
+    "road": {"mass_kg": 7.5, "cda_factor": 1.00, "dev_min_m": 2.10, "dev_max_m": 9.55},
+    "tt": {"mass_kg": 9.0, "cda_factor": 0.80, "dev_min_m": 3.15, "dev_max_m": 10.31},
 }
 BIKE_ROAD = 0
 BIKE_TT = 1
@@ -150,10 +161,32 @@ BIKE_NAMES = ("road", "tt")
 SUPPORTED_LUGGAGE_KG = 2.0
 SUPPORTED_LUGGAGE_CDA = 0.010
 
-#: Ab dieser Geschwindigkeit beginnt die Trittfrequenzgrenze zu greifen …
-DOWNHILL_TAPER_START = 13.9  # 50 km/h
-#: … und darüber tritt niemand mehr sinnvoll mit.
-DOWNHILL_NO_POWER = 18.1  # 65 km/h
+#: Bevorzugte Trittfrequenz. Der Fahrer wählt den Gang, der ihn hier
+#: hinbringt, solange die Kassette das hergibt.
+CADENCE_PREFERRED = 87.0
+#: Darüber wird es zum Leerdrehen: Ab hier fällt die Leistung ab …
+CADENCE_MAX = 114.0
+#: … und darunter zum Mahlen, weil die Pedalkraft steigt.
+CADENCE_GRIND = 70.0
+#: Ganz unten geht gar nichts mehr sinnvoll.
+CADENCE_FLOOR = 40.0
+#: Wirkungsgradverlust bei ganz niedriger Trittfrequenz.
+GRIND_LOSS = 0.10
+#: Wie stark ``berg`` das dämpft. Das Design-Dokument führt beim Attribut
+#: *Berg* ausdrücklich „geringerer Wirkungsgradverlust bei niedriger
+#: Trittfrequenz" — gebaut war davon bis hierher nichts.
+GRIND_BERG_SPAN = 0.50
+
+#: Alte Namen, hergeleitet statt gesetzt. Sie standen als 13,9 und
+#: 18,1 m/s im Code, und das Nachrechnen war die eigentliche
+#: Überraschung: Im größten Gang des Rennrads sind das **87,4 und
+#: 113,8 rpm** — also exakt die bevorzugte und die maximale
+#: Trittfrequenz. Die Konstanten waren bereits ein Trittfrequenzmodell,
+#: nur eines für genau ein Rad. Hergeleitet gelten sie jetzt auch für
+#: das Zeitfahrrad, das mit 54×11 eine längere Übersetzung hat und
+#: deshalb länger mittreten kann.
+DOWNHILL_TAPER_START = BIKES["road"]["dev_max_m"] * CADENCE_PREFERRED / 60.0
+DOWNHILL_NO_POWER = BIKES["road"]["dev_max_m"] * CADENCE_MAX / 60.0
 #: Globaler Sicherheitsdeckel gegen Ausreißer.
 MAX_SPEED = 23.6  # 85 km/h
 #: Untergrenze für die Antriebsrechnung (P/v ist bei v -> 0 singulär).
@@ -293,15 +326,50 @@ def air_force(rho: np.ndarray, cda: np.ndarray, v: np.ndarray, headwind: np.ndar
     return 0.5 * rho * cda * v_air * np.abs(v_air)
 
 
-def downhill_power_taper(v: np.ndarray) -> np.ndarray:
+def cadence_rpm(
+    v: np.ndarray, dev_min_m: np.ndarray, dev_max_m: np.ndarray
+) -> np.ndarray:
+    """Trittfrequenz im jeweils besten verfügbaren Gang.
+
+    Der Fahrer sucht die Entfaltung, die ihn auf seine bevorzugte
+    Frequenz bringt; die Kassette begrenzt ihn nach oben und unten. Erst
+    dort, wo sie nicht mehr reicht, weicht die Frequenz ab — und genau
+    dann kostet es etwas.
+    """
+    v = np.maximum(np.asarray(v, dtype=np.float64), 0.0)
+    want = 60.0 * v / CADENCE_PREFERRED
+    dev = np.clip(want, dev_min_m, dev_max_m)
+    return 60.0 * v / np.maximum(dev, 1e-6)
+
+
+def downhill_power_taper(v: np.ndarray, dev_max_m: np.ndarray | float = None) -> np.ndarray:
     """Anteil der Zielleistung, der bei hohem Tempo noch ankommt.
 
     Ohne diese Begrenzung werden Abfahrten unrealistisch schnell, weil
-    der Fahrer bei 70 km/h weiter 250 W in die Kurbel drückt.
+    der Fahrer bei 70 km/h weiter 250 W in die Kurbel drückt. Der Grund
+    ist die Trittfrequenz: Im größten Gang ist irgendwann Schluss.
     """
-    return np.clip(
-        (DOWNHILL_NO_POWER - v) / (DOWNHILL_NO_POWER - DOWNHILL_TAPER_START), 0.0, 1.0
+    if dev_max_m is None:
+        dev_max_m = BIKES["road"]["dev_max_m"]
+    rpm = 60.0 * np.asarray(v, dtype=np.float64) / np.asarray(dev_max_m)
+    return np.clip((CADENCE_MAX - rpm) / (CADENCE_MAX - CADENCE_PREFERRED), 0.0, 1.0)
+
+
+def grind_factor(rpm: np.ndarray, berg_norm: np.ndarray | float = 0.0) -> np.ndarray:
+    """Wirkungsgradverlust beim Mahlen mit zu niedriger Trittfrequenz.
+
+    Bei gleicher Leistung und halber Frequenz steht die doppelte
+    Pedalkraft an. Das kostet Wirkungsgrad und rekrutiert anaerob — den
+    zweiten Teil erledigt die Engine, indem sie die Schwelle für die
+    W′-Bilanz um denselben Faktor absenkt.
+    """
+    short = np.clip(
+        (CADENCE_GRIND - np.asarray(rpm, dtype=np.float64)) / (CADENCE_GRIND - CADENCE_FLOOR),
+        0.0,
+        1.0,
     )
+    damp = 1.0 - GRIND_BERG_SPAN * np.clip(np.asarray(berg_norm, dtype=np.float64), -1.0, 1.0)
+    return 1.0 - GRIND_LOSS * short * damp
 
 
 #: Wie viel enger die *engste* Kurve eines Abschnitts ist als der

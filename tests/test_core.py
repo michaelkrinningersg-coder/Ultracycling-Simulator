@@ -525,17 +525,74 @@ def test_a_real_pass_is_ridden_on_the_road_bike(route_medium):
 
     Auf einem Anstieg, der lang und steil genug ist, trägt der Gewinn
     die Wechselkosten mit Abstand — dort darf kein Zeitfahrrad stehen.
+
+    Der Pass wird hier gebaut. Vorher stand er in der Fixture, und das
+    ging so lange gut, wie das Zeitfahrrad an *jeder* Steigung über
+    sechs Prozent pauschal vier Prozent Leistung verlor. Seit der
+    Verlust aus der Entfaltung folgt, ist er an einem Siebenprozenter
+    gleich null — dort tritt man auch mit 42×28 noch 79 Umdrehungen, und
+    das ist kein Mahlen. Erst darüber wird es zäh. Ein Test, der das
+    prüfen will, braucht also einen Anstieg, der wirklich steil ist.
     """
     rng = np.random.default_rng(9)
     rider = generate_rider(rng, 0, 0, archetype="kletterer")
-    sections, _ = st.build_bike_plan(rider, route_medium, 0.72, 0.2, change_cost_s=60.0)
-    clear = [
-        s
-        for s in sections
-        if s.est_time_tt_s - s.est_time_road_s > 100.0  # Straßenrad klar schneller
-    ]
-    assert clear, "Die Fixture soll einen richtigen Pass enthalten"
+    steep = _with_steep_ramps(route_medium)
+    cost = 25.0
+    sections, _ = st.build_bike_plan(rider, steep, 0.72, 0.2, change_cost_s=cost)
+
+    # Die Schwelle hängt an der Entscheidungsregel und nicht an einer
+    # geerbten Zahl: Gewechselt wird, wenn der Gewinn die Wechselkosten
+    # trägt, also ist „klar" das Doppelte davon. Vorher standen hier
+    # 100 Sekunden — kalibriert auf den pauschalen Vier-Prozent-Abzug,
+    # der inzwischen weg ist.
+    clear = [s for s in sections if s.est_time_tt_s - s.est_time_road_s > 2 * cost]
+    assert clear, "Die Teststrecke soll einen richtigen Pass enthalten"
     assert all(s.bike == ph.BIKE_ROAD for s in clear)
+
+
+def test_the_time_trial_bike_only_suffers_where_the_gearing_runs_out():
+    """Die Kehrseite: An mäßiger Steigung darf es keinen Abzug geben.
+
+    Der alte ``steep_penalty`` war eine Stufe — vier Prozent ab sechs
+    Prozent Steigung, gleich hoch bei sieben wie bei fünfzehn. Er hat
+    damit zwei verschiedene Dinge vermischt: die zu lange Übersetzung
+    und die unbequeme Position. Die Übersetzung ist jetzt hergeleitet,
+    und sie kostet erst da, wo sie wirklich ausgeht.
+    """
+    tt = ph.BIKES["tt"]
+    # 7 % bei rund 15 km/h: 79 rpm, also noch im Bereich.
+    rpm_mild = float(ph.cadence_rpm(np.array([15 / 3.6]), tt["dev_min_m"], tt["dev_max_m"])[0])
+    assert rpm_mild > ph.CADENCE_GRIND
+    assert float(ph.grind_factor(rpm_mild)) == 1.0
+
+    # 15 % bei rund 11 km/h: 58 rpm, und das kostet.
+    rpm_steep = float(ph.cadence_rpm(np.array([11 / 3.6]), tt["dev_min_m"], tt["dev_max_m"])[0])
+    assert rpm_steep < ph.CADENCE_GRIND
+    assert float(ph.grind_factor(rpm_steep)) < 0.98
+
+    # Das Straßenrad bleibt dort bequem — das ist der ganze Unterschied.
+    road = ph.BIKES["road"]
+    rpm_road = float(ph.cadence_rpm(np.array([11 / 3.6]), road["dev_min_m"], road["dev_max_m"])[0])
+    assert rpm_road > ph.CADENCE_GRIND
+    assert float(ph.grind_factor(rpm_road)) == 1.0
+
+
+def test_a_longer_top_gear_lets_you_pedal_further_downhill():
+    """Der Abfahrtsdeckel gilt jetzt je Rad statt global.
+
+    Die alten Konstanten (13,9 und 18,1 m/s) waren im größten Gang des
+    Straßenrads genau 87 und 114 rpm — sie *waren* schon ein
+    Trittfrequenzmodell, nur eines für ein einziges Rad.
+    """
+    v = np.array([19.0])  # 68 km/h
+    road = float(ph.downhill_power_taper(v, ph.BIKES["road"]["dev_max_m"])[0])
+    tt = float(ph.downhill_power_taper(v, ph.BIKES["tt"]["dev_max_m"])[0])
+    assert road == 0.0, "mit 50x11 ist bei 65 km/h Schluss"
+    assert tt > 0.0, "mit 54x11 tritt man länger mit"
+
+    # Und der Vorgabewert reproduziert die frühere Kurve.
+    assert ph.DOWNHILL_TAPER_START == pytest.approx(13.9, abs=0.1)
+    assert ph.DOWNHILL_NO_POWER == pytest.approx(18.1, abs=0.1)
 
 
 # ----------------------------------------------------------------------
@@ -561,24 +618,33 @@ def test_the_anaerobic_ramp_rises_monotonically():
     assert np.all(np.diff(ramp) >= 0.0)
 
 
-def _with_steep_ramps(base):
-    """Dieselbe Strecke, aber mit drei Rampen à 15 %.
+def _with_steep_ramps(base, pass_km: float = 20.0):
+    """Dieselbe Strecke, aber mit echten Pässen statt Wellen.
 
-    Die Rampe wird hier gebaut und nicht aus ``data/`` geladen: Ein Test,
-    der an einer mitgelieferten Streckendatei hängt, prüft am Ende die
-    Datei und nicht die Mechanik.
+    Je Pass sechs Kilometer an 8 %, dann anderthalb an 15 %, dann
+    hinunter. Die Steilrampe allein genügt nicht: Ein Abschnitt reicht
+    von Servicepunkt zu Servicepunkt beziehungsweise von Fuß zu Kuppe
+    eines Anstiegs, und anderthalb Kilometer darin gehen im Rest unter.
+    Auf der echten Bergstrecke ist der *Pass* der Abschnitt, und genau
+    das muss die Testkulisse nachbauen.
+
+    Gebaut wird sie hier und nicht aus ``data/`` geladen: Ein Test, der
+    an einer mitgelieferten Streckendatei hängt, prüft am Ende die Datei
+    und nicht die Mechanik.
     """
-    n = base.n_points
-    ele = np.zeros(n, dtype=np.float64)
     step = base.raster_m
-    for start_km in (10.0, 25.0, 40.0):
-        lo = int(start_km * 1000 / step)
-        up = lo + int(1500 / step)          # 1,5 km hinauf
-        down = up + int(1500 / step)        # und wieder hinunter
-        ele[lo:up] = np.arange(up - lo) * step * 0.15
-        top = ele[up - 1]
-        ele[up:down] = top - np.arange(down - up) * step * 0.15
-        ele[down:] = 0.0
+    ele = np.zeros(base.n_points, dtype=np.float64)
+    legs = ((6000.0, 0.08), (1500.0, 0.15), (3000.0, -0.12), (4500.0, -0.09))
+    stride = int(pass_km * 1000 / step)
+    cursor = int(2000 / step)
+    while cursor + sum(int(m / step) for m, _ in legs) < base.n_points:
+        here = cursor
+        for length_m, grade in legs:
+            span = int(length_m / step)
+            ele[here : here + span] = ele[max(here - 1, 0)] + np.arange(span) * step * grade
+            here += span
+        ele[here:] = ele[here - 1]
+        cursor += stride
     return replace(base, ele_dm=(ele * 10.0).astype(np.int32))
 
 
@@ -616,4 +682,8 @@ def test_a_route_without_ramps_leaves_w_prime_alone(route):
     teams, riders = generate_pool(8, n_teams=2, seed=77)
     result = simulate_race(route, riders, teams, RaceConfig(seed=2024))
     values = result.telemetry.wprime_pct.astype(np.float64)[result.telemetry.state == 0]
-    assert values.min() > 95.0
+    # Nicht 100 %: Ein Fahrer im Zeitfahrrad mahlt auch an einem
+    # Neunprozenter, und das zieht über die abgesenkte Schwelle etwas
+    # W′. Das ist der zweite, leisere Weg in den anaeroben Bereich und
+    # gewollt. Verboten ist die *tiefe* Entladung ohne Steilrampe.
+    assert values.min() > 85.0

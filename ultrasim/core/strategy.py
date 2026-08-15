@@ -425,12 +425,15 @@ def estimate_section_time(
     ) + tspec["cda"]
     rho = ph.air_density(mean_ele)
     power = power_w * boost_norm * terrain_power_factor(grades, np.full_like(grades, boost))
-    # Zeitfahrrad: Wirkungsgradverlust an steilen Rampen (Abschnitt 6.4).
-    power = power * (1.0 - spec["steep_penalty"] * (grades > 0.06))
+    # Zeitfahrrad an steilen Rampen: Der Verlust folgt jetzt aus der
+    # Entfaltung statt aus einer Pauschale. Er wird nach dem ersten
+    # Tempodurchgang unten angewandt, weil er die Trittfrequenz braucht.
     # Zwei Durchgänge, weil der Rollwiderstand jetzt vom Tempo abhängt
     # und das Tempo vom Rollwiderstand. Der Zusammenhang ist flach — der
     # Tempoterm bewegt den Beiwert um wenige Prozent —, also reicht ein
     # Nachschlag, genau wie beim Energiedeckel eine Ebene höher.
+    tspec_dev_min = spec["dev_min_m"]
+    tspec_dev_max = spec["dev_max_m"]
     v = np.full_like(grades, 8.5)
     for _ in range(2):
         crr = ph.rolling_crr(
@@ -442,8 +445,14 @@ def estimate_section_time(
             np.full_like(grades, mass),
             rider.attr_norm("oberflaechenkompetenz"),
         )
-        v = ph.steady_state_speed(power, grades, np.full_like(grades, mass), cda, crr, rho)
-        v = np.clip(v, 1.0, ph.DOWNHILL_NO_POWER)
+        rpm = ph.cadence_rpm(
+            v, np.full_like(grades, tspec_dev_min), np.full_like(grades, tspec_dev_max)
+        )
+        grind = ph.grind_factor(rpm, rider.attr_norm("berg"))
+        v = ph.steady_state_speed(
+            power * grind, grades, np.full_like(grades, mass), cda, crr, rho
+        )
+        v = np.clip(v, 1.0, spec["dev_max_m"] * ph.CADENCE_MAX / 60.0)
     return float(np.sum(dists / v))
 
 

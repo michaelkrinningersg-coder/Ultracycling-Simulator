@@ -48,7 +48,7 @@ hier umgesetzt.
 | Tote Attribute | Der Kalibrierungsbericht hat sechs Attribute mit einer Null ausgewiesen; fünf haben jetzt eine Mechanik. Sitzbeschwerden ab zwölf Stunden im Sattel, Standzeit nach Panne aus der Mechanikerfähigkeit, Leistungsverlust über 1500 m, ein Kurvenlimit, das in Kehren wirklich bindet, und eine Wettermessung, die nicht mehr an der Chaosempfindlichkeit einer 40-Stunden-Strecke scheitert. Dazu ein Vorzeichentest als zweite Nachweisform für Attribute, deren Wirkung von Ausreißern verzogen wird. Dazu der Attribut-Tuner im Fahrerdetail: zwei Regler, ein Klick, beide Versionen des Fahrers starten im selben Rennen |
 | Ultra-Weltserie | Der Standardkalender: zehn Strecken von 396 bis 2469 km mit zehn verschiedenen Anforderungen, in steigender Distanz. Die Termine stehen dort, wo das Erholungsfenster des vorherigen Rennens endet — das füllt die Saison von Ende Februar bis Mitte Oktober. Wer nach dem letzten Rennen führt, ist **Ultrameister**; vorher steht der Titel nicht da |
 | Live-Rennen (M8) | Ein Rennen, das erst entsteht, während man zusieht: `simulate_race` ist ein Generator, den die Wiedergabeuhr hinter sich herzieht. Alle sieben Zeitrafferstufen bleiben — gemessen schafft die Engine 1900- bis 5400-fache Echtzeit, bei 1000× ist also mindestens die doppelte Reserve da. Der Zwischenstand wird laufend gesichert, im selben Format wie ein fertig gerechnetes Rennen. Dass beide Wege dasselbe Rennen liefern, prüft `tests/test_live.py` auf die Hundertstelsekunde |
-| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 564 Tests inklusive zweier Golden-Master |
+| Werkzeuge | CLI für Pool, Rennen, Ergebnis, Fahrerdetail, Saison und Kalibrierung, Balancing-Batch mit Abgleich gegen Dauerbänder und DNF-Korridor, 570 Tests inklusive zweier Golden-Master |
 
 **Bewusst gestrichen**: die Highlight-Automatik aus M7b — der Ticker
 meldet ohnehin jedes größere Ereignis, und eine automatische Auswahl
@@ -225,10 +225,21 @@ März führt, hat nichts gewonnen — wer im Oktober führt, ist
 
 Die Termine stehen nicht auf runden Abständen, sondern dort, wo das
 **Erholungsfenster** des vorherigen Rennens endet: die Zeit, die ein
-durchschnittlicher Fahrer bis 98 % Frische braucht. Das sind nach dem
-Auftakt neunzehn Tage und nach dem Finale zweiunddreißig, zusammen
-knapp acht Monate — die Saison ist damit voll, und mehr als zehn Rennen
-dieser Art passen nicht in ein Jahr.
+durchschnittlicher Fahrer bis 98 % Frische braucht, plus fünfzehn
+Prozent Marge. Das sind nach dem Auftakt 23 Tage und vor dem Finale 38 —
+zusammen der 1. Februar bis zum 2. November. Acht Wochen Winter bleiben,
+mehr nicht: **Zehn Rennen dieser Größe passen gerade so in ein Jahr.**
+
+Die Marge ist nicht Vorsicht, sondern eine gemessene Korrektur. Geplant
+wird mit einer Schätzung aus Kilometern und Höhenmetern (15,1 kJ je km
+plus 0,76 kJ je Höhenmeter — letzteres ist genau die potenzielle Energie
+eines 78-kg-Systems, m·g/1000 = 0,765). Auf acht der zehn Strecken
+trifft sie auf zehn Prozent. Auf den Dolomiten-Vierpässen nicht: dort
+stehen 23,1 gemessene gegen 14,9 geschätzte Megajoule. Der Rest steckt
+in Mechaniken, die eine Formel aus Kilometern und Höhenmetern nicht
+sehen kann — die Trittfrequenz fällt auf den Steilstücken unter den
+günstigen Bereich, die Rampen über 12 % gehen anaerob, und ein Fünftel
+der Strecke liegt über 1500 m.
 
 Der **Rennkoeffizient** in der letzten Spalte multipliziert die Punkte:
 Ein Sieg auf der Transkontinental ist 272 Punkte wert, einer am Atlantik

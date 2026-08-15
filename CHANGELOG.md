@@ -13,9 +13,9 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
   Pflasterhügel, Nachtfahrt, Bergultra, Monotonie auf der Hochebene,
   Alpenquerung, und am Ende alles zusammen.
   - Die Termine stehen dort, wo das **Erholungsfenster** des vorherigen
-    Rennens endet, nicht auf runden Abständen. Das füllt die Saison von
-    Ende Februar bis Mitte Oktober; mehr als zehn Rennen dieser Art
-    passen nicht in ein Jahr. Dieselbe Regel gilt jetzt auch für den
+    Rennens endet, nicht auf runden Abständen. Das füllt die Saison vom
+    1. Februar bis zum 2. November; zehn Rennen dieser Größe passen
+    gerade so in ein Jahr. Dieselbe Regel gilt jetzt auch für den
     allgemeinen Kalendervorschlag — vorher kam die Pause aus der
     Distanzklasse, und der Eimer „ultra" reicht von 1000 bis 2500 km.
   - Der Kalender liegt beim ersten Start fertig da, **ungerechnet**. Ihn
@@ -67,6 +67,16 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geändert
 
+- Die **Arbeitsschätzung** für die Kalenderplanung hat zwei Terme statt
+  einem. Der alte Wert (15,0 kJ je Äquivalentkilometer) war an drei
+  Strecken mit höchstens 13,4 hm/km erhoben und lag über die zehn neuen
+  zwischen 15,6 und 27,7 — bis zu 85 % daneben. Neu: 15,1 kJ je
+  Kilometer plus 0,76 kJ je Höhenmeter. Der zweite Term ist keine
+  Kurvenanpassung: Die potenzielle Energie eines 78-kg-Systems ist
+  m·g/1000 = 0,765 kJ je Meter. Dazu 15 % Planungsmarge, weil die
+  Schätzung auf der steilsten Strecke weiterhin ein Drittel zu niedrig
+  liegt — Trittfrequenz, anaerobe Rampen und Höhe stehen in keiner
+  Formel aus Kilometern und Höhenmetern.
 - Die Obergrenze des **Rennkoeffizienten** steigt von 2,2 auf 2,9. Sie
   war als Notnagel gegen absurde Eingaben gedacht, hat mit der Weltserie
   aber angefangen zu werten: Alpenüberquerung (1924 km) und

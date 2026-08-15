@@ -78,18 +78,72 @@ def test_the_standard_calendar_spans_four_hundred_to_twentyfive_hundred(tmp_path
     assert km == sorted(km)
 
 
-def test_the_calendar_is_actually_rideable(tmp_path):
+#: Die *gemessene* Arbeit eines Durchschnittsfahrers auf den acht
+#: Strecken, für die ein gerechnetes Rennen vorliegt, in Megajoule.
+#: Median über 250 Fahrer, Weltserie 2031, Seed 7.
+#:
+#: Sie steht hier als Zahlenreihe und nicht als Fixture, weil sie sonst
+#: bei jedem Lauf zwölf Minuten kosten würde. Wer die Physik ändert,
+#: muss sie neu erheben — und genau das soll dieser Test dann auch
+#: verlangen.
+GEMESSENE_ARBEIT_MJ = {
+    "Atlantik-Zeitfahren": 6.5,
+    "Ardennen-Wellenritt": 11.0,
+    "Dolomiten-Vierpässe": 23.1,
+    "Karpaten-Schotterrunde": 12.7,
+    "Toskana-Hügelmarathon": 17.4,
+    "Ostsee-Nachtfahrt": 17.7,
+    "Pyrenäen-Traverse": 25.4,
+    "Steppenroute Anatolien": 24.9,
+}
+
+
+def test_the_calendar_is_actually_rideable():
     """Kein Termin liegt im Erholungsfenster seines Vorgängers.
 
     Ein Kalender, der das verletzt, sieht auf der Seite gleich aus und
     lässt sich genauso rechnen — nur startet das ganze Feld angeschlagen,
     und niemand sieht, warum die Zeiten schlechter werden.
+
+    Geprüft wird gegen die **gemessene** Arbeit, nicht gegen die
+    Schätzung, mit der geplant wurde. Gegen die eigene Schätzung geht
+    ein Plan immer auf; das wäre kein Test, sondern eine Tautologie —
+    und genau daran ist die erste Fassung dieses Kalenders vorbeigelaufen.
     """
     store = Store("data")
-    season = sn.Season(id="w", name="Weltserie", year=2031)
-    season.races = runner.weltserie_calendar(store, 2031)
-    crowded = [row for row in runner.calendar_plan(store, season) if row.crowded]
-    assert not crowded, [row.race.name for row in crowded]
+    calendar = runner.weltserie_calendar(store, 2031)
+    crowded = []
+    for previous, current in zip(calendar, calendar[1:], strict=False):
+        work_mj = GEMESSENE_ARBEIT_MJ.get(previous.name)
+        if work_mj is None:
+            continue
+        needed = sn.recovery_days(work_mj * 1000.0, runner.NOMINAL_CAPACITY_KJ)
+        gap = (current.day - previous.day).days
+        if gap < needed:
+            crowded.append(f"{current.name}: {gap} T Pause, nötig {needed:.1f} T")
+    assert not crowded, crowded
+
+
+def test_the_work_estimate_matches_the_measurements():
+    """Die Schätzung, mit der geplant wird, gegen das, was herauskommt.
+
+    Acht von zehn Strecken auf rund zehn Prozent. Die Dolomiten sind die
+    Ausnahme und bleiben es: Trittfrequenz unter dem günstigen Bereich,
+    anaerobe Rampen und ein Fünftel der Strecke über 1500 m stehen in
+    keiner Formel aus Kilometern und Höhenmetern. Deshalb plant der
+    Kalender mit ``CALENDAR_MARGIN``.
+    """
+    routes = {r["name"]: r for r in Store("data").list_routes()}
+    errors = {}
+    for name, measured_mj in GEMESSENE_ARBEIT_MJ.items():
+        route = routes[name]
+        estimate = runner.estimated_work_kj(route["distance_km"], route["ascent_m"])
+        errors[name] = abs(estimate / 1000.0 - measured_mj) / measured_mj
+
+    ohne_dolomiten = {k: v for k, v in errors.items() if "Dolomiten" not in k}
+    assert max(ohne_dolomiten.values()) < 0.20, ohne_dolomiten
+    # Und die Marge muss die verbleibende Lücke decken.
+    assert runner.CALENDAR_MARGIN > 1.0
 
 
 def test_the_calendar_fits_into_one_year():

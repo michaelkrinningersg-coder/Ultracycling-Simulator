@@ -61,13 +61,21 @@ def race_summaries(store: Store, season: sn.Season) -> dict[str, RaceSummary]:
     return out
 
 
-#: Rennarbeit je „flachem Kilometer", gemessen an gerechneten Rennen:
-#: 14,8 kJ auf der Voralpen-Runde, 14,9 auf dem Hochgebirgs-Marathon,
-#: 13,8 auf der Nordroute. Der Wert ist erstaunlich stabil, weil die
-#: Strecke über ``effort_km`` bereits Höhenmeter enthält und der Rennplan
-#: die Intensität an die Distanz anpasst — lange Rennen werden langsamer
-#: gefahren, kosten pro Kilometer aber ähnlich viel.
-WORK_PER_EFFORT_KM_KJ = 15.0
+#: Rennarbeit je flachem Kilometer und je Höhenmeter, gemessen an
+#: gerechneten Rennen.
+#:
+#: Vorher stand hier ein einziger Wert je „Äquivalentkilometer" (15,0
+#: kJ), erhoben an drei Strecken mit höchstens 13,4 hm/km. Über die zehn
+#: Strecken der Weltserie hält er nicht mehr: gemessen zwischen 15,6 und
+#: 27,7 kJ je Äquivalentkilometer, also bis zu 85 % daneben.
+#:
+#: Zwei Terme statt einem — und der Höhenmeter-Term ist keine
+#: Kurvenanpassung, sondern eine Wiedererkennung: Aus den Messwerten
+#: kommen **0,76 kJ je Höhenmeter**, und die potenzielle Energie eines
+#: 78-kg-Systems ist m·g/1000 = 0,765 kJ je Meter. Der Fit findet die
+#: Physik, die dahintersteckt.
+WORK_PER_KM_KJ = 15.1
+WORK_PER_ASCENT_M_KJ = 0.76
 
 #: Arbeitskapazität eines Fahrers mit Durchschnittswerten (Ausdauer und
 #: Regeneration 50, 70 kg). Bezugsgröße für das Erholungsfenster im
@@ -77,8 +85,18 @@ NOMINAL_CAPACITY_KJ = 42_000.0
 
 
 def estimated_work_kj(distance_km: float, ascent_m: float) -> float:
-    """Was ein Rennen einen durchschnittlichen Fahrer an Arbeit kostet."""
-    return sn.effort_km(distance_km, ascent_m) * WORK_PER_EFFORT_KM_KJ
+    """Was ein Rennen einen durchschnittlichen Fahrer an Arbeit kostet.
+
+    Auf acht der zehn Weltserien-Strecken trifft das auf rund zehn
+    Prozent. Die Ausnahme sind die Dolomiten-Vierpässe: gemessen 23,1
+    MJ gegen 14,9 MJ geschätzt. Der Rest steckt in Mechaniken, die eine
+    Formel aus Kilometern und Höhenmetern nicht sehen kann — die
+    Trittfrequenz fällt auf den Steilstücken unter den günstigen
+    Bereich, die Rampen über 12 % gehen anaerob, und ein Fünftel der
+    Strecke liegt über 1500 m. Deshalb plant der Kalender mit Marge
+    statt mit der nackten Schätzung.
+    """
+    return distance_km * WORK_PER_KM_KJ + ascent_m * WORK_PER_ASCENT_M_KJ
 
 
 @dataclass
@@ -426,15 +444,27 @@ WELTSERIE: tuple[tuple[str, str], ...] = (
 )
 
 #: Erster Termin der Weltserie. Sie braucht fast das ganze Jahr: Die
-#: Erholungsfenster der zehn Rennen summieren sich auf rund 240 Tage,
-#: und das ist keine Vorgabe, sondern das Ergebnis — 2469 Kilometer
-#: kosten einen Durchschnittsfahrer gut vier Wochen.
-WELTSERIE_START = (2, 25)  # 25. Februar
+#: Erholungsfenster der zehn Rennen summieren sich mit Marge auf rund
+#: 290 Tage, und das ist keine Vorgabe, sondern das Ergebnis — 2469
+#: Kilometer kosten einen Durchschnittsfahrer gut fünf Wochen. Ab dem
+#: 1. Februar endet die Serie Anfang November und lässt acht Wochen
+#: Winter; mehr als zehn Rennen dieser Größe passen nicht ins Jahr.
+WELTSERIE_START = (2, 1)
 
 #: Puffer über das Erholungsfenster hinaus, in Tagen. Ohne ihn läge
 #: jeder Termin exakt auf der 98-%-Grenze und der Kalender wäre
 #: rechnerisch fahrbar, praktisch aber auf Kante genäht.
 CALENDAR_BUFFER_DAYS = 2
+
+#: Sicherheitsmarge auf das geschätzte Erholungsfenster.
+#:
+#: Sie steht hier, weil die Schätzung nachweislich zu niedrig liegen
+#: kann: Auf den Dolomiten-Vierpässen sind 23,1 MJ gemessen worden, wo
+#: 14,9 geschätzt waren. Ohne Marge geplant, war genau der Termin
+#: danach als „zu eng" markiert — und zwar zu Recht, denn die Messung
+#: hatte recht und der Plan nicht. Fünfzehn Prozent decken die
+#: gemessene Abweichung auf allen zehn Strecken ab.
+CALENDAR_MARGIN = 1.15
 
 
 def _gap_after(route: dict[str, Any]) -> int:
@@ -445,7 +475,7 @@ def _gap_after(route: dict[str, Any]) -> int:
     Unterschied zwischen drei und viereinhalb Wochen Pause.
     """
     work = estimated_work_kj(route["distance_km"], route["ascent_m"])
-    needed = sn.recovery_days(work, NOMINAL_CAPACITY_KJ)
+    needed = sn.recovery_days(work, NOMINAL_CAPACITY_KJ) * CALENDAR_MARGIN
     return int(math.ceil(needed)) + CALENDAR_BUFFER_DAYS
 
 

@@ -565,6 +565,14 @@ Schwelle, gedämpft durch mentale Widerstandsfähigkeit.
 **Balancing-Test:** 200 Rennen im Batch, DNF-Quote je Klasse prüfen. Das
 ist der erste Golden-Master-Test, der gebaut werden sollte.
 
+**Gemessen (umgesetzt):** Der Aufgabe-Score darf *Notschlaf* nicht als
+verlorene Zeit werten. Bis 1463 km kommt Notschlaf überhaupt nicht vor;
+ab 1924 km sind 85 % der verlorenen Zeit Notschlaf, und mit ihm im
+Zähler lag die Ausfallquote bei 40–43 % statt bei 8–12 %. Schlaf ist auf
+einer Strecke mit fünf Nächten nicht das Scheitern des Plans, sondern
+der Plan — und er steckt über den Schlafdruck ohnehin schon im
+Ermüdungsterm derselben Formel.
+
 ### 6.6 Umwelt
 
 Wetter pro Rennen: Temperaturtagesgang, Niederschlagswahrscheinlichkeit,
@@ -956,7 +964,11 @@ ultrasim/
 
 - **Wie stark darf die Ortsschicht des Wetters wirken?** Wenn ein Passabschnitt immer kalt und windig ist, trifft das alle gleich — aber es verschiebt das Kräfteverhältnis der Fahrertypen auf dieser Strecke dauerhaft.
 - **Wie viele Teams?** Bei 250 Fahrern sind 25–35 Teams à 7–10 Fahrer plausibel. Bei zu wenigen Teams wird Servicedisziplin zum dominanten Faktor.
-- **Zeitlimit je Rennen?** Vorschlag: 1,4 × Siegerzeit oder eine feste Vorgabe im Kalender-Editor.
+- **Zeitlimit je Rennen** — *entschieden:* 2,0 × Siegerzeit. Der
+  ursprüngliche Vorschlag 1,4 nahm gemessen bis zu 32 % eines Feldes aus
+  der Wertung, obwohl die Fahrer angekommen waren. 2,0 ist der Wert aus
+  der Praxis (Paris–Brest–Paris: 90 h auf gut 44 h Siegerzeit). Eine
+  feste Vorgabe je Termin im Kalender-Editor bleibt möglich.
 - **Wie sichtbar sind Zustände in der UI?** Vorschlag: Statusicons in der Board-Zeile plus Zustandsbalken über dem Streckenprofil im Fahrerdetail.
 
 ---

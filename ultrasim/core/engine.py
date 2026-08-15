@@ -74,12 +74,18 @@ SAMPLE_DT_S: dict[str, int] = {"kurz": 5, "mittel": 15, "ultra": 30}
 START_INTERVAL_S: dict[str, int] = {"kurz": 1800, "mittel": 1800, "ultra": 1800}
 
 #: Langsamstes Äquivalenttempo, das der Simulationshorizont noch
-#: abdeckt. Zusammen mit ``RaceConfig.time_limit_factor`` (1,4) ergibt
-#: sich daraus die Bedingung, die zählt: Der Horizont überlebt die
-#: sportliche Zeitgrenze, solange der Sieger schneller als 11 · 1,4 =
-#: 15,4 km/h Äquivalenttempo fährt. Gemessen ist der langsamste Sieger
-#: im Weltserien-Kalender mit 20,7 km/h unterwegs.
-HORIZON_KMH = 11.0
+#: abdeckt. Zusammen mit ``RaceConfig.time_limit_factor`` ergibt sich
+#: daraus die Bedingung, die zählt: Der Horizont überlebt die sportliche
+#: Zeitgrenze, solange der Sieger schneller als ``HORIZON_KMH ·
+#: time_limit_factor`` Äquivalenttempo fährt.
+#:
+#: Mit 11 km/h und dem alten Faktor 1,4 lag die Schwelle bei 15,4 km/h.
+#: Mit dem Zeitlimit von 2,0 wäre sie auf 22 km/h gestiegen — über dem
+#: langsamsten gemessenen Sieger (Dolomiten-Vierpässe, 20,7 km/h
+#: Äquivalenttempo), und der Fehler von vorhin wäre zurück gewesen: Die
+#: Simulation hätte wieder vor der Wertung aufgehört. 8 km/h setzt die
+#: Schwelle auf 16 km/h und lässt ein knappes Drittel Luft.
+HORIZON_KMH = 8.0
 
 STATE_RIDING = 0
 STATE_STOPPED = 1
@@ -101,8 +107,23 @@ class RaceConfig:
     sample_dt_s: int | None = None
     #: Harte Obergrenze der Simulationsdauer je Fahrer.
     max_hours: float | None = None
-    #: Zeitlimit als Vielfaches der Siegerzeit (Abschnitt 15, offener Punkt).
-    time_limit_factor: float = 1.4
+    #: Zeitlimit als Vielfaches der Siegerzeit (Abschnitt 15, offener
+    #: Punkt — das Dokument schlägt 1,4 vor und lässt es offen).
+    #:
+    #: 1,4 war zu eng. Gemessen über den Weltserien-Kalender fielen damit
+    #: 32 % des Feldes auf den Dolomiten-Vierpässen aus der Wertung, 20 %
+    #: auf der Alpenüberquerung und 16 % auf der Transkontinental — nicht
+    #: weil sie das Rennen nicht zu Ende gefahren hätten, sondern weil
+    #: die Grenze knapp hinter dem Mittelfeld lag.
+    #:
+    #: 2,0 ist der Wert aus der Praxis: Paris–Brest–Paris gibt 90 Stunden
+    #: auf eine Siegerzeit von gut 44, London–Edinburgh–London 128 auf
+    #: rund 52, und ein gewöhnliches Brevet rechnet mit etwa dem
+    #: Doppelten des schnellen Tempos. Damit steht über dem gemessenen
+    #: Kalender kein einziger Fahrer mehr auf OTL — die Regel bleibt als
+    #: Netz für wirklich gebrochene Fahrten, statt das halbe Mittelfeld
+    #: aus der Wertung zu nehmen.
+    time_limit_factor: float = 2.0
     #: Zeitfahrrad überhaupt zulassen.
     allow_tt_bike: bool = True
     #: Zwischenfälle und Aufgabe (Abschnitt 6.5). Abschaltbar, damit sich
@@ -147,8 +168,14 @@ class RaceEntry:
     #: Gefahrene Distanz bei der Aufgabe, für die Ergebnisliste.
     dnf_dist_m: float | None = None
     dnf_reason: str = ""
-    #: An Zwischenfällen verlorene Zeit.
+    #: An Zwischenfällen **und Notschlaf** verlorene Zeit.
     lost_s: float = 0.0
+    #: Davon der Teil, der auf Zwischenfälle geht. Die Differenz ist
+    #: Notschlaf am Straßenrand — auf einer Strecke mit fünf Nächten
+    #: sind das 85 % der verlorenen Zeit, und es ist etwas ganz anderes
+    #: als eine Panne: Der Aufgabedruck rechnet deshalb nur mit dieser
+    #: Zahl. ``0.0`` bei Rennen von vor dieser Trennung.
+    lost_incident_s: float = 0.0
     #: Im Rennen geleistete Arbeit. Grundlage der Restermüdung fürs
     #: nächste Rennen der Saison (Abschnitt 14).
     work_kj: float = 0.0
@@ -175,6 +202,7 @@ class RaceEntry:
             "dnf_dist_m": None if self.dnf_dist_m is None else round(self.dnf_dist_m, 1),
             "dnf_reason": self.dnf_reason,
             "lost_s": round(self.lost_s, 1),
+            "lost_incident_s": round(self.lost_incident_s, 1),
             "work_kj": round(self.work_kj, 1),
             "freshness": round(self.freshness, 4),
             "give_up_score": round(self.give_up_score, 4),
@@ -437,6 +465,7 @@ class LiveSnapshot:
     finish_t: np.ndarray
     state: np.ndarray
     lost_s: np.ndarray
+    lost_incident_s: np.ndarray
     dnf_reason: list[str]
     carry_j: np.ndarray
     freshness: np.ndarray
@@ -520,6 +549,7 @@ class LiveSnapshot:
                 dnf_dist_m=None if self.state[i] != STATE_DNF else float(dist[i]),
                 dnf_reason="" if self.state[i] != STATE_DNF else self.dnf_reason[i],
                 lost_s=float(self.lost_s[i]),
+                lost_incident_s=float(self.lost_incident_s[i]),
                 give_up_score=float(give_up[i]),
                 work_kj=float(work_j[i] - self.carry_j[i]) / 1000.0,
                 freshness=float(self.freshness[i]),
@@ -837,8 +867,24 @@ def run_race(
     )
     dnf_reason: list[str] = [""] * n
     #: An Zwischenfällen und Notschlaf verlorene Zeit. Der geplante Halt
-    #: zählt nicht — den hat der Fahrer selbst so gewollt.
+    #: zählt nicht — den hat der Fahrer selbst so gewollt. Das ist die
+    #: Zahl für die Ergebnisliste: „vier Stunden liegengeblieben".
     lost_s = np.zeros(n)
+    #: Davon der Teil, der auf **Zwischenfälle** geht — ohne Notschlaf.
+    #:
+    #: Der Aufgabedruck rechnet mit dieser Zahl und nicht mit ``lost_s``,
+    #: und der Unterschied ist auf langen Strecken alles. Gemessen über
+    #: den Weltserien-Kalender: Bis 1463 km gibt es überhaupt keinen
+    #: Notschlaf, ab 1924 km sind **85 % der verlorenen Zeit** Notschlaf
+    #: (12,4 von 14,6 Stunden; auf 2469 km 17,9 von 20,9).
+    #:
+    #: Der Aufgabe-Term heißt „kein Anschluss mehr an den eigenen Plan"
+    #: und meint den Satz eines Aussteigers: *drei Pannen und zweimal
+    #: verfahren, das hole ich nicht mehr auf.* Schlaf ist nicht dieser
+    #: Satz — auf einer Strecke mit fünf Nächten ist er der Plan. Und er
+    #: zählte doppelt: über ``sleep_press`` steckt er bereits im
+    #: Ermüdungsterm derselben Formel.
+    lost_incident_s = np.zeros(n)
 
     # ---------------- Zustand ----------------------------------------
     dist = np.zeros(n)
@@ -1134,6 +1180,7 @@ def run_race(
             # wären im Ticker nur Rauschen.
             stop_left[i] = outcome.stop_s
             lost_s[i] += outcome.stop_s
+            lost_incident_s[i] += outcome.stop_s
             state[i] = STATE_STOPPED
         if outcome.condition:
             record = conditions.add(
@@ -1168,6 +1215,7 @@ def run_race(
         finish_t=finish_t,
         state=state,
         lost_s=lost_s,
+        lost_incident_s=lost_incident_s,
         dnf_reason=dnf_reason,
         carry_j=carry_j,
         freshness=f_fresh,
@@ -1506,7 +1554,7 @@ def run_race(
                 # fähigkeit. Als Produkt: Wer im Plan liegt, hört nicht
                 # auf – egal wie mies es ihm geht.
                 if config.enable_incidents:
-                    behind = 1.0 + lost_s / np.maximum(t, 1800.0)
+                    behind = 1.0 + lost_incident_s / np.maximum(t, 1800.0)
                     stomach = (
                         1.0
                         + 1.8 * np.clip(1.0 - cond.channel(cond_mods, "kcal_aufnahme"), 0.0, 1.0)
@@ -1916,6 +1964,7 @@ def run_race(
             dnf_dist_m=None if state[i] == STATE_FINISHED else float(dist[i]),
             dnf_reason="" if state[i] == STATE_FINISHED else dnf_reason[i],
             lost_s=float(lost_s[i]),
+            lost_incident_s=float(lost_incident_s[i]),
             give_up_score=float(give_up[i]),
             # Nur die *eigene* Arbeit, ohne den Übertrag – sonst würde
             # sich die Restermüdung über die Saison selbst aufschaukeln.

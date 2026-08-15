@@ -53,6 +53,34 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Behoben
 
+- **Notschlaf zählte als Grund aufzugeben.** Der Aufgabe-Term heißt
+  „kein Anschluss mehr an den eigenen Plan" und meint laut seinem
+  eigenen Kommentar den Satz eines Aussteigers — *drei Pannen und
+  zweimal verfahren, das hole ich nicht mehr auf.* Gerechnet hat er mit
+  der gesamten verlorenen Zeit, und darin steckt der Notschlaf am
+  Straßenrand.
+
+  Bis 1463 km fällt das nicht auf, weil dort **überhaupt kein**
+  Notschlaf vorkommt. Ab 1924 km sind **85 % der verlorenen Zeit**
+  Notschlaf (12,4 von 14,6 Stunden; auf 2469 km 17,9 von 20,9). Auf
+  einer Strecke mit fünf Nächten ist Schlaf nicht das Scheitern des
+  Plans, sondern der Plan — und er zählte doppelt, weil er über den
+  Schlafdruck bereits im Ermüdungsterm derselben Formel steckt.
+
+  Gemessen (80 Fahrer, ohne Restermüdung), Ziel 8–12 %:
+
+  | Strecke | vorher | nachher |
+  |---|---|---|
+  | Pyrenäen-Traverse 1212 km | 7,5 % | 7,5 % |
+  | Steppenroute 1463 km | 12,5 % | 13,8 % |
+  | Alpenüberquerung 1924 km | **42,5 %** | **12,5 %** |
+  | Transkontinental 2469 km | **40,0 %** | **13,8 %** |
+
+  Die zwei kürzeren ändern sich nicht — dort gibt es keinen Notschlaf,
+  die Korrektur greift also genau dort, wo die Ursache liegt.
+
+  Die Ergebnisliste sieht weiterhin beides: ``RaceEntry.lost_s`` ist die
+  ganze verlorene Zeit, ``lost_incident_s`` der Zwischenfallanteil.
 - Der **Simulationshorizont** war auf bergigen Strecken eine sportliche
   Regel statt einer Rechengrenze. Er kam aus der Distanz allein
   (`km / 11`), die Wertungsgrenze aus der Siegerzeit (`× 1,4`) — auf den
@@ -67,6 +95,21 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geändert
 
+- **Zeitlimit von 1,4 auf 2,0 × Siegerzeit.** Abschnitt 15 führt den
+  Wert als offenen Punkt und schlägt 1,4 vor; gemessen war das zu eng.
+  Auf den Dolomiten-Vierpässen fielen damit 32 % des Feldes aus der
+  Wertung, auf der Alpenüberquerung 20 %, auf der Transkontinental 16 %
+  — nicht weil sie nicht angekommen wären, sondern weil die Grenze
+  knapp hinter dem Mittelfeld lag. 2,0 ist der Wert aus der Praxis:
+  Paris–Brest–Paris gibt 90 Stunden auf eine Siegerzeit von gut 44,
+  London–Edinburgh–London 128 auf rund 52. Über den gemessenen Kalender
+  steht damit **kein einziger Fahrer mehr auf OTL**; die Regel bleibt
+  als Netz für wirklich gebrochene Fahrten.
+- Der **Simulationshorizont** rechnet mit 8 statt 11 km/h
+  Äquivalenttempo. Mit dem angehobenen Zeitlimit wäre die Schwelle sonst
+  auf 22 km/h gestiegen — über dem langsamsten gemessenen Sieger
+  (20,7 km/h) —, und die Simulation hätte wieder vor der Wertung
+  aufgehört.
 - **Punkte bis Rang 150** statt bis Rang 23. Der alte Schwanz lief mit
   −2 je Rang aus und war nach dreizehn Plätzen bei null; bei 250
   Startern fuhren damit 91 % des Feldes um nichts, und ein Vierzigster

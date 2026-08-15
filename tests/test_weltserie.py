@@ -387,3 +387,67 @@ def test_a_mountain_race_is_not_cut_short(store):
     n = len(result.entries)
     assert reasons["Zeitrahmen überschritten"] <= n // 10, dict(reasons)
     assert sum(1 for e in result.entries if e.status == "FIN") > n // 2
+
+
+# ----------------------------------------------------------------------
+# Aufgabe auf den Ultras
+# ----------------------------------------------------------------------
+def test_emergency_sleep_is_lost_time_but_not_a_deficit(store):
+    """Notschlaf ist verlorene Zeit — aber kein Grund aufzugeben.
+
+    Der Aufgabe-Term heißt „kein Anschluss mehr an den eigenen Plan" und
+    meint laut seinem eigenen Kommentar den Satz eines Aussteigers:
+    *drei Pannen und zweimal verfahren, das hole ich nicht mehr auf.*
+    Gerechnet hat er mit ``lost_s`` — und darin steckt der Notschlaf.
+
+    Gemessen über den Weltserien-Kalender: Bis 1463 km gibt es überhaupt
+    keinen Notschlaf; ab 1924 km sind **85 % der verlorenen Zeit**
+    Notschlaf (12,4 von 14,6 Stunden). Auf einer Strecke mit fünf
+    Nächten ist Schlaf nicht das Scheitern des Plans, sondern der Plan —
+    und er zählte doppelt, weil er über ``sleep_press`` bereits im
+    Ermüdungsterm derselben Formel steckt.
+
+    Geprüft wird die Trennung, nicht die Quote: Die Ergebnisliste sieht
+    beides, die Aufgabe nur den Zwischenfallanteil.
+    """
+    from ultrasim.core.engine import RaceConfig, simulate_race
+    from ultrasim.geo.route import Route
+
+    teams, riders = generate_pool(10, n_teams=2, seed=21)
+
+    kurz = store.load_route("teststrecke")
+    ohne_nacht = simulate_race(kurz, riders, teams, RaceConfig(seed=4200))
+    assert all(
+        e.lost_incident_s == pytest.approx(e.lost_s, abs=0.01)
+        for e in ohne_nacht.entries
+    ), "ohne Nacht darf es keinen Unterschied geben"
+
+    lang = Route.load("data/routes/alpenueberquerung.json.gz")
+    mit_nacht = simulate_race(lang, riders, teams, RaceConfig(seed=4200))
+    assert all(e.lost_incident_s <= e.lost_s + 0.01 for e in mit_nacht.entries)
+    geschlafen = [
+        e for e in mit_nacht.entries if e.lost_s - e.lost_incident_s > 3600.0
+    ]
+    assert geschlafen, "auf 1924 km sollte jemand am Straßenrand geschlafen haben"
+
+
+def test_the_time_limit_leaves_room_for_the_midfield():
+    """Das Zeitlimit ist ein Netz, keine Sortierregel.
+
+    Mit dem alten Faktor 1,4 fielen gemessen 32 % des Feldes auf den
+    Dolomiten-Vierpässen aus der Wertung, 20 % auf der Alpenüberquerung
+    und 16 % auf der Transkontinental — nicht weil sie das Rennen nicht
+    zu Ende gefahren wären, sondern weil die Grenze knapp hinter dem
+    Mittelfeld lag. 2,0 ist der Wert aus der Praxis: Paris–Brest–Paris
+    gibt 90 Stunden auf eine Siegerzeit von gut 44.
+    """
+    from ultrasim.core.engine import HORIZON_KMH, RaceConfig
+
+    faktor = RaceConfig().time_limit_factor
+    assert faktor >= 2.0
+
+    # Und der Simulationshorizont muss die angehobene Grenze überleben —
+    # sonst ist der Fehler von vorhin zurück und die Rechnung hört vor
+    # der Wertung auf. Langsamster gemessener Sieger: 20,7 km/h
+    # Äquivalenttempo auf den Dolomiten-Vierpässen.
+    assert HORIZON_KMH * faktor < 20.7

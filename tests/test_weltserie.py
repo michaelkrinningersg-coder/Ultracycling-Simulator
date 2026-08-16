@@ -469,25 +469,30 @@ def test_emergency_sleep_is_lost_time_but_not_a_deficit(store):
 
     Geprüft wird die Trennung, nicht die Quote: Die Ergebnisliste sieht
     beides, die Aufgabe nur den Zwischenfallanteil.
+
+    Seit den Ampeln hat ``lost_s`` einen dritten Anteil, der weder
+    Zwischenfall noch Schlaf ist. Der Notschlafanteil ist deshalb, was
+    nach Abzug beider anderen übrig bleibt — genau die Rechnung, die
+    auch die Ergebnisliste anstellt.
     """
     from ultrasim.core.engine import RaceConfig, simulate_race
     from ultrasim.geo.route import Route
 
     teams, riders = generate_pool(10, n_teams=2, seed=21)
 
+    def geschlafen_s(entry) -> float:
+        return entry.lost_s - entry.lost_incident_s - entry.lost_signal_s
+
     kurz = store.load_route("teststrecke")
     ohne_nacht = simulate_race(kurz, riders, teams, RaceConfig(seed=4200))
     assert all(
-        e.lost_incident_s == pytest.approx(e.lost_s, abs=0.01)
-        for e in ohne_nacht.entries
-    ), "ohne Nacht darf es keinen Unterschied geben"
+        geschlafen_s(e) == pytest.approx(0.0, abs=0.01) for e in ohne_nacht.entries
+    ), "ohne Nacht darf niemand am Straßenrand geschlafen haben"
 
     lang = Route.load("data/routes/alpenueberquerung.json.gz")
     mit_nacht = simulate_race(lang, riders, teams, RaceConfig(seed=4200))
     assert all(e.lost_incident_s <= e.lost_s + 0.01 for e in mit_nacht.entries)
-    geschlafen = [
-        e for e in mit_nacht.entries if e.lost_s - e.lost_incident_s > 3600.0
-    ]
+    geschlafen = [e for e in mit_nacht.entries if geschlafen_s(e) > 3600.0]
     assert geschlafen, "auf 1924 km sollte jemand am Straßenrand geschlafen haben"
 
 

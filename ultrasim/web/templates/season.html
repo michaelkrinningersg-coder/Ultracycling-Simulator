@@ -282,6 +282,44 @@
       danach exponentiell auslaufend bis auf einen Punkt für Rang {{ points_last_rank }}.
       Ab Rang {{ points_last_rank + 1 }} gibt es nichts mehr.
     </p>
+
+    {# Der Verlauf: wer wann geführt hat. Die Tabelle darüber kennt nur
+       den Schlussstand, und eine Saison ist keine Momentaufnahme. #}
+    {% if standings_chart %}
+    <div class="panel-title" style="margin-top:1rem">
+      <span>Verlauf der Gesamtwertung</span>
+      <span class="faint">kumulierte Punkte der ersten {{ standings_chart.lines|length }}</span>
+    </div>
+    <div class="rankchart">
+      <span class="rankaxis top">{{ standings_chart.peak|round|int }}</span>
+      <span class="rankaxis bottom">0</span>
+      <div class="rankplot">
+        <svg viewBox="0 0 {{ standings_chart.w }} {{ standings_chart.h }}"
+             preserveAspectRatio="none" role="img"
+             aria-label="Verlauf der Gesamtwertung über die gerechneten Rennen">
+          {% for tick in standings_chart.ticks %}
+          <line x1="{{ tick.x }}" y1="0" x2="{{ tick.x }}" y2="{{ standings_chart.h }}" class="grid"/>
+          {% endfor %}
+          {% for line in standings_chart.lines %}
+          <polyline points="{{ line.points }}" fill="none" stroke="{{ line.color }}"
+                    class="rankline" vector-effect="non-scaling-stroke">
+            <title>{{ line.rank }}. {{ line.name }} ({{ line.team }}) — {{ line.total|round|int }} Punkte</title>
+          </polyline>
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="rankticks">
+        {% for tick in standings_chart.ticks %}
+        <span style="left: {{ (100 * tick.x / standings_chart.w)|round(2) }}%">{{ tick.label }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="chartkey">
+      {% for line in standings_chart.lines %}
+      <span><i style="background:{{ line.color }}"></i>{{ line.rank }}. {{ line.name }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% else %}
     <p class="dim">Noch kein Rennen der Saison gerechnet.</p>
     {% endif %}

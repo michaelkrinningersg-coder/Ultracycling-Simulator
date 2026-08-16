@@ -511,3 +511,46 @@ def test_the_time_limit_leaves_room_for_the_midfield():
     # der Wertung auf. Langsamster gemessener Sieger: 20,7 km/h
     # Äquivalenttempo auf den Dolomiten-Vierpässen.
     assert HORIZON_KMH * faktor < 20.7
+
+
+# ----------------------------------------------------------------------
+# Verlauf der Gesamtwertung
+# ----------------------------------------------------------------------
+def test_the_standings_show_their_history(client, store):
+    """Wer wann geführt hat — die Tabelle kennt nur den Schlussstand."""
+    page = client.get("/season/2031-serie")
+    assert page.status_code == 200
+    assert "Verlauf der Gesamtwertung" in page.text
+    assert "<polyline" in page.text
+
+
+def test_a_single_race_is_no_history(tmp_path, route):
+    """Mit einem Termin gibt es nichts zu verlaufen."""
+    from ultrasim.web.routers.seasons import _standings_chart
+
+    season = sn.Season(id="eins", name="Eins", year=2032)
+    season.races = [
+        sn.CalendarRace(
+            id="01-lauf", name="Lauf", route_id="teststrecke",
+            day=date(2032, 4, 1), race_id="irgendwas",
+        )
+    ]
+    assert _standings_chart(season, []) is None
+
+
+def test_the_history_starts_at_zero(store):
+    """Die Linie beginnt beim Nullpunkt, nicht beim ersten Ergebnis.
+
+    Sonst begänne der Auftaktsieger am linken Rand schon oben — und der
+    Termin mit dem größten Sprung wäre der einzige, den man nicht sieht.
+    """
+    from ultrasim.web.routers.seasons import _standings_chart
+
+    season = store.load_season("2031-serie")
+    chart = _standings_chart(season, runner.standings(store, season))
+    assert chart is not None
+    for line in chart["lines"]:
+        first = line["points"].split()[0]
+        assert first.startswith("0.0,")
+        # y = Höhe heißt: unten, also null Punkte.
+        assert float(first.split(",")[1]) == chart["h"]

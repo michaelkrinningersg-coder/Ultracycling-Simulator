@@ -35,6 +35,86 @@ def _state(request: Request):
     return request.app.state.ultrasim
 
 
+#: So viele Fahrer trägt der Verlauf der Gesamtwertung.
+STANDINGS_CHART_ROWS = 8
+
+#: Zeichenfläche in Nutzerkoordinaten.
+CHART_W, CHART_H = 1000.0, 300.0
+
+#: Linienfarben des Verlaufs. Nicht die Teamfarbe: In der Gesamtwertung
+#: stehen oft zwei Fahrer desselben Teams vorn, und zwei identische
+#: Linien sind schlimmer als acht willkürliche.
+CHART_COLORS = (
+    "#ffc247", "#4ade80", "#47b4ff", "#f8717a",
+    "#a78bfa", "#f0883e", "#5eead4", "#e879f9",
+)
+
+
+def _standings_chart(season: Season, standings: list[sn.Standing]) -> dict | None:
+    """Die Gesamtwertung als Verlauf über die gerechneten Termine.
+
+    Die Tabelle sagt, wer am Ende vorn ist. Sie sagt nicht, wer wann
+    geführt hat — und genau das ist an einer Saison das Erzählbare: dass
+    einer nach dem dritten Rennen sechzig Punkte vorn lag und es auf dem
+    langen Ultra verloren hat.
+
+    Gezeichnet werden **kumulierte Punkte**, nicht Ränge: Bei zehn
+    Rennen mit sehr verschiedenen Koeffizienten ist der Abstand die
+    Aussage, nicht die Platzziffer.
+    """
+    computed = [r for r in season.sorted_races() if r.computed]
+    if len(computed) < 2 or not standings:
+        return None
+    keys = [r.id for r in computed]
+    top = standings[:STANDINGS_CHART_ROWS]
+
+    series = []
+    peak = 0.0
+    for standing in top:
+        by_race = {s.race_key: s.points for s in standing.scores}
+        total = 0.0
+        # Der Nullpunkt gehört dazu: Ohne ihn beginnt die Linie des
+        # Auftaktsiegers am linken Rand schon auf hundert Punkten, und
+        # der erste Termin — der mit dem größten Sprung — wäre der
+        # einzige, den man nicht sieht.
+        cumulative = [0.0]
+        for key in keys:
+            total += by_race.get(key, 0.0)
+            cumulative.append(total)
+        peak = max(peak, total)
+        series.append((standing, cumulative))
+    if peak <= 0.0:
+        return None
+
+    lines = []
+    steps = len(keys)
+    for i, (standing, cumulative) in enumerate(series):
+        points = " ".join(
+            f"{j / steps * CHART_W:.1f},{CHART_H - value / peak * CHART_H:.1f}"
+            for j, value in enumerate(cumulative)
+        )
+        lines.append(
+            {
+                "name": standing.name,
+                "rank": standing.rank,
+                "team": standing.team_name,
+                "color": CHART_COLORS[i % len(CHART_COLORS)],
+                "points": points,
+                "total": cumulative[-1],
+            }
+        )
+    return {
+        "w": CHART_W,
+        "h": CHART_H,
+        "lines": lines,
+        "peak": peak,
+        "ticks": [
+            {"x": (i + 1) / steps * CHART_W, "label": race.name}
+            for i, race in enumerate(computed)
+        ],
+    }
+
+
 def _back(season_id: str, anchor: str = "") -> RedirectResponse:
     """Nach jeder Änderung zurück auf die Saisonseite.
 
@@ -158,6 +238,7 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "routes": store.list_routes(),
             "presets": sorted(PRESETS),
             "standings": standings,
+            "standings_chart": _standings_chart(season, standings),
             "champion": champion,
             "runner_up": standings[1] if champion and len(standings) > 1 else None,
             "pending": len(pending),

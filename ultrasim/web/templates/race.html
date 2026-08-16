@@ -12,6 +12,14 @@
 
 {% block topbar %}
 <a class="faint" href="/">◂ Übersicht</a>
+{% if is_live %}
+<form method="post" action="/race/{{ race_id }}/close" style="display:inline">
+  <button class="linkish"
+          title="Rechnen anhalten und den Stand sichern. Das Rennen bleibt erhalten.">
+    Übertragung beenden
+  </button>
+</form>
+{% endif %}
 <a class="faint" href="/seasons">Saisons</a>
 <a class="faint" href="/careers">Karriere</a>
 <a href="/race/{{ race_id }}/results" title="Achtung: verrät den Ausgang">Ergebnis ▸</a>

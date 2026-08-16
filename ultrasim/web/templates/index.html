@@ -41,6 +41,18 @@
         <div class="actions">
           <a href="/race/{{ race.race_id }}"><button class="primary">Live ansehen</button></a>
           <a href="/race/{{ race.race_id }}/results"><button>Ergebnis</button></a>
+          {% if race.live %}
+          {# Beenden heißt: aus dem Speicher nehmen, nicht löschen. Der
+             Stand geht vorher auf die Platte, das Rennen bleibt in
+             dieser Liste — nur eben ohne mitlaufenden Rechner. Ohne
+             diesen Knopf ist die Obergrenze von drei Übertragungen eine
+             Sackgasse, aus der nur ein Neustart führt. #}
+          <form method="post" action="/race/{{ race.race_id }}/close" style="display:inline">
+            <button title="Rechnen anhalten und den Stand sichern. Das Rennen bleibt erhalten.">
+              Übertragung beenden
+            </button>
+          </form>
+          {% endif %}
         </div>
       </div>
       {% endfor %}

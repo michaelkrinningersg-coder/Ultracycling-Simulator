@@ -58,6 +58,12 @@ h3 { font-size: .9rem; color: var(--fg-dim); text-transform: uppercase; letter-s
 }
 .topbar .brand { font-weight: 700; letter-spacing: .12em; color: var(--accent); }
 .topbar .spacer { flex: 1; }
+/* Ein Knopf, der wie ein Link aussieht: In der Kopfzeile stehen sonst
+   nur Links, und ein Formularknopf muss es sein, weil das Beenden einer
+   Übertragung kein GET sein darf. */
+.linkish { background: none; border: 0; padding: 0; cursor: pointer;
+           color: var(--fg-faint); font-size: inherit; font-family: inherit; }
+.linkish:hover { color: var(--fg); text-decoration: underline; }
 
 .page { padding: 1rem; max-width: 1500px; margin: 0 auto; }
 
@@ -510,6 +516,10 @@ tr.report.podium td { color: var(--fg); font-size: .82rem; font-style: normal;
                   font-size: .66rem; font-family: var(--mono); color: var(--fg-faint);
                   padding-top: .25rem; }
 .rankchart .grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chartkey { display: flex; flex-wrap: wrap; gap: .1rem .9rem; font-size: .72rem;
+            color: var(--fg-dim); margin-top: .3rem; }
+.chartkey i { display: inline-block; width: .8rem; height: 3px; border-radius: 2px;
+              margin-right: .35rem; vertical-align: middle; }
 .rankchart .rankline { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
                        opacity: .75; transition: opacity .15s ease, stroke-width .15s ease; }
 .rankchart:hover .rankline { opacity: .3; }

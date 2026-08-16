@@ -195,3 +195,43 @@ def test_the_overview_prefers_the_running_race_over_its_file(app, client):
     application, _, _ = app
     application.state.ultrasim.live.get("live-test").save()
     assert client.get("/").text.count(">live-test<") <= 1
+
+
+# ----------------------------------------------------------------------
+# Eine Übertragung beenden
+# ----------------------------------------------------------------------
+def test_a_broadcast_can_be_ended_from_the_page(client, app):
+    """Beenden gibt den Platz frei, ohne das Rennen zu verlieren.
+
+    Die Registry deckelt bei drei laufenden Rennen. Ohne diesen Weg
+    wäre die Grenze eine Sackgasse, aus der nur ein Neustart führt.
+    """
+    _room(app, "zumbeenden")
+    application, store, _ = app
+    assert application.state.ultrasim.live.get("zumbeenden") is not None
+
+    # Etwas rechnen lassen, damit es einen Stand gibt, der zu sichern ist.
+    token = client.post("/api/race/zumbeenden/session").json()["token"]
+    client.post(f"/api/playback/{token}/control", json={"action": "seek", "value": 900.0})
+
+    closed = client.post("/race/zumbeenden/close", follow_redirects=False)
+    assert closed.status_code == 303
+    assert application.state.ultrasim.live.get("zumbeenden") is None
+
+    # Das Rennen ist danach ein ganz gewöhnliches gerechnetes Rennen.
+    assert any(r["race_id"] == "zumbeenden" for r in store.list_races())
+    assert client.get("/race/zumbeenden").status_code == 200
+    assert client.get("/race/zumbeenden/results").status_code == 200
+
+
+def test_ending_a_race_that_is_not_running_says_so(client, app):
+    _room(app, "laeuft")
+    assert client.post("/race/gibtsnicht/close").status_code == 404
+
+
+def test_the_overview_offers_the_button_only_while_it_runs(client, app):
+    _room(app, "sichtbar")
+    page = client.get("/").text
+    assert "Übertragung beenden" in page
+    client.post("/race/sichtbar/close", follow_redirects=False)
+    assert "Übertragung beenden" not in client.get("/").text

@@ -78,6 +78,27 @@ def race_live_start(
     return RedirectResponse(f"/race/{race_id}", status_code=303)
 
 
+@router.post("/race/{race_id}/close")
+def race_live_close(request: Request, race_id: str) -> RedirectResponse:
+    """Eine laufende Übertragung beenden (Registry-Platz freigeben).
+
+    Nicht löschen: Der Stand wird gesichert, und das Rennen steht danach
+    wie jedes andere gerechnete in der Übersicht — nur ohne einen
+    Rechner, der im Hintergrund weiterläuft. Die Registry deckelt bei
+    drei laufenden Rennen, und bisher gab es keinen Weg, einen Platz
+    freizugeben, außer das Programm neu zu starten.
+    """
+    state = request.app.state.ultrasim
+    if state.live.get(race_id) is None:
+        raise HTTPException(404, "Für dieses Rennen läuft keine Übertragung.")
+    state.live.close(race_id)
+    # Der Plattencache darf den Stand von vor dem Beenden nicht
+    # festhalten: Das Nächste, was jemand sieht, soll die eben
+    # gesicherte Datei sein.
+    state.invalidate(race_id)
+    return RedirectResponse("/", status_code=303)
+
+
 def _free_race_id(state, base: str) -> str:
     """Einen noch unbelegten Schlüssel finden.
 

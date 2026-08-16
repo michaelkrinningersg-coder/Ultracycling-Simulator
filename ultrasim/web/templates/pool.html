@@ -7,6 +7,38 @@
 {% block body %}
 <div class="page" x-data="{ q: '', team: '', arch: '' }">
 
+  {# Ein Pool liegt als Datei auf der Platte und überlebt jedes Update.
+     Das ist gewollt — bearbeitete Fahrer sollen nicht verschwinden —,
+     zeigt sich aber als Rätsel: „Ich habe eine Saison gestartet, aber
+     es fahren 250 statt 300, und die Teams heißen anders." Hier steht
+     die Antwort, statt dass man sie suchen muss. #}
+  {% if mismatch %}
+  <div class="panel notice">
+    <div class="panel-title"><span>Dieser Fahrerpool ist älter als das Programm</span></div>
+    <p style="max-width:80ch">
+      Gefunden: <strong>{{ mismatch }}</strong>.
+      Der heutige Standard sind <strong>{{ default_field }}</strong> Fahrer in
+      25 fest benannten Teams aus Ausrüster und Radmarke —
+      <span class="dim">Vaude–Canyon, Ortlieb–Cube, Deuter–Rose …</span>
+    </p>
+    <p class="dim" style="max-width:80ch">
+      Ein Pool wird beim Start nur angelegt, wenn noch keiner da ist; ein
+      vorhandener bleibt unangetastet. Neu würfeln behebt das
+      (<a href="#neu">unten auf dieser Seite</a>) — <strong>gerechnete
+      Rennen bleiben unberührt</strong>, sie tragen ihre Fahrer und Teams
+      als Kopie. Was verlorengeht, sind von Hand bearbeitete Fahrer und
+      die Restermüdung laufender Saisons.
+    </p>
+    <form method="post" action="/pool/reset" class="form-row"
+          onsubmit="return confirm('Pool durch {{ default_field }} Fahrer in 25 benannten Teams ersetzen?')">
+      <input type="hidden" name="riders" value="{{ default_field }}">
+      <input type="hidden" name="teams" value="0">
+      <label>Seed<input type="number" name="seed" value="1"></label>
+      <button class="primary" type="submit">Auf {{ default_field }} Fahrer in 25 Teams bringen</button>
+    </form>
+  </div>
+  {% endif %}
+
   {% if not riders %}
   <div class="panel">
     <div class="panel-title"><span>Noch kein Fahrerpool</span></div>
@@ -163,7 +195,7 @@
   </div>
 
   <!-- --------------------------------------------------------------- -->
-  <div class="panel">
+  <div class="panel" id="neu">
     <div class="panel-title"><span>Pool neu würfeln</span></div>
     <form method="post" action="/pool/reset" class="form-row"
           onsubmit="return confirm('Alle Fahrer und Teams verwerfen und neu erzeugen? Bearbeitete Fahrer gehen verloren.')">

@@ -49,8 +49,82 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
   Aufgabe-Term, die gekappten Rennkoeffizienten. Keiner davon wäre hier
   aufgetaucht.
 
+### Geändert
+
+- **Höchstens zwanzig Splits, bei jeweils fünf Prozent der Strecke.**
+  Der Abstand war in Kilometern gestaffelt (10 / 25 / 50 km nach Länge)
+  und ergab auf den langen Strecken bis zu **52** Zeitmessungen: Die
+  Splitmatrix wurde zur Tapete, das Splitmenü zur Endlosliste, und eine
+  Zwischenzeit alle fünfundzwanzig Kilometer sagt über ein Rennen von
+  zweitausend Kilometern nichts, was die vorige nicht schon gesagt hätte.
+
+  Jetzt steht das Raster bei 5, 10, 15 … 95 Prozent, das Ziel bei 100 —
+  neunzehn Marken plus Ziel, gleich viele auf jeder Strecke. Relativ hat
+  einen zweiten Vorteil: Dieselbe Marke bedeutet überall dasselbe. „Bei
+  50 %" ist auf 400 km und auf 2500 km die Rennmitte; „km 200" ist
+  einmal das halbe Rennen und einmal der Anfang.
+
+  **Die Gipfel bleiben ungedeckelt.** Die Zwanzig gilt für das Raster;
+  eine Strecke mit zwölf kategorisierten Anstiegen bekommt alle zwölf
+  dazu. Ein Gipfel ohne Zeitnahme wäre in einem Radrennen das Weglassen
+  der einen Stelle, an der etwas passiert. Über die vierzehn
+  ausgelieferten Strecken sind es damit 20 bis 22 Splits statt 19 bis 52.
+
+  Der lange Golden Master hat auch hier genau eine Zahl bewegt: 336 →
+  160 `SPLIT_PASSED`, alles andere unverändert und die Zielzeiten
+  bitgleich. Splits zeichnen auf, sie greifen nicht ein.
+
+  Streckendateien tragen ihre Splits mit und wachsen deshalb nicht von
+  selbst mit — sie könnten ja von Hand verschoben sein. Die
+  ausgelieferten Strecken sind nachgezogen; für eigene gibt es im
+  Streckeneditor **„Raster neu setzen"**, das Gipfel und Kontrollpunkte
+  stehen lässt.
+
+### Behoben
+
+- **Ein Fahrerpool aus einer älteren Fassung sagt jetzt, dass er einer
+  ist.** Der Pool liegt als Datei auf der Platte und überlebt jedes
+  Update — gewollt, weil von Hand bearbeitete Fahrer nicht verschwinden
+  sollen. Beim Programmstart wird er nur angelegt, wenn noch keiner da
+  ist; ein vorhandener bleibt unangetastet und wächst nicht mit.
+
+  Das zeigte sich als Rätsel: *„Ich habe eine Saison gestartet, aber es
+  starten nur 250 Fahrer, und die Teams aus Ausrüster und Radmarke
+  fehlen."* Nichts in der Oberfläche hat den Grund genannt. Jetzt
+  vergleicht `pool_mismatch` den Pool mit dem heutigen Standard
+  (300 Fahrer, 25 fest benannte Teams) und benennt die Abweichung
+  konkret — auf der Fahrerseite mit einem Knopf, der ihn geradezieht,
+  und auf der **Saisonseite**, wo die Frage aufkommt, mit dem Hinweis,
+  dass immer nur so viele starten, wie der Pool hergibt.
+
 ### Hinzugefügt
 
+- **Die Ampeln zeigen ihre Phase.** Die Mechanik war von Anfang an
+  richtig — 90 s rot, 90 s grün, 180 s Zyklus, gehalten wird nur bei
+  Rot —, aber gezeichnet war jede Ampel als fester roter Punkt im
+  zwischengespeicherten Untergrund des Höhenprofils. Sie sah damit aus
+  wie eine Ampel, die immer rot ist. Jetzt wechselt der Punkt die Farbe
+  und steht auf einem Mast bis zur Profillinie.
+
+  Gezeigt wird die Phase, die der **Fokusfahrer** gerade vorfände: Im
+  Modell läuft sie in Fahrerzeit, damit der Startversatz nicht in die
+  Simulation eingeht — eine Ampelfarbe für das ganze Feld gibt es
+  deshalb nicht. Für den, dem man zusieht, ist es die richtige, und sie
+  sagt ihm voraus, ob er gleich anhalten muss.
+- **Kilometer und Restmeter zählen mit statt zu springen.** Was für die
+  Uhren längst galt, gilt jetzt auch für die Distanzen: Der Server
+  schickt bei hohem Zeitraffer ein Bild je Sekunde, und die
+  Kilometerspalte sprang dabei in Schritten von einem halben Kilometer.
+  Zwischen zwei Bildern rechnet der Client mit dem Tempo weiter, das im
+  Bild steht. Nur wer fährt, zählt mit — einem Stehenden, einem
+  Aufgeber oder einem Zielankömmling Meter anzudichten wäre schlimmer
+  als ein Sprung.
+- **Platzierung am vorherigen Checkpoint als Board-Spalte.** Sie zeigt
+  nur, wer dort **in diesem Moment schon durch war**: Eine Platzierung
+  an einem Checkpoint ist keine feststehende Zahl, sondern eine, die
+  sich ändert, solange hinten jemand ankommt. Zusammen mit dem
+  Richtungspfeil steht damit beides nebeneinander — wo einer war und
+  wie viele Plätze er seitdem gewonnen hat.
 - **Ampeln auf der Strecke.** Ein Ultrarennen führt über öffentliche
   Straßen, und öffentliche Straßen haben Ampeln. Rot und Grün dauern je
   90 s; wer rot ankommt, wartet den Rest der Phase ab. Höchstens zwei

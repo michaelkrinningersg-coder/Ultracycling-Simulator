@@ -394,8 +394,15 @@ def test_a_running_rider_drops_behind_times_he_passes(view):
     Sobald sie über eine gefahrene Zeit hinauswandert, rutscht der
     Fahrer einen Platz nach hinten — ohne dass sich an der Strecke
     irgendetwas ändert.
+
+    Genommen wird eine Marke aus der Rennmitte, nicht die zweite: Wenn
+    der Erste die zweite Marke passiert, sind bei viertelstündigem
+    Startabstand kaum drei Fahrer überhaupt losgefahren — der Test
+    prüfte dann nur, dass die Straße leer ist. (Genau daran ist er
+    aufgelaufen, als das Splitraster von zehn Kilometern auf fünf
+    Prozent der Strecke umgestellt wurde.)
     """
-    split_idx = 1
+    split_idx = max(1, len(view.route.splits) // 2)
     times = view.result.split_times_s[:, split_idx]
     reached = view.offsets + times
     # Wanduhr kurz nachdem der erste Fahrer den Split passiert hat.
@@ -729,3 +736,85 @@ def test_choosing_a_rider_switches_the_direction_off(client):
     assert control("auto_focus", True)["auto_focus"] is True
     assert control("focus", 3)["auto_focus"] is False
     assert control("focus", 3)["focus_entry"] == 3
+
+
+# ----------------------------------------------------------------------
+# Platzierung am vorherigen Checkpoint
+# ----------------------------------------------------------------------
+def test_every_row_carries_the_rank_at_the_previous_checkpoint(view):
+    board = view.board_rows(t_wall=12 * 3600.0, split_idx=2, focus=0)
+    expected = view.measured_ranks(12 * 3600.0, 1)
+    for row in board["rows"]:
+        assert row["prev_rank"] == (int(expected[row["entry_id"]]) or None)
+
+
+def test_the_previous_checkpoint_is_named(view):
+    board = view.board_rows(t_wall=12 * 3600.0, split_idx=2, focus=0)
+    assert board["split"]["previous"] == view.route.splits[1].name
+
+
+def test_the_first_checkpoint_has_none_before_it(view):
+    board = view.board_rows(t_wall=12 * 3600.0, split_idx=0, focus=0)
+    assert board["split"]["previous"] is None
+    assert all(row["prev_rank"] is None for row in board["rows"])
+
+
+def test_only_riders_already_through_are_ranked_there(view):
+    """„Live nur von den Fahrern, die in diesem Moment am CP waren."
+
+    Die Platzierung an einem Checkpoint ist keine feststehende Zahl:
+    Solange hinten noch jemand ankommt, ändert sie sich. Gewertet ist
+    deshalb nur, wer dort zur Wanduhrzeit schon durch war.
+    """
+    early = 3600.0
+    ranks = view.measured_ranks(early, 1)
+    times = view.result.split_times_s[:, 1]
+    for i in range(view.n):
+        through = np.isfinite(times[i]) and view.offsets[i] + times[i] <= early
+        assert bool(ranks[i]) == bool(through)
+    # Und die Zahlen sind lückenlos 1..n unter genau diesen Fahrern.
+    given = sorted(int(r) for r in ranks if r)
+    assert given == list(range(1, len(given) + 1))
+
+
+def test_the_ranking_at_a_checkpoint_grows_with_the_clock(view):
+    """Mit fortschreitender Uhr kommen Fahrer dazu, keiner fällt weg."""
+    early = view.measured_ranks(6 * 3600.0, 1)
+    late = view.measured_ranks(24 * 3600.0, 1)
+    assert int((late > 0).sum()) >= int((early > 0).sum())
+    for i in range(view.n):
+        if early[i]:
+            assert late[i] and late[i] <= early[i]
+
+
+def test_the_arrow_matches_the_two_checkpoint_ranks(view):
+    """Der Pfeil ist die Differenz der beiden Spalten, nichts anderes."""
+    t = 12 * 3600.0
+    board = view.board_rows(t_wall=t, split_idx=2, focus=0)
+    now = view.measured_ranks(t, 2)
+    for row in board["rows"]:
+        i = row["entry_id"]
+        if row["prev_rank"] and now[i]:
+            assert row["trend"] == row["prev_rank"] - int(now[i])
+        else:
+            assert row["trend"] == 0
+
+
+# ----------------------------------------------------------------------
+# Ampelphasen an der Oberfläche
+# ----------------------------------------------------------------------
+def test_the_route_payload_carries_the_light_phases(client):
+    """Ohne Versatz und Zyklus kann die Anzeige nur einen Punkt malen.
+
+    Und ein Punkt, der immer gleich aussieht, sieht aus wie eine Ampel,
+    die immer rot ist — genau so war es, bis diese beiden Felder
+    mitgingen.
+    """
+    from ultrasim.geo import signals as sig
+
+    data = client.get("/api/race/testrennen/route").json()
+    assert data["signal_phase"] == {"red_s": sig.RED_S, "green_s": sig.GREEN_S}
+    assert data["signal_phase"]["red_s"] == data["signal_phase"]["green_s"]
+    for light in data["traffic_lights"]:
+        assert 0.0 <= light["offset_s"] < sig.CYCLE_S
+        assert "dist_m" in light

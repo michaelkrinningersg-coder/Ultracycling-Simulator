@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ... import career_runner as careers
 from ... import season_runner as runner
 from ...core import season as sn
+from ...core.rider import DEFAULT_FIELD, pool_mismatch
 from ...core.season import CalendarRace, Season
 from ...core.weather import PRESETS
 from ..jobs import Job, race_progress
@@ -221,6 +222,13 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
         )
         previous = calendar_race.day
 
+    mismatch = None
+    pool_size = 0
+    if store.pool_exists():
+        pool_teams, pool_riders = store.load_pool()
+        pool_size = len(pool_riders)
+        mismatch = pool_mismatch(pool_teams, pool_riders)
+
     standings = runner.standings(store, season)
     pending = runner.pending_races(season)
     # Der Titel steht erst, wenn der letzte Termin gefahren ist. Vorher
@@ -243,10 +251,17 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "runner_up": standings[1] if champion and len(standings) > 1 else None,
             "pending": len(pending),
             "pool_exists": store.pool_exists(),
+            # Warum starten weniger Fahrer als geplant? Die Antwort ist
+            # fast immer ein Pool aus einer älteren Fassung — und der
+            # Ort, an dem die Frage aufkommt, ist diese Seite.
+            "pool_size": pool_size,
+            "pool_mismatch": mismatch,
+            "planned_field": max((r.n_riders for r in season.races), default=0),
             "jobs": [j.to_dict() for j in state.jobs.list_jobs(season_id)[:8]],
             "busy": state.jobs.active_for(season_id) is not None,
             "points_head": season.points_head or list(sn.POINTS_HEAD),
             "points_last_rank": sn.POINTS_LAST_RANK,
+            "default_field": DEFAULT_FIELD,
             "plan": runner.calendar_plan(store, season),
             "career": careers.career_of_season(store, season_id),
         },

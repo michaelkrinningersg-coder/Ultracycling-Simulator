@@ -176,6 +176,26 @@
 
   {% if route_id %}
   <div class="panel">
+    <div class="panel-title"><span>Splitraster neu setzen</span></div>
+    <p class="dim" style="max-width:82ch">
+      Das Raster steht bei 5, 10, 15 … 95 Prozent der Strecke, das Ziel
+      bei 100 — höchstens zwanzig Zeitmessungen, gleich viele auf jeder
+      Strecke. Dazu kommen alle Gipfel kategorisierter Anstiege; die sind
+      nicht gedeckelt.
+    </p>
+    <p class="dim" style="max-width:82ch">
+      Eine Streckendatei trägt ihre Splits mit und wächst nicht von
+      selbst mit einer geänderten Regel — sie könnten ja von Hand
+      verschoben sein. <strong>Gipfel und Kontrollpunkte bleiben
+      stehen</strong>, von Hand gesetzte Zwischenmarken fallen weg.
+    </p>
+    <form method="post" action="/route/{{ route_id }}/splits/rebuild"
+          onsubmit="return confirm('Splitraster neu setzen? Von Hand gesetzte Zwischenmarken gehen verloren, Gipfel und Kontrollpunkte bleiben.')">
+      <button type="submit">Raster neu setzen</button>
+    </form>
+  </div>
+
+  <div class="panel">
     <div class="panel-title"><span>Strecke löschen</span></div>
     <form method="post" action="/route/{{ route_id }}/delete"
           onsubmit="return confirm('Streckendatei löschen? Gerechnete Rennen bleiben erhalten, Kalendertermine auf diese Strecke zeigen danach ins Leere.')">

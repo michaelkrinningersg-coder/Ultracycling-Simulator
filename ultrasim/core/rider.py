@@ -8,7 +8,7 @@ als harter Multiplikator auf die Endzeit.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -485,6 +485,38 @@ RIDERS_PER_TEAM = 12
 #: Das Standardfeld. Wer ``generate_pool()`` ohne Zahl aufruft, bekommt
 #: genau dieses.
 DEFAULT_FIELD = len(TEAM_NAMES) * RIDERS_PER_TEAM
+
+
+def pool_mismatch(teams: Sequence[Team], riders: Sequence[Rider]) -> str | None:
+    """Warum dieser Pool nicht mehr dem Standard entspricht — oder ``None``.
+
+    Ein Fahrerpool liegt als Datei auf der Platte und überlebt jedes
+    Update. Das ist gewollt: Wer Fahrer von Hand bearbeitet hat, will
+    sie nicht beim nächsten Start verlieren. Es hat aber eine Kehrseite,
+    die sich in der Oberfläche als Rätsel zeigt — „ich habe eine Saison
+    gestartet, aber es fahren 250 statt 300, und die Teams heißen
+    anders". Der Pool ist dann schlicht älter als die Fassung, mit der
+    er angesehen wird.
+
+    Diese Funktion sagt das in einem Satz, damit die Oberfläche es
+    sagen kann, statt den Nutzer suchen zu lassen.
+    """
+    if not riders or not teams:
+        return None
+    problems: list[str] = []
+    if len(riders) != DEFAULT_FIELD:
+        problems.append(f"{len(riders)} Fahrer statt {DEFAULT_FIELD}")
+    known = set(TEAM_NAMES)
+    foreign = [t.name for t in teams if t.name not in known]
+    if foreign:
+        example = ", ".join(foreign[:3])
+        problems.append(
+            f"{len(foreign)} Team{'s' if len(foreign) != 1 else ''} ohne festen "
+            f"Namen ({example}{' …' if len(foreign) > 3 else ''})"
+        )
+    elif len(teams) != len(TEAM_NAMES):
+        problems.append(f"{len(teams)} Teams statt {len(TEAM_NAMES)}")
+    return " · ".join(problems) or None
 
 
 def generate_team(rng: np.random.Generator, team_id: int, used: set[str]) -> Team:

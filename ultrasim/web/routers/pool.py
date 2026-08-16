@@ -32,12 +32,14 @@ from ...core.rider import (
     ARCHETYPES,
     ATTRIBUTE_LABELS,
     ATTRIBUTES,
+    DEFAULT_FIELD,
     WKG_RANGE,
     Rider,
     Team,
     generate_pool,
     generate_rider,
     generate_team,
+    pool_mismatch,
 )
 
 router = APIRouter()
@@ -84,6 +86,12 @@ def pool_index(request: Request) -> HTMLResponse:
             "team_colors": {t.id: t.color for t in teams},
             "team_sizes": by_team,
             "archetypes": ARCHETYPES,
+            # Stammt der Pool noch aus einer älteren Fassung? Er liegt
+            # als Datei auf der Platte und überlebt jedes Update — was
+            # gewollt ist, sich aber als Rätsel zeigt, wenn plötzlich
+            # 250 statt 300 Fahrer starten.
+            "mismatch": pool_mismatch(teams, riders),
+            "default_field": DEFAULT_FIELD,
             "stats": {
                 "n": len(riders),
                 "mean": round(float(potentials.mean()), 1) if riders else 0.0,

@@ -18,7 +18,11 @@ from ultrasim.geo.route import (
 )
 from ultrasim.geo.segmentation import climb_category
 from ultrasim.geo.smoothing import savgol_coeffs, savgol_filter
-from ultrasim.geo.splits import build_splits, split_spacing_m
+from ultrasim.geo.splits import (
+    MAX_INTERVAL_SPLITS,
+    build_splits,
+    split_spacing_m,
+)
 
 
 # ----------------------------------------------------------------------
@@ -176,21 +180,47 @@ def test_climb_categories_match_reference_climbs():
     assert climb_category(60, 0.03)[0] == ""  # zu klein für eine Kategorie
 
 
-@pytest.mark.parametrize(
-    "distance_m,expected",
-    [(150_000, 10_000), (399_000, 10_000), (400_000, 25_000), (1_200_000, 50_000)],
-)
-def test_split_spacing_follows_distance(distance_m, expected):
-    assert split_spacing_m(distance_m) == expected
+@pytest.mark.parametrize("distance_m", [150_000, 400_000, 1_200_000, 2_469_000])
+def test_split_spacing_is_a_share_of_the_route(distance_m):
+    """Fünf Prozent, egal wie lang.
+
+    Vorher war der Abstand in Kilometern gestaffelt, und die langen
+    Strecken bekamen bis zu fünfzig Marken. Relativ hat einen zweiten
+    Vorteil: Dieselbe Marke bedeutet auf jeder Strecke dasselbe. „Bei
+    50 %" ist immer die Rennmitte; „km 200" ist einmal das halbe Rennen
+    und einmal der Anfang.
+    """
+    assert split_spacing_m(distance_m) == pytest.approx(distance_m * 0.05)
 
 
 @pytest.mark.parametrize("distance_km", [150, 300, 600, 1200, 2500])
-def test_split_count_stays_readable(distance_km):
-    """Ziel ist stets ein Feld von rund 30–50 Splits."""
+def test_the_grid_never_exceeds_twenty_marks(distance_km):
+    """5, 10, 15 … 95 Prozent und das Ziel — höchstens zwanzig."""
     splits = build_splits(distance_km * 1000.0)
-    assert 14 <= len(splits) <= 52
+    assert len(splits) == MAX_INTERVAL_SPLITS + 1 == 20
     assert splits[-1].kind == "finish"
     assert splits[-1].dist_m == pytest.approx(distance_km * 1000.0)
+    # Und sie stehen wirklich auf den Fünfprozentmarken.
+    for i, split in enumerate(splits[:-1], start=1):
+        assert split.dist_m == pytest.approx(distance_km * 1000.0 * 0.05 * i, abs=1.0)
+
+
+def test_summits_come_on_top_of_the_grid(route_medium):
+    """Die Zwanzig gilt für das Raster, nicht für die Gipfel.
+
+    Ein Gipfel ohne Zeitnahme wäre in einem Radrennen das Weglassen der
+    einen Stelle, an der etwas passiert.
+    """
+    splits = build_splits(route_medium.distance_m, route_medium.climbs)
+    grid = [s for s in splits if s.kind == "interval"]
+    summits = [s for s in splits if s.kind == "summit"]
+    assert summits, "die mittlere Teststrecke hat kategorisierte Anstiege"
+    assert len(grid) <= MAX_INTERVAL_SPLITS
+    # Jeder Gipfel taucht auf — auch wenn er einen Rastersplit verdrängt.
+    for climb in route_medium.climbs:
+        assert any(
+            abs(s.dist_m - climb.summit_dist_m) < 1.0 for s in summits
+        ), climb.summit_dist_m
 
 
 def test_summit_splits_replace_nearby_interval_splits(route):

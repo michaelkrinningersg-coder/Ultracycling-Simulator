@@ -87,11 +87,14 @@ export class ProfileView {
   /** Untergrund verwerfen – nötig, wenn sich Marker geändert haben. */
   invalidate() { this._baseKey = ''; }
 
-  setFrame(positions, focusEntry, neighbourIds, conditions) {
+  setFrame(positions, focusEntry, neighbourIds, conditions, signalTime) {
     this.positions = positions;
     this.focus = focusEntry;
     this.neighbours = new Set(neighbourIds || []);
     this.conditions = conditions || [];
+    // Die Eigenzeit des Fokusfahrers. An ihr hängt die Ampelphase —
+    // siehe ``_drawSignals``.
+    this.signalTime = signalTime;
   }
 
   /** Sichtfenster aus der Fokusposition ableiten. */
@@ -259,17 +262,10 @@ export class ProfileView {
       c.fillRect(xx - 1.5, baseY - 4, 3, 4);
     }
 
-    // Ampeln. Bewusst klein und ohne Phase: Ob sie gerade rot ist, weiß
-    // erst der Fahrer, der davorsteht — und der Zuschauer, wenn er
-    // stehenbleibt.
-    for (const light of (this.showMarkers ? (this.route.traffic_lights || []) : [])) {
-      if (light.dist_m < this.viewStart || light.dist_m > this.viewEnd) continue;
-      const xx = this.x(light.dist_m);
-      c.fillStyle = '#e0574f';
-      c.beginPath();
-      c.arc(xx, this.padTop + 3, 2.2, 0, Math.PI * 2);
-      c.fill();
-    }
+    // Ampeln stehen *nicht* hier: Ihre Farbe wechselt alle 90 Sekunden,
+    // und der Untergrund wird nur neu gezeichnet, wenn sich der
+    // Ausschnitt ändert. Sie gehören ins laufende Bild — siehe
+    // ``_drawSignals``.
 
     // Kilometerachse
     c.fillStyle = '#5c6880';
@@ -399,6 +395,8 @@ export class ProfileView {
       ctx.stroke();
     }
 
+    if (this.showMarkers) this._drawSignals(ctx);
+
     // Steht der Fokusfahrer im Anstieg, zählt nur eine Zahl: wie weit
     // noch bis oben. Sie gehört nicht in den vorgerenderten Untergrund,
     // weil sie sich mit jedem Bild ändert.
@@ -410,6 +408,56 @@ export class ProfileView {
       ctx.strokeStyle = 'rgba(255,194,71,.6)';
       ctx.lineWidth = 1;
       ctx.strokeRect(this.x(a), this.padTop, Math.max(this.x(b) - this.x(a), 2), this._size.h - this.padTop - this.padBottom);
+    }
+  }
+
+  /** Ampeln in ihrer aktuellen Phase.
+   *
+   * Rot und Grün wechseln alle 90 Sekunden Rennzeit. Welche Phase
+   * gezeigt wird, richtet sich nach der **Eigenzeit des Fokusfahrers**:
+   * Im Modell läuft die Ampelphase in Fahrerzeit, damit der
+   * Startversatz nicht in die Simulation eingeht (siehe
+   * ``geo/signals.py``). Zwei Fahrer, die zwei Stunden auseinander
+   * gestartet sind, treffen dieselbe Ampel bei derselben *eigenen*
+   * Fahrzeit im selben Zustand an — eine Ampelfarbe für das ganze Feld
+   * gibt es deshalb nicht.
+   *
+   * Gezeigt wird also: *So steht die Ampel für den, dem wir zusehen.*
+   * Das ist die einzige Ablesung, die für ihn stimmt — und sie sagt
+   * ihm voraus, ob er gleich anhalten muss.
+   */
+  _drawSignals(ctx) {
+    const lights = this.route.traffic_lights || [];
+    if (!lights.length) return;
+    const phase = this.route.signal_phase || { red_s: 90, green_s: 90 };
+    const cycle = phase.red_s + phase.green_s;
+    const now = this.signalTime || 0;
+
+    for (const light of lights) {
+      if (light.dist_m < this.viewStart || light.dist_m > this.viewEnd) continue;
+      const at = ((now + (light.offset_s || 0)) % cycle + cycle) % cycle;
+      const red = at < phase.red_s;
+      const xx = this.x(light.dist_m);
+      const yy = this.padTop + 4;
+
+      // Mast bis zur Profillinie: Ohne ihn schwebt der Punkt über der
+      // Strecke, statt an einer Stelle davon zu stehen.
+      ctx.beginPath();
+      ctx.moveTo(xx, yy);
+      ctx.lineTo(xx, this._size.h - this.padBottom);
+      ctx.strokeStyle = red ? 'rgba(255,77,69,.30)' : 'rgba(74,222,128,.22)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(xx, yy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = red ? '#ff4d45' : '#4ade80';
+      ctx.fill();
+      // Ein dunkler Ring hebt die Lampe vom Untergrund ab, egal ob sie
+      // gerade vor Fels oder vor Himmel steht.
+      ctx.strokeStyle = 'rgba(5,7,12,.85)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     }
   }
 

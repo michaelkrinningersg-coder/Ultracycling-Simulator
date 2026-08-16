@@ -38,6 +38,7 @@ from ...geo.gpx_import import GpxImportError, ImportReport, import_gpx
 from ...geo.route import Route
 from ...geo.splits import (
     MIN_MARKER_GAP_M,
+    build_splits,
     normalise_service_points,
     normalise_splits,
 )
@@ -280,6 +281,29 @@ async def route_save(request: Request) -> dict[str, Any]:
 def route_discard(request: Request, token: str) -> RedirectResponse:
     _state(request).drafts.pop(token, None)
     return RedirectResponse("/routes", status_code=303)
+
+
+@router.post("/route/{route_id}/splits/rebuild")
+def route_rebuild_splits(request: Request, route_id: str) -> RedirectResponse:
+    """Das Splitraster neu setzen.
+
+    Eine Streckendatei trägt ihre Splits mit und überlebt jedes Update —
+    was gewollt ist, weil sie von Hand verschoben sein können. Ändert
+    sich die Regel, mit der das Raster gebaut wird, wächst eine
+    vorhandene Strecke deshalb nicht von selbst mit. Dieser Knopf holt
+    sie nach.
+
+    Gipfel und Kontrollpunkte bleiben erhalten: Sie stehen dort, wo die
+    Strecke etwas Besonderes tut, und das ändert sich nicht dadurch,
+    dass das Raster ein anderes wird. Von Hand gesetzte Zwischenmarken
+    fallen weg — das ist der Preis, und er steht auf dem Knopf.
+    """
+    state = _state(request)
+    route = state.store.load_route(route_id)
+    keep = [s.dist_m for s in route.splits if s.kind == "control"]
+    route.splits = build_splits(route.distance_m, route.climbs, keep)
+    route.save(state.store.routes_dir / f"{route_id}.json.gz")
+    return RedirectResponse(f"/route/{route_id}", status_code=303)
 
 
 @router.post("/route/{route_id}/delete")

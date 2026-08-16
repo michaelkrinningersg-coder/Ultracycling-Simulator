@@ -54,6 +54,11 @@ const BOARD_COLUMNS = [
   { key: 'km', label: 'km', hint: 'gefahrene Kilometer' },
   { key: 'biscp', label: 'bis CP', hint: 'Meter bis zur nächsten Zeitmessung' },
   { key: 'trend', label: '±', hint: 'Plätze gewonnen oder verloren seit dem Split davor' },
+  {
+    key: 'vorcp',
+    label: 'Rg CP',
+    hint: 'Platzierung am vorherigen Checkpoint — gewertet nur unter denen, die dort in diesem Moment schon durch waren',
+  },
   { key: 'tempo', label: 'km/h', hint: 'Momentangeschwindigkeit' },
   { key: 'leistung', label: 'W', hint: 'Tretleistung' },
   { key: 'aufgabe', label: 'Aufgabe', hint: 'Aufgabedruck in Prozent der eigenen Grenze' },
@@ -149,6 +154,17 @@ function raceLive(raceId) {
       const riding = this.focus.started && (this.focus.state === 0 || this.focus.state === 1);
       return this.focus.own_time_s + (riding ? this.liveDelta : 0);
     },
+    //: Die Kilometer des Fokusfahrers, mitgezählt wie seine Uhr. Sie
+    //: stehen direkt neben ihr — eine laufende Uhr neben einer
+    //: springenden Distanz sieht aus, als hakte die Seite.
+    get liveFocusDistM() {
+      if (!this.focus) return 0;
+      return this.liveDist(this.focus.dist_m, this.focus.v_kmh, this.focus.state);
+    },
+    get liveFocusRemainingM() {
+      if (!this.focus || !this.route) return 0;
+      return Math.max(this.route.distance_m - this.liveFocusDistM, 0);
+    },
     get latest() { return this.visibleTicker.slice(0, 10); },
     get visibleTicker() {
       return this.ticker.filter((e) => {
@@ -234,6 +250,34 @@ function raceLive(raceId) {
       return row.running ? row.t_s + this.liveDelta : row.t_s;
     },
 
+    //: Gefahrene Kilometer, zwischen zwei Frames mitgezählt.
+    //:
+    //: Aus demselben Grund wie bei den Uhren: Der Server schickt bei
+    //: hohem Zeitraffer ein Bild je Sekunde, und die Spalte sprang dann
+    //: in Schritten von einem halben Kilometer. Gerechnet wird mit dem
+    //: Tempo, das im Bild steht — der Fahrer bewegt sich zwischen zwei
+    //: Bildern nicht anders als in ihnen.
+    //:
+    //: Nur wer **fährt**, zählt mit. Ein Stehender, ein Aufgeber und
+    //: ein Zielankömmling stehen still; ihnen Meter anzudichten wäre
+    //: schlimmer als ein Sprung.
+    liveDist(dist_m, v_kmh, state) {
+      if (state !== 0) return dist_m;
+      const limit = this.route ? this.route.distance_m : Infinity;
+      return Math.min(dist_m + (v_kmh / 3.6) * this.liveDelta, limit);
+    },
+    rowDistKm(row) {
+      return this.liveDist(row.dist_km * 1000, row.v_kmh, row.state) / 1000;
+    },
+    //: Und dieselbe Rechnung rückwärts: Die Meter bis zur nächsten
+    //: Zeitmessung laufen herunter statt in Blöcken zu fallen.
+    rowToNextM(row) {
+      const m = row && row.to_next_m;
+      if (m === null || m === undefined) return null;
+      if (row.state !== 0) return m;
+      return Math.max(m - (row.v_kmh / 3.6) * this.liveDelta, 0);
+    },
+
     //: Meter bis zur nächsten Zeitmessung.
     //:
     //: Unter 10 km in Metern, darüber in Kilometern — 47 000 m liest
@@ -241,12 +285,12 @@ function raceLive(raceId) {
     //: im Ziel oder ausgeschieden ist, bekommt einen Strich: Eine 0
     //: wäre in beiden Fällen falsch.
     toNext(row) {
-      const m = row && row.to_next_m;
-      if (m === null || m === undefined) return '–';
+      const m = this.rowToNextM(row);
+      if (m === null) return '–';
       // Ohne Tausenderpunkt: "1.386 m" ist nach deutscher Schreibweise
       // zwar richtig, liest sich in einer Zahlenspalte neben "25.0 km"
       // aber wie 1,386 Meter. "1386 m" kann man nicht falsch verstehen.
-      return m < 10000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
+      return m < 10000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`;
     },
 
     //: Inhalt einer wählbaren Spalte.
@@ -255,10 +299,11 @@ function raceLive(raceId) {
     //: behauptet einen Messwert, „–" sagt, dass keiner vorliegt.
     cell(key, row) {
       switch (key) {
-        case 'km': return row.dist_km.toFixed(1);
+        case 'km': return this.rowDistKm(row).toFixed(1);
         case 'biscp': return this.toNext(row);
         case 'trend':
           return row.trend > 0 ? `▲${row.trend}` : row.trend < 0 ? `▼${-row.trend}` : '–';
+        case 'vorcp': return row.prev_rank === null ? '–' : row.prev_rank;
         case 'tempo': return row.v_kmh.toFixed(1);
         case 'leistung': return row.power_w;
         case 'aufgabe': return row.giveup_pct === null ? '–' : `${row.giveup_pct} %`;
@@ -276,6 +321,7 @@ function raceLive(raceId) {
     cellClass(key, row) {
       switch (key) {
         case 'trend': return row.trend > 0 ? 'neg' : row.trend < 0 ? 'pos' : 'faint';
+        case 'vorcp': return row.prev_rank === null ? 'faint' : '';
         case 'aufgabe':
           if (row.giveup_pct === null) return 'faint';
           return row.giveup_pct > 70 ? 'bad' : row.giveup_pct > 40 ? 'warn' : '';
@@ -465,7 +511,9 @@ function raceLive(raceId) {
       for (const view of [this.overview, this.detail]) {
         if (!view) continue;
         view.setFrame(
-          frame.positions, frame.focus.entry_id, neighbours, frame.focus.conditions
+          frame.positions, frame.focus.entry_id, neighbours, frame.focus.conditions,
+          // Die Ampelphase läuft in Fahrerzeit — also in *seiner*.
+          frame.focus.own_time_s
         );
       }
       if (this.detail && this.overview) {

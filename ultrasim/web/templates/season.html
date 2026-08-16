@@ -36,6 +36,30 @@
   </div>
   {% endif %}
 
+  {# Warum starten weniger Fahrer als im Kalender steht? Fast immer:
+     Der Fahrerpool ist älter als das Programm. Der Ort, an dem die
+     Frage aufkommt, ist diese Seite — also steht die Antwort hier. #}
+  {% if pool_mismatch %}
+  <div class="panel notice">
+    <div class="panel-title"><span>Der Fahrerpool passt nicht zum Kalender</span></div>
+    <p style="max-width:82ch">
+      Im Pool stehen <strong>{{ pool_size }}</strong> Fahrer
+      ({{ pool_mismatch }}), die Termine hier planen mit bis zu
+      <strong>{{ planned_field }}</strong>. Es starten immer nur so viele,
+      wie der Pool hergibt — <strong>{{ pool_size }}</strong> also.
+      Der heutige Standard sind {{ default_field }} Fahrer in 25 fest
+      benannten Teams aus Ausrüster und Radmarke.
+    </p>
+    <p class="dim" style="max-width:82ch">
+      Ein Pool wird beim Programmstart nur angelegt, wenn noch keiner da
+      ist; ein vorhandener bleibt unangetastet — deshalb wächst er nicht
+      von selbst mit. <a href="/pool">Im Fahrer-Editor</a> lässt er sich
+      neu aufbauen. Schon gerechnete Rennen bleiben unberührt, sie tragen
+      ihre Fahrer und Teams als Kopie.
+    </p>
+  </div>
+  {% endif %}
+
   {% if not pool_exists %}
   <div class="panel"><p class="bad">Kein Fahrerpool vorhanden — Rennen lassen sich nicht rechnen.
     <span class="mono">python -m ultrasim.cli.simulate pool --riders 300</span></p></div>

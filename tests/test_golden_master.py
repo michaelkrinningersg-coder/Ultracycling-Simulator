@@ -26,10 +26,15 @@ from ultrasim.core.engine import RaceConfig, simulate_race
 from ultrasim.core.rider import generate_pool
 
 #: Streckenkennzahlen der Testroute (siehe conftest).
+#:
+#: ``n_splits`` stand bei 6, solange das Raster in Kilometern gestaffelt
+#: war (10 km auf einer 60-km-Strecke). Seit es bei jeweils fünf Prozent
+#: steht, sind es zwanzig — auf jeder Strecke gleich viele, und das ist
+#: der Zweck der Umstellung.
 GOLDEN_ROUTE = {
     "distance_m": 60_100.0,
     "ascent_m": 457.2,
-    "n_splits": 6,
+    "n_splits": 20,
     "n_segments": 189,
     "n_climbs": 1,
 }
@@ -260,7 +265,13 @@ GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
 #:
 #: Jetzt schaltet der Ampelhalt seine Freigabe stumm, und die Zeile
 #: sagt genau das Richtige: **eine** neue Zahl, alle anderen unverändert.
-GOLDEN_LONG_EVENTS: dict[str, int] = {'CONDITION_END': 29, 'CONDITION_START': 40, 'DECISION': 11, 'FINISH': 8, 'INCIDENT': 50, 'PLAN': 66, 'SLEEP': 2, 'SPLIT_PASSED': 336, 'START': 8, 'STOP_END': 138, 'STOP_START': 88, 'TRAFFIC_LIGHT': 69}
+#:
+#: Und ein zweites Mal beim Fünfprozentraster: 336 → 160 ``SPLIT_PASSED``,
+#: **jede andere Zahl unverändert**. Genau das erwartet man, wenn die
+#: Zahl der Zeitmessungen sinkt und sonst nichts — Splits zeichnen auf,
+#: sie greifen nicht ein. Die Zielzeiten unten sind denn auch bitgleich
+#: geblieben.
+GOLDEN_LONG_EVENTS: dict[str, int] = {'CONDITION_END': 29, 'CONDITION_START': 40, 'DECISION': 11, 'FINISH': 8, 'INCIDENT': 50, 'PLAN': 66, 'SLEEP': 2, 'SPLIT_PASSED': 160, 'START': 8, 'STOP_END': 138, 'STOP_START': 88, 'TRAFFIC_LIGHT': 69}
 
 TOLERANCE_LONG_S = 2.0
 

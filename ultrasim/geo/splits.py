@@ -4,19 +4,33 @@ from __future__ import annotations
 
 from .route import Climb, ServicePoint, Split
 
-#: Split-Abstand nach Streckenlänge. Ziel ist stets ein Feld von 30–50
-#: Splits – genug für Dramaturgie, wenig genug für ein lesbares Board.
-SPLIT_SPACING_M = ((400_000.0, 10_000.0), (1_200_000.0, 25_000.0), (float("inf"), 50_000.0))
+#: Abstand der Rastersplits als **Anteil der Strecke**: alle fünf
+#: Prozent, also bei 5, 10, 15 … 95 % und dem Ziel bei 100 %. Das sind
+#: höchstens zwanzig Zeitmessungen, unabhängig von der Länge.
+#:
+#: Vorher stand hier ein Abstand in Kilometern, gestaffelt nach
+#: Streckenlänge — und der ergab auf den langen Strecken bis zu fünfzig
+#: Marken. Die Splitmatrix wurde damit zur Tapete, das Splitmenü zur
+#: Endlosliste, und eine Zwischenzeit alle fünfundzwanzig Kilometer sagt
+#: über ein Rennen von zweitausend Kilometern nichts, was die vorige
+#: nicht schon gesagt hätte.
+#:
+#: Relativ statt absolut hat einen zweiten Vorteil: Dieselbe Marke
+#: bedeutet auf jeder Strecke dasselbe. „Bei 50 %" ist auf 400 km und auf
+#: 2500 km die Rennmitte; „km 200" ist einmal das halbe Rennen und
+#: einmal der Anfang.
+SPLIT_FRACTION = 0.05
+
+#: So viele Rastermarken höchstens — 5 % bis 95 %, das Ziel kommt dazu.
+MAX_INTERVAL_SPLITS = int(round(1.0 / SPLIT_FRACTION)) - 1
 
 #: Abstand der Treffpunkte mit dem Begleitfahrzeug, nach Distanzklasse.
 SERVICE_SPACING_M = {"kurz": 60_000.0, "mittel": 90_000.0, "ultra": 120_000.0}
 
 
 def split_spacing_m(distance_m: float) -> float:
-    for limit, spacing in SPLIT_SPACING_M:
-        if distance_m < limit:
-            return spacing
-    return SPLIT_SPACING_M[-1][1]
+    """Abstand zweier Rastersplits in Metern — fünf Prozent der Strecke."""
+    return max(float(distance_m) * SPLIT_FRACTION, 1.0)
 
 
 def build_splits(
@@ -24,19 +38,26 @@ def build_splits(
     climbs: list[Climb] | None = None,
     extra_dists_m: list[float] | None = None,
 ) -> list[Split]:
-    """Automatische Splits: regelmäßiges Raster plus markante Punkte.
+    """Automatische Splits: Fünfprozentraster plus markante Punkte.
 
-    Gipfel kategorisierter Anstiege verdrängen einen nahen Rastersplit –
-    ein Zeitmesspunkt 800 m vor der Passhöhe erzählt nichts, was der
-    Gipfelsplit nicht besser erzählen würde.
+    Das Raster steht bei 5, 10, 15 … 95 Prozent der Strecke, das Ziel bei
+    100 — höchstens zwanzig Zeitmessungen, gleich viele auf jeder
+    Strecke. Dazu kommen die Gipfel kategorisierter Anstiege, und die
+    verdrängen einen nahen Rastersplit: Ein Zeitmesspunkt 800 m vor der
+    Passhöhe erzählt nichts, was der Gipfelsplit nicht besser erzählen
+    würde.
+
+    **Gipfel sind nicht gedeckelt.** Die Zwanzig gilt für das Raster;
+    eine Strecke mit acht kategorisierten Anstiegen bekommt sie alle.
+    Ein Gipfel ohne Zeitnahme wäre in einem Radrennen das Weglassen der
+    einen Stelle, an der etwas passiert.
     """
     spacing = split_spacing_m(distance_m)
     candidates: list[tuple[float, str, str]] = []
 
-    d = spacing
-    while d < distance_m - spacing * 0.25:
+    for step in range(1, MAX_INTERVAL_SPLITS + 1):
+        d = distance_m * SPLIT_FRACTION * step
         candidates.append((d, f"km {d / 1000:.0f}", "interval"))
-        d += spacing
 
     for climb in climbs or []:
         if climb.summit_dist_m < distance_m:

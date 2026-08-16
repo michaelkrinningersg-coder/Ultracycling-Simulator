@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from ...core.events import format_event
 from ...core.physics import BIKE_NAMES
+from ...geo import signals as sig
 from ..playback import SORT_FIELDS, SPEEDS, PlaybackSession, RaceView
 
 router = APIRouter(prefix="/api")
@@ -128,11 +129,19 @@ def route_data(request: Request, race_id: str) -> JSONResponse:
             "service_points": [
                 {"idx": p.idx, "dist_m": p.dist_m, "name": p.name} for p in route.service_points
             ],
-            # Der Phasenversatz geht bewusst nicht mit: Der Client soll
-            # nicht ausrechnen können, ob eine Ampel gleich rot wird.
+            # Mit Phasenversatz: Ohne ihn kann die Oberfläche nur einen
+            # Punkt malen, und ein Punkt, der immer gleich aussieht,
+            # sieht aus wie eine Ampel, die immer rot ist.
+            #
+            # Verraten wird damit nichts: Eine Ampel schaltet alle 90 s,
+            # ein Fahrer braucht für die nächsten fünf Kilometer eine
+            # Viertelstunde. Was in diesem Moment weiter vorn steht, hat
+            # sich bis zu seiner Ankunft fünfmal geändert.
             "traffic_lights": [
-                {"idx": lt.idx, "dist_m": lt.dist_m} for lt in route.traffic_lights
+                {"idx": lt.idx, "dist_m": lt.dist_m, "offset_s": round(lt.offset_s, 1)}
+                for lt in route.traffic_lights
             ],
+            "signal_phase": {"red_s": sig.RED_S, "green_s": sig.GREEN_S},
         }
     )
 

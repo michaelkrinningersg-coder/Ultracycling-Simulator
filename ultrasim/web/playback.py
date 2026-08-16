@@ -71,6 +71,7 @@ SORT_FIELDS: dict[str, str] = {
     "wasser": "hydration_pct",
     "aufgabe": "giveup_pct",
     "trend": "trend",
+    "vorcp": "prev_rank",
     "rueckstand": "gap_s",
 }
 
@@ -620,13 +621,16 @@ class RaceView:
         snap = self.snapshot(t_wall)
         times = self.result.split_times_s[:, split_idx]
         reached_wall = self.offsets + times
-        trend = self.split_trend(t_wall, split_idx)
+        before, now = self.rank_pair(t_wall, split_idx)
+        both = (now > 0) & (before > 0)
+        trend = np.where(both, before - now, 0)
 
         rows: list[dict[str, Any]] = []
         for i, entry in enumerate(self.result.entries):
             base = {
                 **self._row_base(i, entry, snap, t_wall),
                 "trend": int(trend[i]),
+                "prev_rank": int(before[i]) or None,
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
                 rows.append(
@@ -679,6 +683,10 @@ class RaceView:
                 "name": split.name,
                 "dist_m": split.dist_m,
                 "kind": split.kind,
+                # Welche Marke die Spalte „Rg CP" meint.
+                "previous": (
+                    self.route.splits[split_idx - 1].name if split_idx > 0 else None
+                ),
             },
             "rows": _window(sort_rows(ordered, sort, sort_desc), focus, BOARD_WINDOW),
             # Die fixierte Kopfzeile zeigt den tatsächlich Führenden, nicht
@@ -744,6 +752,23 @@ class RaceView:
         ranks[order] = np.arange(1, order.size + 1)
         return ranks
 
+    def rank_pair(self, t_wall: float, split_idx: int) -> tuple[np.ndarray, np.ndarray]:
+        """Platzziffern an dieser Marke und an der davor.
+
+        Beide zur Wanduhrzeit abgeschnitten: Gewertet ist nur, wer dort
+        **in diesem Moment schon durch war**. Eine Platzierung an einem
+        Checkpoint ist keine feststehende Zahl, sondern eine, die sich
+        noch ändert, solange hinten jemand ankommt — und genau so soll
+        sie auch dastehen.
+        """
+        now = self.measured_ranks(t_wall, split_idx)
+        before = (
+            self.measured_ranks(t_wall, split_idx - 1)
+            if split_idx > 0
+            else np.zeros(self.n, dtype=np.int32)
+        )
+        return before, now
+
     def split_trend(self, t_wall: float, split_idx: int) -> np.ndarray:
         """Plätze gewonnen (+) oder verloren (−) seit dem Split davor.
 
@@ -753,8 +778,7 @@ class RaceView:
         """
         if split_idx <= 0:
             return np.zeros(self.n, dtype=np.int32)
-        now = self.measured_ranks(t_wall, split_idx)
-        before = self.measured_ranks(t_wall, split_idx - 1)
+        before, now = self.rank_pair(t_wall, split_idx)
         both = (now > 0) & (before > 0)
         return np.where(both, before - now, 0).astype(np.int32)
 
@@ -802,6 +826,10 @@ class RaceView:
         # keine Zeitnahme und kann deshalb keinen Vergleich liefern.
         last_split = int(np.searchsorted(self.split_dist, ref_m, side="right")) - 1
         trend = self.split_trend(t_wall, last_split)
+        # In der virtuellen Rangliste gibt es keine eigene Zeitmessung —
+        # der „vorherige Checkpoint" ist die letzte Marke hinter der
+        # Bezugsdistanz, nicht die davor.
+        prev_rank = self.measured_ranks(t_wall, last_split)
         rows: list[dict[str, Any]] = []
         for i, entry in enumerate(self.result.entries):
             if not snap["started"][i]:
@@ -820,6 +848,7 @@ class RaceView:
                 {
                     **self._row_base(i, entry, snap, t_wall),
                     "trend": int(trend[i]),
+                    "prev_rank": int(prev_rank[i]) or None,
                     "t_s": actual,
                     "provisional": provisional,
                     # Die virtuelle Rangliste projiziert auf eine
@@ -839,6 +868,9 @@ class RaceView:
                 "name": f"Virtuell bei km {ref_m / 1000:.1f}",
                 "dist_m": ref_m,
                 "kind": "virtual",
+                "previous": (
+                    self.route.splits[last_split].name if last_split >= 0 else None
+                ),
             },
             "rows": _window(sort_rows(rows, sort, sort_desc), focus, BOARD_WINDOW),
             "leader": rows[0] if rows else None,

@@ -89,9 +89,9 @@
                Zeilenumbruch getroffen. -->
           <div class="statgrid" style="margin-top:.55rem">
             <div class="cell"><span class="k">Gefahren<span class="u">km</span></span>
-              <span class="v" x-text="(focus.dist_m/1000).toFixed(1)"></span></div>
+              <span class="v" x-text="(liveFocusDistM/1000).toFixed(1)"></span></div>
             <div class="cell"><span class="k">Rest<span class="u">km</span></span>
-              <span class="v" x-text="(focus.remaining_m/1000).toFixed(1)"></span></div>
+              <span class="v" x-text="(liveFocusRemainingM/1000).toFixed(1)"></span></div>
             <div class="cell"><span class="k">Fahrerzeit</span>
               <span class="v" x-text="focus.own_clock || '—'"></span></div>
 
@@ -266,7 +266,7 @@
           <span><i style="background:rgba(217,83,79,.35)"></i>kategorisierter Anstieg</span>
           <span><i style="background:#a78bfa"></i>ab 1500 m kostet Höhe Leistung</span>
           <span><i style="background:#47b4ff"></i>Servicepunkt</span>
-          <span><i style="background:#e0574f"></i>Ampel</span>
+          <span title="90 s rot, 90 s grün. Gezeigt wird die Phase, die der Fokusfahrer gerade vorfände — im Modell läuft sie in seiner Fahrzeit."><i style="background:#ff4d45"></i><i style="background:#4ade80"></i>Ampel (Phase des Fokusfahrers)</span>
           <span><i style="background:#ffc247"></i>Fokusfahrer</span>
           <span><i style="background:#f8717a"></i>Zustand des Fokusfahrers</span>
         </div>
@@ -345,7 +345,9 @@
                  Zeitmessung ist "0,8" nichtssagend und "800 m" die Zahl,
                  auf die man wartet. -->
             <template x-for="c in visibleColumns" :key="c.key">
-              <th class="right clickable" :title="c.hint" @click="sortBy(c.key)">
+              <th class="right clickable" @click="sortBy(c.key)"
+                  :title="c.key === 'vorcp' && board && board.split.previous
+                          ? c.hint + ' (' + board.split.previous + ')' : c.hint">
                 <span x-text="c.label"></span><span x-text="sortMark(c.key)"></span>
               </th>
             </template>

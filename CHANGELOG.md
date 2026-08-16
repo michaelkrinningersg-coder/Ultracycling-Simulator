@@ -51,6 +51,76 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
+- **Aufgabedruck als sichtbare Größe.** `give_up` wurde seit M6.2 jede
+  Sekunde gerechnet und war nirgends zu sehen — die dramatischste Zahl
+  des Modells lief unbeobachtet mit. Jetzt ist sie ein
+  Telemetriekanal (`giveup_pct`, ein uint8 je Fahrer und Abtastung) und
+  steht als Board-Spalte und im Fokuspanel.
+
+  Angezeigt wird der **Anteil an der eigenen Grenze**, nicht der
+  Rohwert: Die Grenze ist je Fahrer gezogen (Exp(1)) und bleibt
+  verborgen; ein Rohwert von 0,8 bedeutet für den einen fast nichts und
+  für den anderen das Ende. 100 % heißt: Er steigt in dieser Sekunde ab.
+
+  Der Kanal kostet ein Byte je Fahrer und Abtastung — sieben Prozent
+  mehr Telemetrie. Rennen ohne ihn bleiben lesbar; die Spalte fehlt
+  dann, statt dass die Datei abgelehnt wird.
+- **Elf wählbare Board-Spalten, alle sortierbar.** Zur festen Hälfte —
+  Rang, Nummer, Fahrer, Team, Zeit, Rückstand — lassen sich km, bis CP,
+  Trend, Tempo, Leistung, Aufgabedruck, Form, W′, Glykogen, Schlaf und
+  Wasser dazuschalten. Welche Frage man an das Feld hat, hängt vom
+  Moment ab: in der ersten Nacht der Schlafdruck, am Berg das Tempo,
+  nach 2000 km der Aufgabedruck.
+
+  Sortiert wird **serverseitig**, weil das Board ein 41-Zeilen-Fenster
+  um den Fokusfahrer ist — im Browser zu sortieren hieße, 41 von 300
+  Zeilen zu ordnen. Die Platzziffern bleiben dabei unangetastet: Rang 1
+  ist der Schnellste, auch wenn die Liste nach Tempo steht.
+- **Richtungspfeil je Zeile.** Plätze gewonnen oder verloren seit dem
+  Split davor. Gerechnet aus den **gemessenen** Zeiten zur Wanduhrzeit,
+  nicht aus `split_ranks` — die dort stehenden Ränge sind am Rennende
+  vergeben und wüssten, wer später noch schneller war.
+- **Zwei Fahrer anheften.** Sie stehen über dem Board, egal wo sie
+  liegen, mit dem Abstand zwischen genau diesen beiden. Ein Duell über
+  1200 km ist sonst nur zu verfolgen, indem man zwischen zwei Zeilen
+  hin- und herscrollt.
+- **Ticker mit Themenchips und anklickbaren Meldungen.** Sechs Gruppen
+  (Zeiten, Ausfälle, Zwischenfälle, Stopps & Schlaf, Taktik, Start &
+  Ziel) plus „nur Fokusfahrer". Bei 1000× laufen dreißig Meldungen je
+  Sekunde durch; ein Ticker, der alles zeigt, zeigt nichts.
+
+  Ein Klick auf eine Meldung springt zu ihrem Moment, wechselt den
+  Fokus auf den Fahrer und hält an — damit wird aus der Dekoration die
+  Navigation, die der Seite bisher gefehlt hat.
+- **Höhenachse und beschriftete Anstiege im Profilausschnitt.** Ohne
+  Maßstab ist dieselbe Zacke einmal dreißig und einmal dreihundert
+  Höhenmeter. Dazu die 1500-m-Linie, ab der Höhe im Modell Leistung
+  kostet, jeder Anstieg mit Kategorie, Länge und Höhenmetern, und —
+  solange der Fokusfahrer drinsteckt — „noch 4,2 km bis oben".
+- **Startliste nach Team oder Nation gefaltet.** Dreihundert flache
+  Zeilen mit Textsuche sind kein Verzeichnis, sondern eine Schriftrolle:
+  Man findet darin nur, wovon man den Namen schon weiß.
+- **Standzeit in der Ergebnisliste, aufgeschlüsselt.** `lost_incident_s`
+  steht seit der Notschlaf-Korrektur neben `lost_s` in jedem Ergebnis
+  und wurde nirgends angezeigt. Jetzt als Spalte mit Balken: der
+  gefüllte Teil ist Notschlaf, der Rest sind Zwischenfälle. Vier Stunden
+  Panne und vier Stunden Schlaf stehen als dieselbe Zahl da und sind
+  zwei verschiedene Rennen.
+- **Ausführlicher Rennbericht für das Podium.** Der Einzeiler bleibt für
+  das Feld; die ersten drei bekommen mehrere Sätze mit dem, wofür in
+  einem Satz kein Platz ist — jeder nennenswerte Zwischenfall statt nur
+  des größten, der Radwechsel, die aufgeschlüsselte Standzeit. Subjekt
+  der Folgesätze ist der Name des Fahrers, nicht ein Pronomen: Das
+  Modell kennt kein Geschlecht, und der Bericht erfindet keins.
+- **Rangverlauf und Saisonverlauf als Liniendiagramme.** Dieselben
+  Zahlen wie in der Splitmatrix und in der Gesamtwertung, aber als Form:
+  wo einer nach vorn gefahren ist, und wer wann die Saison angeführt
+  hat. Als SVG im Dokument statt als Canvas — es bewegt sich nichts, und
+  so bleibt es beim Drucken und ohne JavaScript lesbar.
+- **Übertragung im UI beenden.** Die Registry deckelt bei drei laufenden
+  Rennen; bisher gab es keinen Weg, einen Platz freizugeben, außer das
+  Programm neu zu starten. Beenden heißt: Stand sichern, Rechner
+  anhalten — das Rennen bleibt als gerechnetes Rennen erhalten.
 - **Umgekehrte Startreihenfolge ab dem zweiten Saisonrennen.** Der
   Auftakt startet weiter nach geschätztem Potenzial — es gibt noch nichts
   anderes. Danach zählt das Erreichte: Wer die Gesamtwertung anführt,

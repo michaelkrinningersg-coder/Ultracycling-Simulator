@@ -250,6 +250,19 @@ class Telemetry:
     #: Oberfläche sagt dann „nicht aufgezeichnet" statt zu raten.
     factors: dict[str, np.ndarray] | None = None
 
+    #: Aufgabedruck in Prozent der **eigenen** Grenze: 0 = fährt zufrieden,
+    #: 100 = steigt in dieser Sekunde aus.
+    #:
+    #: Die Grenze ist je Fahrer gezogen (``give_up_limit``, Exp(1)) und
+    #: bleibt verborgen — sichtbar wird nur, wie nah er ihr ist. Das ist
+    #: keine Vorhersage: Der Wert kann tagelang bei 40 % stehen und in
+    #: einer schlechten Nacht durchschlagen. Ohne den Bezug auf die eigene
+    #: Grenze wäre die Zahl unlesbar, weil ein Rohwert von 0,8 für den
+    #: einen fast nichts und für den anderen das Ende bedeutet.
+    #:
+    #: ``None`` wie ``factors``: Rennen von vor dieser Aufzeichnung.
+    giveup_pct: np.ndarray | None = None
+
     #: Reihenfolge und Beschriftung der aufgezeichneten Faktoren.
     FACTOR_LABELS: ClassVar[dict[str, str]] = {
         "section": "Abschnittsform",
@@ -271,7 +284,7 @@ class Telemetry:
         return int(self.dist_m.shape[1])
 
     def nbytes(self) -> int:
-        return sum(
+        total = sum(
             getattr(self, name).nbytes
             for name in (
                 "dist_m",
@@ -286,8 +299,10 @@ class Telemetry:
                 "state",
             )
         )
+        return total + (self.giveup_pct.nbytes if self.giveup_pct is not None else 0)
 
     def save(self, path) -> None:
+        extra = {} if self.giveup_pct is None else {"giveup_pct": self.giveup_pct}
         np.savez_compressed(
             path,
             sample_dt_s=np.int32(self.sample_dt_s),
@@ -301,6 +316,7 @@ class Telemetry:
             hydration_pct=self.hydration_pct,
             bike=self.bike,
             state=self.state,
+            **extra,
         )
 
     @classmethod
@@ -318,6 +334,10 @@ class Telemetry:
                 hydration_pct=data["hydration_pct"],
                 bike=data["bike"],
                 state=data["state"],
+                # Ältere Dateien haben den Kanal nicht. Sie deshalb
+                # abzulehnen wäre die schlechteste aller Antworten: Die
+                # Spalte fehlt eben, das Rennen bleibt lesbar.
+                giveup_pct=data["giveup_pct"] if "giveup_pct" in data.files else None,
             )
 
 
@@ -525,6 +545,7 @@ class LiveSnapshot:
             hydration_pct=self.buffers["hydration_pct"][:, :end],
             bike=self.buffers["bike"][:, :end],
             state=self.buffers["state"][:, :end],
+            giveup_pct=self.buffers["giveup_pct"][:, :end],
             factors={key: buf[:, :end] for key, buf in self.factor_buffers.items()},
         )
 
@@ -972,6 +993,7 @@ def run_race(
     buf_hyd = np.full((n, cap), 100, dtype=np.uint8)
     buf_bike = np.zeros((n, cap), dtype=np.uint8)
     buf_state = np.zeros((n, cap), dtype=np.uint8)
+    buf_giveup = np.zeros((n, cap), dtype=np.uint8)
     # Die Zerlegung der Form. Sieben zusätzliche uint8-Kanäle kosten bei
     # 250 Fahrern rund 7 MB vor der Kompression — der Preis dafür, dass
     # die Oberfläche „warum ist der langsam?" beantworten kann, statt nur
@@ -999,21 +1021,23 @@ def run_race(
             "hydration_pct": buf_hyd,
             "bike": buf_bike,
             "state": buf_state,
+            "giveup_pct": buf_giveup,
         }
 
     def _grow() -> None:
         # Bewusst nicht np.resize: das tilt die Daten in flacher
         # Reihenfolge und würde die Zeilen gegeneinander verschieben.
         nonlocal cap, buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp
-        nonlocal buf_hyd, buf_bike, buf_state
+        nonlocal buf_hyd, buf_bike, buf_state, buf_giveup
         new_cap = cap * 2
         grown = []
-        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_hyd, buf_bike, buf_state):
+        for buf in (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp,
+                    buf_hyd, buf_bike, buf_state, buf_giveup):
             bigger = np.zeros((n, new_cap), dtype=buf.dtype)
             bigger[:, :cap] = buf
             grown.append(bigger)
         (buf_dist, buf_v, buf_p, buf_form, buf_wp, buf_gly, buf_slp, buf_hyd,
-         buf_bike, buf_state) = grown
+         buf_bike, buf_state, buf_giveup) = grown
         for key, buf in buf_factors.items():
             bigger = np.full((n, new_cap), 100, dtype=np.uint8)
             bigger[:, :cap] = buf
@@ -1055,6 +1079,10 @@ def run_race(
         buf_hyd[:, n_samples] = nut.hydration_display_pct(dehyd_pct).astype(np.uint8)
         buf_bike[:, n_samples] = bike.astype(np.uint8)
         buf_state[:, n_samples] = state
+        # Aufgabedruck relativ zur eigenen, verborgenen Grenze.
+        buf_giveup[:, n_samples] = np.clip(
+            give_up / np.maximum(give_up_limit, 1e-6) * 100.0, 0, 255
+        ).astype(np.uint8)
         # Wer ausgestiegen ist, erholt sich nicht mehr im Rennen. Die
         # physiologischen Kanäle laufen im Modell weiter (der
         # Flüssigkeitshaushalt füllt sich auf, der Speicher auch), aber
@@ -1956,6 +1984,7 @@ def run_race(
         hydration_pct=buf_hyd[:, :n_samples].copy(),
         bike=buf_bike[:, :n_samples].copy(),
         state=buf_state[:, :n_samples].copy(),
+        giveup_pct=buf_giveup[:, :n_samples].copy(),
         factors={k: v[:, :n_samples].copy() for k, v in buf_factors.items()},
     )
 

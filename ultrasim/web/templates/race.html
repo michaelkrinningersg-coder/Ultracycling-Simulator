@@ -25,14 +25,29 @@
     <span class="tickerbar-label">Ticker</span>
     <div class="tickerbar-items">
       <template x-for="(e, i) in latest" :key="e.key">
-        <span class="tick" :class="[e.type.toLowerCase(), e.focus ? 'focus' : '']">
+        <span class="tick clickable" :class="[e.type.toLowerCase(), e.focus ? 'focus' : '']"
+              @click="jumpTo(e)"
+              title="Anklicken: Uhr springt zu diesem Moment, Fokus wechselt auf den Fahrer">
           <span class="t" x-text="hms(e.t_s)"></span>
           <span x-text="e.text"></span>
         </span>
       </template>
       <template x-if="!latest.length">
-        <span class="tick dim">Noch nichts passiert.</span>
+        <span class="tick dim"
+              x-text="tickerHidden ? `${tickerHidden} Meldungen ausgefiltert.` : 'Noch nichts passiert.'"></span>
       </template>
+    </div>
+    <!-- Filterchips: Bei 1000× laufen dreißig Meldungen je Sekunde
+         durch. Ein Ticker, der alles zeigt, zeigt damit nichts. -->
+    <div class="tickerbar-filter">
+      <button class="chipbtn" :class="{on: focusOnly}" @click="toggleFocusOnly()"
+              title="Nur Meldungen des Fokusfahrers">Fokus</button>
+      <template x-for="g in tickerGroups" :key="g.key">
+        <button class="chipbtn" :class="{on: groupOn(g.key)}" @click="toggleGroup(g.key)"
+                x-text="g.label"></button>
+      </template>
+      <button class="chipbtn ghost" x-show="tickerOff.length || focusOnly"
+              @click="showAllGroups()">alle</button>
     </div>
   </div>
 
@@ -95,6 +110,11 @@
             <div class="cell"><span class="k">Glykogen<span class="u">%</span></span>
               <span class="v" :class="focus.glyco_pct < 15 ? 'bad' : (focus.glyco_pct < 30 ? 'warn' : '')"
                     x-text="focus.glyco_pct"></span></div>
+            <div class="cell" x-show="focus.giveup_pct !== null"
+                 title="Wie nah er seiner eigenen Aufgabegrenze ist. 100 % heißt: Er steigt ab.">
+              <span class="k">Aufgabe<span class="u">%</span></span>
+              <span class="v" :class="focus.giveup_pct > 70 ? 'bad' : (focus.giveup_pct > 40 ? 'warn' : '')"
+                    x-text="focus.giveup_pct"></span></div>
             <div class="cell"><span class="k">Rad</span>
               <span class="v wide"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
                     x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>
@@ -156,17 +176,37 @@
         <span class="faint" x-text="frame ? `${frame.field.on_course} unterwegs · ${frame.field.finished} im Ziel` : ''"></span>
       </div>
       <input class="field-input" placeholder="Name, Team oder Startnummer" x-model="filter">
+      <div class="groupbar">
+        <span class="faint">gruppieren</span>
+        <button class="chipbtn" :class="{on: groupBy === 'keine'}" @click="setGroupBy('keine')">keine</button>
+        <button class="chipbtn" :class="{on: groupBy === 'team'}" @click="setGroupBy('team')">Team</button>
+        <button class="chipbtn" :class="{on: groupBy === 'nation'}" @click="setGroupBy('nation')">Nation</button>
+      </div>
       <div class="startlist" style="margin-top:.4rem">
-        <template x-for="r in filteredStart" :key="r.entry_id">
-          <div class="row" :class="{focus: focus && r.entry_id === focus.entry_id}"
-               @click="setFocus(r.entry_id)">
-            <span class="b" x-text="r.bib"></span>
-            <span>
-              <span class="swatch" style="display:inline-block;width:.35rem;height:.8rem;border-radius:1px;margin-right:.35rem;vertical-align:-1px"
-                    :style="`background:${r.color}`"></span>
-              <span x-text="r.name"></span>
-            </span>
-            <span class="faint mono" x-text="hms(r.start_offset_s)"></span>
+        <template x-for="g in startGroups" :key="g.key">
+          <div>
+            <div class="grouphead clickable" x-show="groupBy !== 'keine'"
+                 @click="toggleGroupFold(g.key)">
+              <span x-text="groupOpen(g.key) ? '▾' : '▸'"></span>
+              <span x-text="g.label"></span>
+              <span class="faint" x-text="g.rows.length"></span>
+            </div>
+            <template x-if="groupOpen(g.key)">
+              <div>
+                <template x-for="r in g.rows" :key="r.entry_id">
+                  <div class="row" :class="{focus: focus && r.entry_id === focus.entry_id}"
+                       @click="setFocus(r.entry_id)">
+                    <span class="b" x-text="r.bib"></span>
+                    <span>
+                      <span class="swatch" style="display:inline-block;width:.35rem;height:.8rem;border-radius:1px;margin-right:.35rem;vertical-align:-1px"
+                            :style="`background:${r.color}`"></span>
+                      <span x-text="r.name"></span>
+                    </span>
+                    <span class="faint mono" x-text="hms(r.start_offset_s)"></span>
+                  </div>
+                </template>
+              </div>
+            </template>
           </div>
         </template>
       </div>
@@ -210,6 +250,7 @@
           <span><i style="background:#d9853f"></i>5–8 %</span>
           <span><i style="background:#ff3b30"></i>&gt; 11 %</span>
           <span><i style="background:rgba(217,83,79,.35)"></i>kategorisierter Anstieg</span>
+          <span><i style="background:#a78bfa"></i>ab 1500 m kostet Höhe Leistung</span>
           <span><i style="background:#47b4ff"></i>Servicepunkt</span>
           <span><i style="background:#ffc247"></i>Fokusfahrer</span>
           <span><i style="background:#f8717a"></i>Zustand des Fokusfahrers</span>
@@ -240,20 +281,60 @@
                   title="Board folgt automatisch dem zuletzt passierten Split des Fokusfahrers">
             ⟳ folgen
           </button>
+          <button @click="showColumnPicker = !showColumnPicker"
+                  :class="{on: showColumnPicker}" title="Welche Spalten die Tabelle zeigt">
+            ⊞ Spalten
+          </button>
           <span class="faint" style="font-size:.75rem"
                 x-text="board ? `${board.n_reached} von ${board.n_total} durch` : ''"></span>
         </div>
       </div>
 
+      <!-- Spaltenwahl: die Frage, die man gerade an das Feld hat -->
+      <div class="colpicker" x-show="showColumnPicker" x-cloak>
+        <template x-for="c in allColumns" :key="c.key">
+          <button class="chipbtn" :class="{on: columns.includes(c.key)}"
+                  :title="c.hint" @click="toggleColumn(c.key)" x-text="c.label"></button>
+        </template>
+        <button class="chipbtn ghost" @click="resetColumns()">zurücksetzen</button>
+      </div>
+
+      <!-- Duell: zwei angeheftete Fahrer und der Abstand zwischen ihnen -->
+      <div class="duel" x-show="pinnedRows.length" x-cloak>
+        <template x-for="(p, pi) in pinnedRows" :key="p.entry_id">
+          <span class="duel-side clickable" @click="setFocus(p.entry_id)">
+            <span class="swatch" :style="`background:${p.color}`"></span>
+            <span x-text="p.name"></span>
+            <span class="mono faint" x-text="p.t_s === null ? '—' : hms(rowTime(p))"></span>
+            <button class="pin on" @click.stop="togglePin(p.entry_id)" title="lösen">✕</button>
+          </span>
+        </template>
+        <span class="duel-gap mono" x-show="pinnedGap !== null"
+              x-text="pinnedGap === null ? '' : `Abstand ${gap(pinnedGap)}`"></span>
+        <span class="faint" style="font-size:.72rem" x-show="pinnedRows.length < 2">
+          Zweiten Fahrer anheften, um den Abstand zu sehen.
+        </span>
+      </div>
+
       <table class="board">
         <thead>
           <tr>
-            <th>Rg</th><th>Nr</th><th>Fahrer</th><th>Team</th>
-            <th class="right">Zeit</th><th class="right">Rückstand</th><th class="right">km</th>
+            <th class="clickable" @click="sortBy('zeit')"
+                title="nach der Zeitnahme ordnen">Rg<span x-text="sortMark('zeit')"></span></th>
+            <th class="clickable" @click="sortBy('nr')">Nr<span x-text="sortMark('nr')"></span></th>
+            <th class="clickable" @click="sortBy('name')">Fahrer<span x-text="sortMark('name')"></span></th>
+            <th class="clickable" @click="sortBy('team')">Team<span x-text="sortMark('team')"></span></th>
+            <th class="right clickable" @click="sortBy('zeit')">Zeit<span x-text="sortMark('zeit')"></span></th>
+            <th class="right clickable" @click="sortBy('rueckstand')">Rückstand<span x-text="sortMark('rueckstand')"></span></th>
             <!-- Meter statt Kilometer: Auf den letzten 800 m vor einer
                  Zeitmessung ist "0,8" nichtssagend und "800 m" die Zahl,
                  auf die man wartet. -->
-            <th class="right" title="Meter bis zur nächsten Zeitmessung">bis CP</th><th></th>
+            <template x-for="c in visibleColumns" :key="c.key">
+              <th class="right clickable" :title="c.hint" @click="sortBy(c.key)">
+                <span x-text="c.label"></span><span x-text="sortMark(c.key)"></span>
+              </th>
+            </template>
+            <th></th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -270,15 +351,16 @@
               <td class="dim" x-text="board.leader.team"></td>
               <td class="time" x-text="hms(board.leader.t_s)"></td>
               <td class="gap faint">Führender</td>
-              <td class="right mono faint" x-text="board.leader.dist_km.toFixed(1)"></td>
-              <td class="right mono faint" x-text="toNext(board.leader)"></td>
-              <td></td>
+              <template x-for="c in visibleColumns" :key="c.key">
+                <td class="right mono faint" x-text="cell(c.key, board.leader)"></td>
+              </template>
+              <td></td><td></td>
             </tr>
           </template>
 
           <template x-for="row in rows" :key="row.entry_id">
             <tr class="clickable"
-                :class="{focus: focus && row.entry_id === focus.entry_id, provisional: row.provisional, dnf: row.state === 3}"
+                :class="{focus: focus && row.entry_id === focus.entry_id, provisional: row.provisional, dnf: row.state === 3, pinned: isPinned(row.entry_id)}"
                 @click="setFocus(row.entry_id)">
               <td class="rank" x-text="row.rank || '–'"></td>
               <td class="bib" x-text="row.bib"></td>
@@ -289,8 +371,11 @@
               <td class="time" x-text="row.t_s === null ? '—' : hms(rowTime(row))"></td>
               <td class="gap" :class="row.gap_s > 0 ? 'pos' : (row.gap_s < 0 ? 'neg' : '')"
                   x-text="row.gap_s === null || row.gap_s === 0 ? '' : gap(rowGap(row))"></td>
-              <td class="right mono faint" x-text="row.dist_km.toFixed(1)"></td>
-              <td class="right mono" :title="row.next_split || ''" x-text="toNext(row)"></td>
+              <template x-for="c in visibleColumns" :key="c.key">
+                <td class="right mono" :class="cellClass(c.key, row)"
+                    :title="c.key === 'biscp' ? (row.next_split || '') : c.hint"
+                    x-text="cell(c.key, row)"></td>
+              </template>
               <td>
                 <span class="chip tt" x-show="row.bike === 1">TT</span>
                 <span class="chip stop" x-show="row.state === 1">Stopp</span>
@@ -303,6 +388,11 @@
                 <template x-for="(label, ci) in (row.conditions || [])" :key="ci">
                   <span class="chip cond" x-text="label"></span>
                 </template>
+              </td>
+              <td>
+                <button class="pin" :class="{on: isPinned(row.entry_id)}"
+                        @click.stop="togglePin(row.entry_id)"
+                        title="Fahrer anheften – zwei angeheftete zeigen ihren Abstand">📌</button>
               </td>
             </tr>
           </template>

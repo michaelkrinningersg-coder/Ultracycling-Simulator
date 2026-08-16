@@ -554,3 +554,138 @@ def test_every_board_row_carries_the_distance_to_the_next_checkpoint(view):
         assert "to_next_m" in row and "next_split" in row
         if row["to_next_m"] is not None:
             assert row["to_next_m"] >= 0
+
+
+# ----------------------------------------------------------------------
+# Wählbare Spalten, Sortierung, Nadeln
+# ----------------------------------------------------------------------
+def test_every_row_carries_the_values_of_the_optional_columns(view):
+    """Die wählbaren Spalten kommen mit jeder Zeile mit.
+
+    Sonst bräuchte jedes Umschalten eine zweite Abfragestrecke — für
+    acht Zahlen je Zeile, die ohnehin schon im Speicher liegen.
+    """
+    board = view.board_rows(t_wall=3600.0, split_idx=1, focus=0)
+    for row in board["rows"]:
+        for key in (
+            "v_kmh", "power_w", "form_pct", "wprime_pct", "glyco_pct",
+            "sleep_pct", "hydration_pct", "giveup_pct", "trend",
+        ):
+            assert key in row, key
+
+
+def test_the_give_up_pressure_is_a_share_of_the_riders_own_limit(view):
+    """0 heißt zufrieden, 100 heißt: Er steigt in dieser Sekunde ab."""
+    board = view.board_rows(t_wall=3600.0, split_idx=1, focus=0)
+    values = [r["giveup_pct"] for r in board["rows"]]
+    assert values and all(v is not None for v in values)
+    assert all(0 <= v <= 255 for v in values)
+
+
+def test_a_race_without_the_channel_shows_no_pressure(stored):
+    """Ein altes Rennen verliert die Spalte, nicht die Lesbarkeit."""
+    import dataclasses
+
+    _, result, route = stored
+    old = dataclasses.replace(
+        result, telemetry=dataclasses.replace(result.telemetry, giveup_pct=None)
+    )
+    board = RaceView(old, route).board_rows(t_wall=3600.0, split_idx=1, focus=0)
+    assert all(row["giveup_pct"] is None for row in board["rows"])
+
+
+def test_sorting_reorders_the_rows_without_touching_the_ranks(view):
+    """Rang 1 bleibt der Schnellste, auch wenn nach Tempo sortiert ist."""
+    plain = view.board_rows(t_wall=3600.0, split_idx=1, focus=0)
+    by_bib = view.board_rows(t_wall=3600.0, split_idx=1, focus=0, sort="nr")
+
+    bibs = [r["bib"] for r in by_bib["rows"]]
+    assert bibs == sorted(bibs)
+    ranks = {r["entry_id"]: r["rank"] for r in plain["rows"]}
+    for row in by_bib["rows"]:
+        if row["entry_id"] in ranks:
+            assert row["rank"] == ranks[row["entry_id"]]
+
+
+def test_sorting_descending_turns_the_list_around(view):
+    up = view.board_rows(t_wall=3600.0, split_idx=1, focus=0, sort="km")
+    down = view.board_rows(t_wall=3600.0, split_idx=1, focus=0, sort="km", sort_desc=True)
+    assert [r["dist_km"] for r in up["rows"]] == sorted(r["dist_km"] for r in up["rows"])
+    assert [r["dist_km"] for r in down["rows"]] == sorted(
+        (r["dist_km"] for r in down["rows"]), reverse=True
+    )
+
+
+def test_rows_without_a_value_stay_at_the_end_in_both_directions():
+    """Ein fehlender Wert ist keine 0 und gehört nie an die Spitze."""
+    from ultrasim.web.playback import sort_rows
+
+    rows = [{"dist_km": 3.0}, {"dist_km": None}, {"dist_km": 1.0}]
+    for desc in (False, True):
+        out = sort_rows(list(rows), "km", desc)
+        assert out[-1]["dist_km"] is None
+
+
+def test_an_unknown_sort_key_leaves_the_order_alone():
+    from ultrasim.web.playback import sort_rows
+
+    rows = [{"dist_km": 3.0}, {"dist_km": 1.0}]
+    assert sort_rows(list(rows), "gibtsnicht", False) == rows
+
+
+def test_the_trend_only_speaks_where_both_splits_are_measured(view):
+    """Kein Pfeil aus halber Datenlage."""
+    early = view.split_trend(t_wall=60.0, split_idx=1)
+    assert not early.any(), "vor der ersten Zeitnahme gibt es keinen Trend"
+    assert not view.split_trend(t_wall=99999.0, split_idx=0).any(), "der erste Split hat keinen davor"
+
+
+def test_the_trend_counts_places_gained(view):
+    """Wer an der ersten Marke Zweiter war und dann Erster, steht auf +1."""
+    late = 12 * 3600.0
+    now = view.measured_ranks(late, 2)
+    before = view.measured_ranks(late, 1)
+    trend = view.split_trend(late, 2)
+    for i in range(view.n):
+        if now[i] and before[i]:
+            assert trend[i] == before[i] - now[i]
+        else:
+            assert trend[i] == 0
+
+
+def test_pinned_riders_come_along_no_matter_where_they_stand(view):
+    board = view.board_rows(t_wall=3600.0, split_idx=1, focus=0, pinned=[0, 3])
+    assert [r["entry_id"] for r in board["pinned"]] == [0, 3]
+
+
+def test_the_pin_holds_two_riders(client):
+    """Der dritte verdrängt den ältesten — ein Duell hat zwei Seiten."""
+    from ultrasim.web.playback import MAX_PINNED, PlaybackSession
+
+    session = PlaybackSession(race_id="x")
+    for entry_id in (1, 2, 3):
+        session.toggle_pin(entry_id)
+    assert session.pinned == [2, 3]
+    assert len(session.pinned) == MAX_PINNED
+    session.toggle_pin(3)
+    assert session.pinned == [2]
+
+
+def test_the_control_endpoint_sorts_and_pins(client):
+    token = client.post("/api/race/testrennen/session").json()["token"]
+
+    def control(action, value=None):
+        return client.post(f"/api/playback/{token}/control", json={"action": action, "value": value})
+
+    assert control("sort", "tempo").json()["sort"] == "tempo"
+    # Dieselbe Spalte noch einmal dreht die Richtung.
+    assert control("sort", "tempo").json()["sort_desc"] is True
+    assert control("sort", "tempo").json()["sort_desc"] is False
+    assert control("sort", "gibtsnicht").status_code == 400
+
+    assert control("pin", 2).json()["pinned"] == [2]
+    assert control("pin", 2).json()["pinned"] == []
+
+    control("pin", 1)
+    frame = client.get(f"/api/playback/{token}/frame").json()
+    assert [r["entry_id"] for r in frame["board"]["pinned"]] == [1]

@@ -26,6 +26,15 @@ function gradeColor(g) {
   return '#ff3b30';
 }
 
+//: Ab hier kostet Höhe Leistung (``physics.ALTITUDE_THRESHOLD_M``).
+//: Der Wert steht bewusst doppelt: Die Zeichnung braucht ihn, und ihn
+//: durch drei Schichten Renndaten zu schleusen wäre teurer als eine
+//: Zahl, die sich seit dem Modellentwurf nicht bewegt hat.
+const ALTITUDE_THRESHOLD_M = 1500;
+
+//: Kandidaten für den Abstand der Höhenlinien, in Metern.
+const ELE_STEPS = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
+
 export class ProfileView {
   /**
    * @param {HTMLCanvasElement} canvas
@@ -41,6 +50,10 @@ export class ProfileView {
     // sind sie anfassbar und müssen bei jedem Mausschritt neu liegen,
     // hier stecken sie im vorgerenderten Untergrund.
     this.showMarkers = opts.showMarkers !== false;
+    // Höhenachse: nur dort sinnvoll, wo der Ausschnitt einen kleinen
+    // Höhenbereich aufspannt. Im Übersichtsband über 2500 km stünden
+    // fünf Beschriftungen für eine Kurve, die ohnehin alles zeigt.
+    this.eleAxis = opts.eleAxis === true;
     this.route = null;
     this.positions = [];
     this.focus = -1;
@@ -48,6 +61,10 @@ export class ProfileView {
     this.conditions = [];
     this.viewStart = 0;
     this.viewEnd = 0;
+    this.padX = 6;
+    this.padLeft = 6;
+    this.padTop = 6;
+    this.padBottom = 12;
     this.dpr = Math.min(window.devicePixelRatio || 1, 2);
     this._base = null;      // vorgerendertes Profil
     this._baseKey = '';
@@ -114,7 +131,7 @@ export class ProfileView {
   x(dist) {
     const { w } = this._size;
     const span = Math.max(this.viewEnd - this.viewStart, 1);
-    return ((dist - this.viewStart) / span) * (w - 2 * this.padX) + this.padX;
+    return ((dist - this.viewStart) / span) * (w - this.padLeft - this.padX) + this.padLeft;
   }
 
   y(ele) {
@@ -126,7 +143,7 @@ export class ProfileView {
   distAt(px) {
     const { w } = this._size;
     const span = this.viewEnd - this.viewStart;
-    return this.viewStart + ((px - this.padX) / (w - 2 * this.padX)) * span;
+    return this.viewStart + ((px - this.padLeft) / (w - this.padLeft - this.padX)) * span;
   }
 
   /** Profil, Anstiege, Splits und Servicepunkte einmal vorrendern. */
@@ -154,6 +171,8 @@ export class ProfileView {
     c.fillStyle = '#0d121c';
     c.fillRect(0, 0, w, h);
 
+    if (this.eleAxis) this._drawEleAxis(c, w, h);
+
     // Anstiege schraffiert hinterlegen
     for (const climb of this.route.climbs) {
       if (climb.dist_end_m < this.viewStart || climb.dist_start_m > this.viewEnd) continue;
@@ -161,12 +180,29 @@ export class ProfileView {
       const x1 = this.x(climb.dist_end_m);
       c.fillStyle = 'rgba(217,83,79,.10)';
       c.fillRect(x0, this.padTop, Math.max(x1 - x0, 1), h - this.padTop - this.padBottom);
-      if (this.showLabels && x1 - x0 > 26) {
-        c.fillStyle = '#d9534f';
-        c.font = '600 10px system-ui, sans-serif';
-        c.textAlign = 'center';
-        c.fillText(climb.category, (x0 + x1) / 2, this.padTop + 10);
-      }
+      if (!this.showLabels || x1 - x0 <= 26) continue;
+      // Die Kategorie allein sagt "hier ist ein Anstieg". Länge und
+      // Höhenmeter sagen, was er kostet — und genau das ist die Zahl,
+      // über die im Fernsehen geredet wird. Nur so viel, wie in den
+      // Balken passt: Ein abgeschnittener Text ist schlechter als eine
+      // kurze Beschriftung.
+      const width = x1 - x0;
+      const long = `${climb.category} · ${(climb.length_m / 1000).toFixed(1)} km · ${Math.round(climb.ascent_m)} hm`;
+      const mid = `${climb.category} · ${(climb.length_m / 1000).toFixed(1)} km`;
+      c.font = '600 10px system-ui, sans-serif';
+      const label = c.measureText(long).width + 8 < width ? long
+        : c.measureText(mid).width + 8 < width ? mid : climb.category;
+      c.fillStyle = '#e08a86';
+      c.textAlign = 'center';
+      c.fillText(label, (x0 + x1) / 2, this.padTop + 10);
+      // Gipfelkante: Ohne sie liest man den Anstieg als Fläche, nicht
+      // als Ziel. Der Punkt, auf den es ankommt, ist die rechte Kante.
+      c.beginPath();
+      c.moveTo(x1, this.padTop);
+      c.lineTo(x1, h - this.padBottom);
+      c.strokeStyle = 'rgba(224,138,134,.45)';
+      c.lineWidth = 1;
+      c.stroke();
     }
 
     // Profilfläche, segmentweise nach Steigung eingefärbt
@@ -237,6 +273,46 @@ export class ProfileView {
     this._baseKey = key;
   }
 
+  /** Höhenlinien mit Meterangabe – und die Grenze, ab der Höhe kostet.
+   *
+   * Ohne Achse ist das Profil eine Form ohne Maßstab: Dieselbe Zacke
+   * bedeutet im Ausschnitt einmal dreißig und einmal dreihundert
+   * Höhenmeter. Die 1500er-Linie ist keine Verzierung, sondern eine
+   * Modellgrenze — darüber verliert der Fahrer messbar Leistung, und
+   * auf den Dolomiten liegt ein Fünftel der Strecke darüber.
+   */
+  _drawEleAxis(c, w, h) {
+    const span = Math.max(this.eleMax - this.eleMin, 20);
+    const step = ELE_STEPS.find((s) => span / s <= 6) || ELE_STEPS[ELE_STEPS.length - 1];
+    c.font = '9px ui-monospace, monospace';
+    c.textAlign = 'right';
+    for (let ele = Math.ceil(this.eleMin / step) * step; ele <= this.eleMax; ele += step) {
+      const yy = this.y(ele);
+      c.beginPath();
+      c.moveTo(this.padLeft, yy);
+      c.lineTo(w - this.padX, yy);
+      c.strokeStyle = 'rgba(120,140,180,.16)';
+      c.lineWidth = 1;
+      c.stroke();
+      c.fillStyle = '#5c6880';
+      c.fillText(String(Math.round(ele)), this.padLeft - 4, yy + 3);
+    }
+    if (ALTITUDE_THRESHOLD_M > this.eleMin && ALTITUDE_THRESHOLD_M < this.eleMax) {
+      const yy = this.y(ALTITUDE_THRESHOLD_M);
+      c.beginPath();
+      c.moveTo(this.padLeft, yy);
+      c.lineTo(w - this.padX, yy);
+      c.strokeStyle = 'rgba(167,139,250,.55)';
+      c.lineWidth = 1;
+      c.setLineDash([4, 3]);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = '#a78bfa';
+      c.textAlign = 'left';
+      c.fillText('1500 m', this.padLeft + 4, yy - 3);
+    }
+  }
+
   _indexBefore(arr, value) {
     let i = 0;
     while (i < arr.length - 1 && arr[i + 1] < value) i++;
@@ -253,6 +329,7 @@ export class ProfileView {
     if (!this.route) return;
     this._size = this._layout();
     this.padX = 6;
+    this.padLeft = this.eleAxis ? 34 : 6;
     this.padTop = 6;
     this.padBottom = 12;
     this._updateWindow();
@@ -310,6 +387,11 @@ export class ProfileView {
       ctx.stroke();
     }
 
+    // Steht der Fokusfahrer im Anstieg, zählt nur eine Zahl: wie weit
+    // noch bis oben. Sie gehört nicht in den vorgerenderten Untergrund,
+    // weil sie sich mit jedem Bild ändert.
+    if (this.showLabels) this._drawClimbCountdown(ctx);
+
     // Im Übersichtsband zeigt ein Rahmen, wo der Detailausschnitt liegt.
     if (this.detailRange && !this.windowM) {
       const [a, b] = this.detailRange;
@@ -317,6 +399,29 @@ export class ProfileView {
       ctx.lineWidth = 1;
       ctx.strokeRect(this.x(a), this.padTop, Math.max(this.x(b) - this.x(a), 2), this._size.h - this.padTop - this.padBottom);
     }
+  }
+
+  /** „noch 4,2 km bis oben" am Gipfel des Anstiegs, in dem er gerade ist. */
+  _drawClimbCountdown(ctx) {
+    const pos = this.positions.find((p) => p[0] === this.focus);
+    if (!pos) return;
+    const dist = pos[1];
+    const climb = this.route.climbs.find(
+      (cl) => dist >= cl.dist_start_m && dist < cl.dist_end_m
+    );
+    if (!climb) return;
+    const remaining = climb.dist_end_m - dist;
+    const text = remaining < 1000
+      ? `noch ${Math.round(remaining)} m`
+      : `noch ${(remaining / 1000).toFixed(1)} km`;
+    const xx = Math.min(this.x(climb.dist_end_m), this._size.w - this.padX);
+    ctx.font = '600 10px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    const width = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(13,18,28,.8)';
+    ctx.fillRect(xx - width - 6, this.padTop + 16, width + 5, 13);
+    ctx.fillStyle = '#ffc247';
+    ctx.fillText(text, xx - 3, this.padTop + 26);
   }
 
   _eleAt(p, dist) {

@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from ...core.events import format_event
 from ...core.physics import BIKE_NAMES
-from ..playback import SPEEDS, PlaybackSession, RaceView
+from ..playback import SORT_FIELDS, SPEEDS, PlaybackSession, RaceView
 
 router = APIRouter(prefix="/api")
 
@@ -215,6 +215,16 @@ async def control(request: Request, token: str) -> JSONResponse:
         session.split_follow = bool(value)
     elif action == "mode":
         session.mode = "virtual" if value == "virtual" else "split"
+    elif action == "sort":
+        # Zweimal dieselbe Spalte dreht die Richtung um — die einzige
+        # Geste, die eine Tabellenüberschrift überall sonst auch hat.
+        key = str(value or "zeit")
+        if key != "zeit" and key not in SORT_FIELDS:
+            raise HTTPException(400, f"Unbekannte Sortierspalte: {key}")
+        session.sort_desc = key == session.sort and not session.sort_desc
+        session.sort = key
+    elif action == "pin":
+        session.toggle_pin(int(np.clip(int(value), 0, view.n - 1)))
     elif action == "next_split":
         target = view.next_split_time(session.now(), session.focus_entry)
         if target is not None:
@@ -263,10 +273,11 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
     if session.split_follow and session.mode != "virtual":
         session.split_idx = view.last_split_index(t, focus)
 
+    opts = {"sort": session.sort, "sort_desc": session.sort_desc, "pinned": session.pinned}
     board = (
-        view.virtual_rows(t, focus)
+        view.virtual_rows(t, focus, **opts)
         if session.mode == "virtual"
-        else view.board_rows(t, session.split_idx, focus)
+        else view.board_rows(t, session.split_idx, focus, **opts)
     )
 
     entry = result.entries[focus]
@@ -300,6 +311,9 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
         "speed": session.speed,
         "mode": session.mode,
         "split_follow": session.split_follow,
+        "sort": session.sort,
+        "sort_desc": session.sort_desc,
+        "pinned": list(session.pinned),
         "horizon_s": round(session.horizon_s, 1),
         "positions": positions,
         "board": board,
@@ -325,6 +339,9 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
             "glyco_pct": int(snap["glyco"][focus]),
             "sleep_pct": int(snap["sleep"][focus]),
             "hydration_pct": int(snap["hydration"][focus]),
+            "giveup_pct": (
+                None if snap["giveup"] is None else int(snap["giveup"][focus])
+            ),
             "bike": BIKE_NAMES[int(snap["bike"][focus])],
             "state": int(snap["state"][focus]),
             "conditions": view.conditions_at(focus, t),

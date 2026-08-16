@@ -194,6 +194,43 @@ td { padding: .18rem .35rem; border-bottom: 1px solid #1a2131; }
 .board .swatch { display: inline-block; width: .45rem; height: .95rem; border-radius: 1px; margin-right: .45rem; vertical-align: -2px; }
 .board .clickable { cursor: pointer; }
 .board .clickable:hover { background: #1b2436; }
+.board tr.pinned { box-shadow: inset -3px 0 0 var(--accent-2); }
+/* Zahlenspalten brechen nicht um: "85 %" über zwei Zeilen kostet die
+   halbe Tabellenhöhe und liest sich als zwei Werte. */
+.board td.mono, .board th { white-space: nowrap; }
+/* Sortierbare Überschriften: der Pfeil sitzt an der aktiven Spalte,
+   der Rest gibt sich erst beim Überfahren zu erkennen. */
+.board th.clickable { cursor: pointer; user-select: none; }
+.board th.clickable:hover { color: var(--fg); }
+
+/* Nadel zum Anheften. Sie ist blass, bis sie steckt — sonst zieht eine
+   Spalte aus einundvierzig Nadeln mehr Aufmerksamkeit als die Zeiten. */
+.pin { background: none; border: 0; padding: 0 .2rem; cursor: pointer;
+       font-size: .72rem; opacity: .18; filter: grayscale(1); }
+.pin:hover { opacity: .8; filter: none; }
+.pin.on { opacity: 1; filter: none; }
+
+/* Spaltenwahl und Duellleiste */
+.colpicker { display: flex; flex-wrap: wrap; gap: .25rem; margin: .35rem 0 .1rem;
+             padding-bottom: .35rem; border-bottom: 1px solid var(--line); }
+.duel { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+        margin: .35rem 0; padding: .3rem .45rem; border-radius: var(--radius);
+        background: var(--bg-panel-2); border: 1px solid var(--line); }
+.duel-side { display: inline-flex; align-items: center; gap: .35rem; font-size: .8rem;
+             cursor: pointer; }
+.duel-side .swatch { display: inline-block; width: .45rem; height: .95rem;
+                     border-radius: 1px; vertical-align: -2px; }
+.duel-gap { font-size: .82rem; color: var(--accent); margin-left: auto; }
+
+/* Gruppenköpfe der Startliste */
+.groupbar { display: flex; align-items: center; gap: .25rem; margin-top: .35rem;
+            font-size: .68rem; }
+.grouphead { display: flex; align-items: center; gap: .4rem; cursor: pointer;
+             padding: .2rem .1rem; font-size: .72rem; color: var(--fg-dim);
+             border-bottom: 1px solid var(--line); position: sticky; top: 0;
+             background: var(--bg-panel); }
+.grouphead:hover { color: var(--fg); }
+.grouphead .faint { margin-left: auto; }
 
 .board-head {
   display: flex; justify-content: space-between; align-items: center;
@@ -412,7 +449,8 @@ ul.plain li:last-child { border-bottom: 0; }
 .tickerbar-label { font-size: .62rem; text-transform: uppercase; letter-spacing: .12em;
                    color: var(--fg-faint); align-self: center; padding-right: .5rem;
                    border-right: 1px solid var(--line); }
-.tickerbar-items { display: flex; gap: .45rem; overflow-x: auto; scrollbar-width: none; }
+.tickerbar-items { display: flex; gap: .45rem; overflow-x: auto; scrollbar-width: none;
+                   flex: 1 1 auto; min-width: 0; }
 .tickerbar-items::-webkit-scrollbar { display: none; }
 .tick { display: inline-flex; align-items: baseline; gap: .3rem; white-space: nowrap;
         font-size: .74rem; padding: .12rem .45rem; border-radius: 999px;
@@ -423,6 +461,19 @@ ul.plain li:last-child { border-bottom: 0; }
 .tick.dnf, .tick.incident { border-color: var(--bad); color: var(--bad); }
 .tick.sleep { border-color: var(--accent-2); color: var(--accent-2); }
 .tick.finish { border-color: var(--good); color: var(--fg); }
+.tick.clickable { cursor: pointer; }
+.tick.clickable:hover { border-color: var(--accent); color: var(--fg); }
+
+/* Filterchips des Tickers. Sie stehen rechts und schrumpfen nicht:
+   Wer filtert, muss den Schalter finden, ohne den Ticker wegzuscrollen. */
+.tickerbar-filter { display: flex; gap: .25rem; align-items: center; flex-shrink: 0;
+                    margin-left: auto; padding-left: .5rem;
+                    border-left: 1px solid var(--line); }
+.chipbtn { font-size: .66rem; padding: .1rem .4rem; border-radius: 999px; cursor: pointer;
+           background: transparent; border: 1px solid var(--line); color: var(--fg-faint); }
+.chipbtn:hover { color: var(--fg); }
+.chipbtn.on { border-color: var(--accent); color: var(--fg); }
+.chipbtn.ghost { border-style: dashed; }
 
 /* Rennbericht: eine Zeile Fließtext unter der Ergebniszeile, bewusst
    ohne eigene Spalte — er gehört zum Fahrer darüber, nicht in eine

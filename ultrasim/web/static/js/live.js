@@ -18,6 +18,54 @@ import { ProfileView } from './profile.js';
 
 const SPEEDS = [1, 5, 10, 30, 60, 300, 1000];
 
+/* Ereignisgruppen des Tickers.
+ *
+ * Nicht nach Ereignistyp gefiltert, sondern nach Frage: Ein Zuschauer
+ * will „nur die Entscheidungen" sehen oder „nur, wem es schlecht geht" –
+ * nicht CONDITION_START von MECHANICAL trennen. Ein Typ, der hier nicht
+ * vorkommt, läuft immer mit: Ein neuer Ereignistyp soll nicht dadurch
+ * unsichtbar werden, dass jemand vergessen hat, ihn einzutragen.
+ */
+const TICKER_GROUPS = [
+  { key: 'zeit', label: 'Zeiten', types: ['BEST_TIME', 'SPLIT_PASSED'] },
+  { key: 'aus', label: 'Ausfälle', types: ['DNF', 'BONK'] },
+  { key: 'panne', label: 'Zwischenfälle', types: ['INCIDENT', 'MECHANICAL', 'CONDITION_START', 'CONDITION_END'] },
+  { key: 'pause', label: 'Stopps & Schlaf', types: ['SLEEP', 'STOP_START', 'STOP_END'] },
+  { key: 'takt', label: 'Taktik', types: ['DECISION', 'BIKE_CHANGE'] },
+  { key: 'ziel', label: 'Start & Ziel', types: ['START', 'FINISH'] },
+];
+
+const GROUP_OF_TYPE = new Map();
+for (const group of TICKER_GROUPS) for (const t of group.types) GROUP_OF_TYPE.set(t, group.key);
+
+/* Wählbare Spalten des Boards.
+ *
+ * Die feste Hälfte der Tabelle — Rang, Nummer, Fahrer, Team, Zeit,
+ * Rückstand — beantwortet „wer liegt wo". Diese hier beantworten die
+ * jeweils nächste Frage, und welche das ist, hängt vom Zuschauer ab:
+ * In der ersten Nacht ist es der Schlafdruck, am Berg das Tempo, nach
+ * 2000 km der Aufgabedruck. Alle gleichzeitig zu zeigen hieße, eine
+ * Tabelle mit fünfzehn Zahlenspalten zu bauen, in der man keine liest.
+ *
+ * ``sort`` ist der Schlüssel, den der Server kennt (``SORT_FIELDS``).
+ */
+const BOARD_COLUMNS = [
+  { key: 'km', label: 'km', hint: 'gefahrene Kilometer' },
+  { key: 'biscp', label: 'bis CP', hint: 'Meter bis zur nächsten Zeitmessung' },
+  { key: 'trend', label: '±', hint: 'Plätze gewonnen oder verloren seit dem Split davor' },
+  { key: 'tempo', label: 'km/h', hint: 'Momentangeschwindigkeit' },
+  { key: 'leistung', label: 'W', hint: 'Tretleistung' },
+  { key: 'aufgabe', label: 'Aufgabe', hint: 'Aufgabedruck in Prozent der eigenen Grenze' },
+  { key: 'form', label: 'Form', hint: 'Leistungsfähigkeit gegenüber frisch, in Prozent' },
+  { key: 'wprime', label: 'W′', hint: 'anaerober Vorrat in Prozent' },
+  { key: 'glyko', label: 'Glyk', hint: 'Glykogenspeicher in Prozent' },
+  { key: 'schlaf', label: 'Schlaf', hint: 'Schlafdruck in Prozent' },
+  { key: 'wasser', label: 'Wasser', hint: 'Flüssigkeitshaushalt in Prozent' },
+];
+
+//: Was ohne eigene Wahl steht — dieselben zwei Spalten wie bisher.
+const DEFAULT_COLUMNS = ['km', 'biscp'];
+
 function hms(seconds) {
   if (seconds === null || seconds === undefined) return '—';
   const total = Math.round(Math.abs(seconds));
@@ -48,7 +96,16 @@ function raceLive(raceId) {
     frame: null,
     ticker: [],
     speeds: SPEEDS,
+    tickerGroups: TICKER_GROUPS,
+    //: Abgewählte Gruppen. Als Liste statt als Set, damit Alpine die
+    //: Änderung sieht — Reaktivität geht über Set-Methoden verloren.
+    tickerOff: [],
+    focusOnly: false,
+    allColumns: BOARD_COLUMNS,
+    columns: [...DEFAULT_COLUMNS],
+    showColumnPicker: false,
     filter: '',
+    groupBy: 'keine',
     tooltip: null,
     error: null,
     overview: null,
@@ -91,7 +148,26 @@ function raceLive(raceId) {
       const riding = this.focus.started && (this.focus.state === 0 || this.focus.state === 1);
       return this.focus.own_time_s + (riding ? this.liveDelta : 0);
     },
-    get latest() { return this.ticker.slice(0, 10); },
+    get latest() { return this.visibleTicker.slice(0, 10); },
+    get visibleTicker() {
+      return this.ticker.filter((e) => {
+        if (this.focusOnly && !e.focus) return false;
+        const group = GROUP_OF_TYPE.get(e.type);
+        return !group || !this.tickerOff.includes(group);
+      });
+    },
+    //: Wie viele Meldungen die Filter gerade wegnehmen — ohne das wirkt
+    //: ein leerer Ticker wie ein hängengebliebener Server.
+    get tickerHidden() { return this.ticker.length - this.visibleTicker.length; },
+    groupOn(key) { return !this.tickerOff.includes(key); },
+    toggleGroup(key) {
+      this.tickerOff = this.groupOn(key)
+        ? [...this.tickerOff, key]
+        : this.tickerOff.filter((k) => k !== key);
+      this.rememberFilter();
+    },
+    showAllGroups() { this.tickerOff = []; this.focusOnly = false; this.rememberFilter(); },
+    toggleFocusOnly() { this.focusOnly = !this.focusOnly; this.rememberFilter(); },
     //: Der Faktor, der gerade am meisten kostet — die Kurzfassung des
     //: Warum-Panels für die zugeklappte Zeile.
     get worstFactor() {
@@ -100,6 +176,20 @@ function raceLive(raceId) {
     },
     get board() { return this.frame ? this.frame.board : null; },
     get rows() { return this.board ? this.board.rows : []; },
+    get pinnedRows() { return this.board && this.board.pinned ? this.board.pinned : []; },
+    //: Der Abstand zwischen den beiden angehefteten Fahrern — das
+    //: einzige, was ein Duell wirklich ausmacht.
+    get pinnedGap() {
+      const [a, b] = this.pinnedRows;
+      if (!a || !b || a.t_s === null || b.t_s === null) return null;
+      return this.rowTime(b) - this.rowTime(a);
+    },
+    get visibleColumns() {
+      return BOARD_COLUMNS.filter((c) => this.columns.includes(c.key));
+    },
+    //: Die Kopfzeile hat drei feste Spalten links, zwei rechts und
+    //: dazwischen die gewählten — plus Zustandschips und Nadel.
+    get colSpan() { return 6 + this.visibleColumns.length + 1; },
     get filteredStart() {
       const q = this.filter.trim().toLowerCase();
       if (!q) return this.startlist;
@@ -107,6 +197,33 @@ function raceLive(raceId) {
         (r) => r.name.toLowerCase().includes(q) || r.team.toLowerCase().includes(q) || String(r.bib) === q
       );
     },
+    //: Die Startliste gefaltet.
+    //:
+    //: Dreihundert flache Zeilen mit Textsuche sind kein Verzeichnis,
+    //: sondern eine Schriftrolle: Man findet darin nur, wovon man den
+    //: Namen schon weiß. Nach Team oder Nation gruppiert beantwortet
+    //: sie auch „wer fährt eigentlich für Ortlieb–Cube".
+    get startGroups() {
+      const rows = this.filteredStart;
+      if (this.groupBy === 'keine') return [{ key: '', label: '', rows }];
+      const buckets = new Map();
+      for (const r of rows) {
+        const key = this.groupBy === 'team' ? r.team : r.nation;
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(r);
+      }
+      return [...buckets.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], 'de'))
+        .map(([key, group]) => ({ key, label: key || '—', rows: group }));
+    },
+    get collapsedGroups() { return this._collapsed || []; },
+    groupOpen(key) { return !(this._collapsed || []).includes(key); },
+    toggleGroupFold(key) {
+      const now = this._collapsed || [];
+      this._collapsed = now.includes(key) ? now.filter((k) => k !== key) : [...now, key];
+    },
+    setGroupBy(mode) { this.groupBy = mode; this._collapsed = []; this.rememberFilter(); },
+    _collapsed: [],
 
     hms, gap,
 
@@ -131,6 +248,61 @@ function raceLive(raceId) {
       return m < 10000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`;
     },
 
+    //: Inhalt einer wählbaren Spalte.
+    //:
+    //: Ein Strich statt einer Null, wo es keinen Wert gibt: „0 %"
+    //: behauptet einen Messwert, „–" sagt, dass keiner vorliegt.
+    cell(key, row) {
+      switch (key) {
+        case 'km': return row.dist_km.toFixed(1);
+        case 'biscp': return this.toNext(row);
+        case 'trend':
+          return row.trend > 0 ? `▲${row.trend}` : row.trend < 0 ? `▼${-row.trend}` : '–';
+        case 'tempo': return row.v_kmh.toFixed(1);
+        case 'leistung': return row.power_w;
+        case 'aufgabe': return row.giveup_pct === null ? '–' : `${row.giveup_pct} %`;
+        case 'form': return `${row.form_pct} %`;
+        case 'wprime': return `${row.wprime_pct} %`;
+        case 'glyko': return `${row.glyco_pct} %`;
+        case 'schlaf': return `${row.sleep_pct} %`;
+        case 'wasser': return `${row.hydration_pct} %`;
+        default: return '';
+      }
+    },
+
+    //: Wann eine Zelle warnt. Dieselben Schwellen wie im Fokuspanel —
+    //: eine Zahl darf nicht in zwei Anzeigen unterschiedlich alarmieren.
+    cellClass(key, row) {
+      switch (key) {
+        case 'trend': return row.trend > 0 ? 'neg' : row.trend < 0 ? 'pos' : 'faint';
+        case 'aufgabe':
+          if (row.giveup_pct === null) return 'faint';
+          return row.giveup_pct > 70 ? 'bad' : row.giveup_pct > 40 ? 'warn' : '';
+        case 'glyko': return row.glyco_pct < 15 ? 'bad' : row.glyco_pct < 30 ? 'warn' : '';
+        case 'schlaf': return row.sleep_pct > 120 ? 'bad' : row.sleep_pct > 60 ? 'warn' : '';
+        case 'wasser': return row.hydration_pct < 30 ? 'bad' : row.hydration_pct < 60 ? 'warn' : '';
+        default: return '';
+      }
+    },
+
+    toggleColumn(key) {
+      this.columns = this.columns.includes(key)
+        ? this.columns.filter((k) => k !== key)
+        : [...this.columns, key];
+      this.rememberFilter();
+    },
+    resetColumns() { this.columns = [...DEFAULT_COLUMNS]; this.rememberFilter(); },
+
+    sortBy(key) { this.control('sort', key); },
+    sortMark(key) {
+      if (!this.frame || this.frame.sort !== key) return '';
+      return this.frame.sort_desc ? ' ▾' : ' ▴';
+    },
+    isPinned(entryId) {
+      return !!(this.frame && this.frame.pinned && this.frame.pinned.includes(entryId));
+    },
+    togglePin(entryId) { this.control('pin', entryId); },
+
     //: Der Rückstand muss mitzählen wie die Uhr, sonst springt er.
     //:
     //: Er kommt als ``t_s − Bestzeit`` vom Server, und die Bestzeit ist
@@ -145,6 +317,7 @@ function raceLive(raceId) {
     },
 
     async init() {
+      this.restoreFilter();
       try {
         const [routeRes, listRes, sessionRes] = await Promise.all([
           fetch(`/api/race/${this.raceId}/route`),
@@ -161,7 +334,9 @@ function raceLive(raceId) {
       }
 
       this.overview = new ProfileView(this.$refs.overview, { height: 90, showLabels: false });
-      this.detail = new ProfileView(this.$refs.detail, { height: 190, windowM: 40000 });
+      this.detail = new ProfileView(this.$refs.detail, {
+        height: 190, windowM: 40000, eleAxis: true,
+      });
       for (const view of [this.overview, this.detail]) {
         view.setRoute(this.route);
         view.onSeek = (dist) => this.control('distance', dist);
@@ -184,6 +359,38 @@ function raceLive(raceId) {
     //: bei halbstündigem Startabstand bedeutet "von vorn" Stunden vor dem
     //: Moment, den man gerade sehen wollte.
     get memoryKey() { return `ultrasim:playback:${this.raceId}`; },
+    //: Die Anzeigefilter gehören dem Betrachter, nicht dem Rennen —
+    //: deshalb rennübergreifend und in ``localStorage``: Wer den Ticker
+    //: einmal auf „nur Ausfälle" gestellt hat, will das beim nächsten
+    //: Rennen wieder so vorfinden.
+    filterKey: 'ultrasim:ticker',
+
+    restoreFilter() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(this.filterKey) || 'null');
+        if (!saved) return;
+        if (Array.isArray(saved.off)) this.tickerOff = saved.off;
+        if (Array.isArray(saved.columns)) {
+          // Gegen die bekannten Spalten filtern: Ein gespeicherter
+          // Schlüssel, den es nicht mehr gibt, würde sonst eine leere
+          // Spalte in die Tabelle setzen.
+          this.columns = saved.columns.filter((k) => BOARD_COLUMNS.some((c) => c.key === k));
+        }
+        if (typeof saved.groupBy === 'string') this.groupBy = saved.groupBy;
+        this.focusOnly = !!saved.focusOnly;
+      } catch (e) { /* dann eben ungefiltert */ }
+    },
+
+    rememberFilter() {
+      try {
+        localStorage.setItem(this.filterKey, JSON.stringify({
+          off: this.tickerOff,
+          focusOnly: this.focusOnly,
+          columns: this.columns,
+          groupBy: this.groupBy,
+        }));
+      } catch (e) { /* privater Modus */ }
+    },
 
     async restore() {
       let saved = null;
@@ -266,13 +473,32 @@ function raceLive(raceId) {
       this.remember();
     },
 
-    async control(action, value) {
-      const res = await fetch(`/api/playback/${this.token}/control`, {
+    send(action, value) {
+      return fetch(`/api/playback/${this.token}/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, value }),
       });
+    },
+
+    async control(action, value) {
+      const res = await this.send(action, value);
       if (res.ok) await this.refresh();
+    },
+
+    //: Klick auf eine Tickermeldung: hinschauen, wo sie passiert ist.
+    //:
+    //: Erst der Fahrer, dann die Uhr — in der anderen Reihenfolge zöge
+    //: das Board beim Fokuswechsel wieder auf den zuletzt passierten
+    //: Split des neuen Fahrers. Und angehalten wird dabei: Bei 1000×
+    //: wäre der Moment, zu dem man springt, im nächsten Bild schon eine
+    //: Viertelstunde her.
+    async jumpTo(event) {
+      const rider = this.startlist.find((r) => r.entry_id === event.entry_id);
+      if (!rider) return;
+      await this.send('focus', event.entry_id);
+      await this.send('pause');
+      await this.control('seek', rider.start_offset_s + event.t_s);
     },
 
     setFocus(entryId) { this.control('focus', entryId); },

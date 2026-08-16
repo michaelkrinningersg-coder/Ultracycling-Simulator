@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -38,6 +39,34 @@ MAJOR_ONLY_ABOVE = 60
 #: Fenstergröße des Telemetrie-Boards (Abschnitt 9.1).
 BOARD_WINDOW = 41
 
+#: Höchstens so viele Fahrer lassen sich gleichzeitig anheften. Zwei,
+#: weil ein Duell aus zwei Fahrern besteht — bei dreien ist es ein
+#: Klassement, und dafür gibt es das Board.
+MAX_PINNED = 2
+
+#: Sortierschlüssel des Boards: Anzeigename → Feld der Zeile.
+#:
+#: ``"zeit"`` fehlt bewusst — das ist die gewachsene Reihenfolge aus
+#: gemessenen und laufenden Uhren, und die entsteht nicht durch
+#: Sortieren nach einem Feld, sondern durch die Zeitnahme selbst.
+SORT_FIELDS: dict[str, str] = {
+    "nr": "bib",
+    "name": "name",
+    "team": "team",
+    "km": "dist_km",
+    "biscp": "to_next_m",
+    "tempo": "v_kmh",
+    "leistung": "power_w",
+    "form": "form_pct",
+    "wprime": "wprime_pct",
+    "glyko": "glyco_pct",
+    "schlaf": "sleep_pct",
+    "wasser": "hydration_pct",
+    "aufgabe": "giveup_pct",
+    "trend": "trend",
+    "rueckstand": "gap_s",
+}
+
 
 @dataclass
 class PlaybackSession:
@@ -54,8 +83,23 @@ class PlaybackSession:
     #: sonst würde die Auswahl beim nächsten Frame wieder wegspringen.
     split_follow: bool = True
     mode: str = "split"  # split | virtual
+    #: Nach welcher Spalte das Board sortiert ist. ``"zeit"`` ist die
+    #: Zeitnahme selbst — jede andere Wahl ordnet dieselben Zeilen um,
+    #: ohne die Platzziffern anzutasten.
+    sort: str = "zeit"
+    sort_desc: bool = False
+    #: Angeheftete Fahrer: stehen über dem Board, egal wo sie liegen.
+    pinned: list[int] = field(default_factory=list)
     anchor: float = field(default_factory=time.monotonic)
     horizon_s: float = 0.0  # Ende des Rennens; darüber hinaus läuft nichts
+
+    def toggle_pin(self, entry_id: int) -> None:
+        """Anheften oder lösen; der älteste Pin weicht dem dritten Fahrer."""
+        if entry_id in self.pinned:
+            self.pinned.remove(entry_id)
+            return
+        self.pinned.append(entry_id)
+        del self.pinned[:-MAX_PINNED]
 
     # ------------------------------------------------------------------
     def now(self) -> float:
@@ -125,6 +169,9 @@ class PlaybackSession:
             "split_idx": self.split_idx,
             "split_follow": self.split_follow,
             "mode": self.mode,
+            "sort": self.sort,
+            "sort_desc": self.sort_desc,
+            "pinned": list(self.pinned),
             "horizon_s": round(self.horizon_s, 1),
         }
 
@@ -407,10 +454,16 @@ class RaceView:
         glyco = self.telemetry.glyco_pct[rows, idx]
         sleep = self.telemetry.sleep_pct[rows, idx]
         hydration = self.telemetry.hydration_pct[rows, idx]
+        giveup = (
+            self.telemetry.giveup_pct[rows, idx]
+            if self.telemetry.giveup_pct is not None
+            else None
+        )
         dist[~started] = 0.0
         v[~started] = 0.0
         power[~started] = 0.0
         return {
+            "giveup": giveup,
             "started": started,
             "elapsed": elapsed,
             "dist": dist,
@@ -503,7 +556,15 @@ class RaceView:
         frac = (target_m - d0) / (d1 - d0) if d1 > d0 else 0.0
         return (i - 1 + frac) * self.telemetry.sample_dt_s
 
-    def board_rows(self, t_wall: float, split_idx: int, focus: int) -> dict[str, Any]:
+    def board_rows(
+        self,
+        t_wall: float,
+        split_idx: int,
+        focus: int,
+        sort: str = "zeit",
+        sort_desc: bool = False,
+        pinned: Sequence[int] = (),
+    ) -> dict[str, Any]:
         """Rangliste eines Splits (Abschnitt 9.1).
 
         Fahrer, die den Split schon passiert haben, stehen mit ihrer
@@ -525,23 +586,13 @@ class RaceView:
         snap = self.snapshot(t_wall)
         times = self.result.split_times_s[:, split_idx]
         reached_wall = self.offsets + times
+        trend = self.split_trend(t_wall, split_idx)
 
         rows: list[dict[str, Any]] = []
         for i, entry in enumerate(self.result.entries):
-            rider = self.riders[entry.rider_id]
-            team = self.teams.get(rider.team_id)
             base = {
-                "entry_id": i,
-                "bib": entry.bib,
-                "name": rider.name,
-                "nation": rider.nation,
-                "team": team.name if team else "",
-                "color": team.color if team else "#888888",
-                "bike": int(snap["bike"][i]),
-                "state": int(snap["state"][i]),
-                "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
-                "conditions": self.condition_labels(i, t_wall),
-                **self.to_next_split(float(snap["dist"][i]), int(snap["state"][i])),
+                **self._row_base(i, entry, snap, t_wall),
+                "trend": int(trend[i]),
             }
             if np.isfinite(times[i]) and reached_wall[i] <= t_wall:
                 rows.append(
@@ -595,13 +646,83 @@ class RaceView:
                 "dist_m": split.dist_m,
                 "kind": split.kind,
             },
-            "rows": _window(ordered, focus, BOARD_WINDOW),
+            "rows": _window(sort_rows(ordered, sort, sort_desc), focus, BOARD_WINDOW),
             # Die fixierte Kopfzeile zeigt den tatsächlich Führenden, nicht
             # den bestplatzierten Prognosewert.
             "leader": next((r for r in ordered if not r["provisional"]), None),
+            "pinned": _pinned_rows(ordered, pinned),
             "n_reached": sum(1 for r in ordered if not r["provisional"]),
             "n_total": len(ordered),
         }
+
+    def _row_base(
+        self, i: int, entry: Any, snap: dict[str, np.ndarray], t_wall: float
+    ) -> dict[str, Any]:
+        """Die Stammdaten einer Board-Zeile — für beide Ranglisten dieselben.
+
+        Die physiologischen Werte stehen hier, obwohl das Board sie
+        standardmäßig nicht zeigt: Sie sind die wählbaren Spalten, und
+        sie je Umschaltung nachzuladen hieße, für acht Zahlen je Zeile
+        eine zweite Abfragestrecke zu bauen.
+        """
+        rider = self.riders[entry.rider_id]
+        team = self.teams.get(rider.team_id)
+        giveup = snap["giveup"]
+        return {
+            "entry_id": i,
+            "bib": entry.bib,
+            "name": rider.name,
+            "nation": rider.nation,
+            "team": team.name if team else "",
+            "color": team.color if team else "#888888",
+            "bike": int(snap["bike"][i]),
+            "state": int(snap["state"][i]),
+            "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
+            "v_kmh": round(float(snap["v"][i]) * 3.6, 1),
+            "power_w": int(snap["power"][i]),
+            "form_pct": int(snap["form"][i]),
+            "wprime_pct": int(snap["wprime"][i]),
+            "glyco_pct": int(snap["glyco"][i]),
+            "sleep_pct": int(snap["sleep"][i]),
+            "hydration_pct": int(snap["hydration"][i]),
+            "giveup_pct": None if giveup is None else int(giveup[i]),
+            "conditions": self.condition_labels(i, t_wall),
+            **self.to_next_split(float(snap["dist"][i]), int(snap["state"][i])),
+        }
+
+    def measured_ranks(self, t_wall: float, split_idx: int) -> np.ndarray:
+        """Platzziffern an einem Split, nur aus **gemessenen** Zeiten.
+
+        0 heißt „hat den Split zur Wanduhrzeit noch nicht erreicht".
+
+        Bewusst nicht aus ``result.split_ranks``: Die dort stehenden
+        Ränge sind am Rennende vergeben und wüssten damit, wer später
+        noch schneller war. Hier zählt nur, was zum Zeitpunkt der
+        Betrachtung schon durch die Zeitnahme gelaufen ist.
+        """
+        ranks = np.zeros(self.n, dtype=np.int32)
+        if not 0 <= split_idx < len(self.route.splits):
+            return ranks
+        times = self.result.split_times_s[:, split_idx]
+        reached = np.isfinite(times) & (self.offsets + times <= t_wall)
+        order = np.flatnonzero(reached)
+        order = order[np.argsort(times[order], kind="stable")]
+        ranks[order] = np.arange(1, order.size + 1)
+        return ranks
+
+    def split_trend(self, t_wall: float, split_idx: int) -> np.ndarray:
+        """Plätze gewonnen (+) oder verloren (−) seit dem Split davor.
+
+        0 steht für „keine Aussage": Wer an einem der beiden Splits noch
+        keine gemessene Zeit hat, hat auch keinen Trend. Ein Pfeil, der
+        aus einer halben Datenlage entsteht, wäre schlimmer als keiner.
+        """
+        if split_idx <= 0:
+            return np.zeros(self.n, dtype=np.int32)
+        now = self.measured_ranks(t_wall, split_idx)
+        before = self.measured_ranks(t_wall, split_idx - 1)
+        both = (now > 0) & (before > 0)
+        return np.where(both, before - now, 0).astype(np.int32)
 
     def to_next_split(self, dist_m: float, state: int) -> dict[str, Any]:
         """Meter bis zur nächsten Zeitmessung und wie sie heißt.
@@ -625,7 +746,14 @@ class RaceView:
             "next_split": self.route.splits[idx].name,
         }
 
-    def virtual_rows(self, t_wall: float, focus: int) -> dict[str, Any]:
+    def virtual_rows(
+        self,
+        t_wall: float,
+        focus: int,
+        sort: str = "zeit",
+        sort_desc: bool = False,
+        pinned: Sequence[int] = (),
+    ) -> dict[str, Any]:
         """Virtuelle Rangliste: alle Fahrer auf dieselbe Distanz projiziert.
 
         Die echte "wer liegt vorn"-Sicht bei versetzten Startzeiten. Als
@@ -635,12 +763,15 @@ class RaceView:
         """
         snap = self.snapshot(t_wall)
         ref_m = float(snap["dist"][focus])
+        # Trend auch hier: gemeint ist der letzte Split, den der
+        # Fokusfahrer hinter sich hat — die virtuelle Marke selbst hat
+        # keine Zeitnahme und kann deshalb keinen Vergleich liefern.
+        last_split = int(np.searchsorted(self.split_dist, ref_m, side="right")) - 1
+        trend = self.split_trend(t_wall, last_split)
         rows: list[dict[str, Any]] = []
         for i, entry in enumerate(self.result.entries):
             if not snap["started"][i]:
                 continue
-            rider = self.riders[entry.rider_id]
-            team = self.teams.get(rider.team_id)
             actual = self.elapsed_at_distance(i, ref_m, t_wall)
             if actual is not None:
                 provisional = False
@@ -653,16 +784,8 @@ class RaceView:
                 provisional = True
             rows.append(
                 {
-                    "entry_id": i,
-                    "bib": entry.bib,
-                    "name": rider.name,
-                    "nation": rider.nation,
-                    "team": team.name if team else "",
-                    "color": team.color if team else "#888888",
-                    "bike": int(snap["bike"][i]),
-                    "state": int(snap["state"][i]),
-                    "dist_km": round(float(snap["dist"][i]) / 1000.0, 2),
-                    "conditions": self.condition_labels(i, t_wall),
+                    **self._row_base(i, entry, snap, t_wall),
+                    "trend": int(trend[i]),
                     "t_s": actual,
                     "provisional": provisional,
                     # Die virtuelle Rangliste projiziert auf eine
@@ -683,11 +806,42 @@ class RaceView:
                 "dist_m": ref_m,
                 "kind": "virtual",
             },
-            "rows": _window(rows, focus, BOARD_WINDOW),
+            "rows": _window(sort_rows(rows, sort, sort_desc), focus, BOARD_WINDOW),
             "leader": rows[0] if rows else None,
+            "pinned": _pinned_rows(rows, pinned),
             "n_reached": len(rows),
             "n_total": len(rows),
         }
+
+
+def _pinned_rows(rows: list[dict[str, Any]], pinned: Sequence[int]) -> list[dict[str, Any]]:
+    """Die angehefteten Zeilen, in der Reihenfolge des Anheftens.
+
+    Sie kommen aus derselben Liste wie das Board — angeheftet zu sein
+    ändert an einer Zeile nichts außer der Frage, wo sie steht.
+    """
+    by_id = {r["entry_id"]: r for r in rows}
+    return [by_id[i] for i in pinned if i in by_id]
+
+
+def sort_rows(rows: list[dict[str, Any]], key: str, desc: bool) -> list[dict[str, Any]]:
+    """Das Board nach einer anderen Größe ordnen.
+
+    Zeilen ohne Wert stehen **immer** am Ende, in beiden Richtungen: Ein
+    Fahrer ohne Glykogenwert gehört nicht an die Spitze der Liste „wem
+    geht es am schlechtesten", nur weil ``None`` kleiner sortiert.
+
+    Die Platzziffern werden dabei nicht neu vergeben. Rang 1 ist der
+    Schnellste, auch wenn die Liste gerade nach Tempo sortiert ist —
+    sonst wäre die Spalte „Rg" nur noch eine Zeilennummer.
+    """
+    field_name = SORT_FIELDS.get(key)
+    if field_name is None:
+        return rows
+    with_value = [r for r in rows if r.get(field_name) is not None]
+    without = [r for r in rows if r.get(field_name) is None]
+    with_value.sort(key=lambda r: r[field_name], reverse=desc)
+    return with_value + without
 
 
 def _window(rows: list[dict[str, Any]], focus: int, size: int) -> list[dict[str, Any]]:

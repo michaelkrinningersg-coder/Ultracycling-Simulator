@@ -204,6 +204,11 @@ class Store:
             bike=result.telemetry.bike,
             state=result.telemetry.state,
             split_times_s=result.split_times_s.astype(np.float32),
+            **(
+                {}
+                if result.telemetry.giveup_pct is None
+                else {"giveup_pct": result.telemetry.giveup_pct}
+            ),
             split_ranks=result.split_ranks,
             # Die Formfaktoren unter eigenem Präfix, damit ein Rennen ohne
             # sie weiterhin lädt.
@@ -248,6 +253,7 @@ class Store:
                 hydration_pct=data["hydration_pct"],
                 bike=data["bike"],
                 state=data["state"],
+                giveup_pct=data["giveup_pct"] if "giveup_pct" in data.files else None,
                 # Rennen von vor der Faktoraufzeichnung haben diese
                 # Schlüssel nicht. ``None`` heißt für die Oberfläche
                 # „nicht aufgezeichnet"; sie sagt das dann auch, statt

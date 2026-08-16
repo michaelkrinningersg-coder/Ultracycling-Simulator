@@ -190,18 +190,23 @@ def test_telemetry_roundtrip(race, tmp_path):
 
 
 def test_telemetry_stays_within_the_memory_budget(race):
-    """Rund 45 MB je Ultra-Rennen mit 250 Fahrern (Abschnitt 12).
+    """Rund 50 MB je Ultra-Rennen mit 250 Fahrern (Abschnitt 12).
 
-    10 Kanäle: dist int32, v und power int16, Form, W′, Glykogen,
-    Schlafdruck, Hydration, Rad und Zustand als uint8 – zusammen 15 Byte.
-    Bei 250 Fahrern und 30-s-Abtastung über 110 h sind das 50 MB, also die
-    Größenordnung, die das Dokument veranschlagt.
+    11 Kanäle: dist int32, v und power int16, Form, W′, Glykogen,
+    Schlafdruck, Hydration, Rad, Zustand und Aufgabedruck als uint8 –
+    zusammen 16 Byte. Bei 250 Fahrern und 30-s-Abtastung über 110 h sind
+    das 53 MB, also die Größenordnung, die das Dokument veranschlagt.
+
+    Die Grenze stand bei 15 Byte, solange der Aufgabedruck nur gerechnet
+    und nie aufgezeichnet wurde. Ihn zu zeigen kostet ein Byte je Fahrer
+    und Abtastung — sieben Prozent mehr Telemetrie für die Größe, um die
+    es beim Ultracycling geht.
     """
     result, _, _ = race
     per_rider_per_sample = result.telemetry.nbytes() / (
         result.telemetry.n_entries * result.telemetry.n_samples
     )
-    assert per_rider_per_sample <= 15.0
+    assert per_rider_per_sample <= 16.0
 
 
 # ----------------------------------------------------------------------

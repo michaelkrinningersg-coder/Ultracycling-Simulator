@@ -5,6 +5,33 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ## Unveröffentlicht
 
+### Geprüft
+
+- **Kalibrierungsbericht neu erhoben** (`docs/KALIBRIERUNG.md`, 45 min).
+  Alle vier Strecken liegen jetzt im DNF-Korridor — die Flachetappe war
+  mit 3,8 % als einzige markiert und steht bei 4,2 %:
+
+  | Strecke | vorher | jetzt | Ziel |
+  |---|---|---|---|
+  | Voralpen-Runde 300 km | 1,7 % | 1,2 % | 1–2 % |
+  | Hochgebirgs-Marathon 506 km | 5,0 % | 4,6 % | 4–7 % |
+  | Flachetappe Nordsee 466 km | 3,8 % ⚠ | 4,2 % | 4–7 % |
+  | Nordroute Langstrecke 1230 km | 9,6 % | 10,0 % | 8–12 % |
+
+  Die Archetyp-Tabelle steht erstmals mit zwanzig Fahrern je Typ im
+  eingecheckten Bericht — und dreht die bisherige Aussage: Nicht der
+  Fettverbrenner führt, sondern der **Kletterer**, und zwar auf allen
+  vier Strecken. `spritzigkeit` ist seit dem Trittfrequenzmodell
+  messbar; ohne Nachweis bleiben drei Attribute
+  (`mentale_widerstandsfaehigkeit`, `navigationssicherheit`,
+  `materialpflege`).
+
+  **Was der Bericht nicht sehen kann:** Seine längste Strecke ist
+  1230 km. Sämtliche Fehler dieser Fassung lagen oberhalb von 1500 km —
+  der abgeschnittene Simulationshorizont, der Notschlaf im
+  Aufgabe-Term, die gekappten Rennkoeffizienten. Keiner davon wäre hier
+  aufgetaucht.
+
 ### Hinzugefügt
 
 - **Die Ultra-Weltserie**: zehn neue Strecken von 396 bis 2469 km und

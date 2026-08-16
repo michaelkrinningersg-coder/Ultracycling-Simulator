@@ -4,20 +4,27 @@ Erzeugt von `python -m ultrasim.cli.calibrate`. Nicht von Hand
 bearbeiten — die Datei ist eingecheckt, damit man Balancing-
 Änderungen im Diff sieht.
 
-Stand: 2026-08-14 · 6 Rennen je Strecke · Feld 40 Fahrer · Archetypen 4 je Typ mit gleichem Potenzial · Sensitivität 2 × 16 Grundfahrer, ±10 Punkte
+Stand: 2026-08-16 · 6 Rennen je Strecke · Feld 40 Fahrer · Archetypen 20 je Typ mit gleichem Potenzial · Sensitivität 2 × 16 Grundfahrer, ±10 Punkte · Wetter 48 Grundfahrer
 
 ## 1 · Strecken, Dauerbänder und Ausfälle
 
-Der Abgleich mit den beiden Ankern, die das Design-Dokument selbst
-setzt: dem Dauerband je Distanzklasse (Abschnitt 2) und dem
-DNF-Korridor (Abschnitt 6.5).
+Der Abgleich mit den beiden Ankern des Design-Dokuments: der
+erwarteten Dauer (Abschnitt 2) und dem DNF-Korridor (6.5).
 
-| Strecke | Klasse | Sieger | Median | Letzter | Feld im Band | DNF+OTL | Ziel | Rangkorrelation |
-|---|---|---|---|---|---|---|---|---|
-| Voralpen-Runde (300 km) | kurz | 9,4 h | 10,0 h | 14,7 h | 100 % | 1,7 % | 1–2 % | 0,48 |
-| Hochgebirgs-Marathon (507 km) | mittel | 17,8 h | 19,5 h | 27,0 h | 97 % | 5,0 % | 4–7 % | 0,54 |
-| Flachetappe Nordsee (466 km) | mittel | 13,2 h | 13,5 h | 20,6 h | 27 % | 3,8 % ⚠ | 4–7 % | 0,42 |
-| Nordroute Langstrecke (1230 km) | ultra | 39,5 h | 42,4 h | 64,8 h | 17 % | 9,6 % | 8–12 % | 0,48 |
+Das Dauerband hing bis vor kurzem an der Distanzklasse. Das ging
+an den Rändern zwangsläufig schief, denn „mittel" reicht von 400
+bis 1200 Äquivalentkilometern und umfasst Rennen von zwölf bis
+fünfundvierzig Stunden — ein einziges Band dafür muss an beiden
+Enden danebenliegen. Jetzt wird es stetig aus Distanz und
+Höhenmetern gerechnet. Die Klassen bleiben, wofür sie da sind:
+Split-Dichte, Schlafplanung und Rennkoeffizient.
+
+| Strecke | Klasse | Sieger | Median | Letzter | Erwartet | Feld im Band | DNF+OTL | Ziel | Rangkorrelation |
+|---|---|---|---|---|---|---|---|---|---|
+| Voralpen-Runde (300 km) | kurz | 9,3 h | 9,9 h | 14,6 h | 8.4–17.2 h | 83 % | 1,2 % | 1–2 % | 0,51 |
+| Hochgebirgs-Marathon (506 km) | mittel | 17,5 h | 19,3 h | 26,8 h | 15.3–31.5 h | 91 % | 4,6 % | 4–7 % | 0,58 |
+| Flachetappe Nordsee (466 km) | mittel | 13,1 h | 13,4 h | 20,6 h | 11.3–23.4 h | 83 % | 4,2 % | 4–7 % | 0,47 |
+| Nordroute Langstrecke (1230 km) | ultra | 39,3 h | 42,1 h | 65,0 h | 31.7–65.2 h | 85 % | 10,0 % | 8–12 % | 0,51 |
 
 Die Rangkorrelation zwischen Potenzial und Ergebnis sagt, wie stark
 sich die Attribute durchsetzen. Bei 1,0 wäre das Rennen eine
@@ -30,20 +37,32 @@ Gleich viele Fahrer je Archetyp, **identisches Potenzial-Budget** —
 es unterscheidet sich nur, wie das Budget verteilt ist, und was der
 Archetyp an Körperbau mitbringt. Damit misst die Tabelle nicht, wer
 die besseren Fahrer bekommen hat, sondern wer zur Strecke passt.
-Angegeben ist die mittlere Platzierung; in Klammern die Siege.
+
+Angegeben ist die mittlere Platzierung ± Standardfehler und in
+Klammern der Anteil der Starts im besten Zehntel des Feldes.
+
+**Zwei Zahlen, die früher hier standen, stehen bewusst nicht mehr
+da.** Die Siegzahl ist die eine: Sechs Rennen ergeben sechs Sieger,
+verteilt auf acht Archetypen — daraus lässt sich nichts ablesen,
+egal wie groß das Feld ist. Der Standardfehler ist die andere, und
+er hat gefehlt: Mit vier Fahrern je Typ lag er bei knapp zwei
+Plätzen, und es wurde abgelesen, was Rauschen war. Zwei Befunde,
+die auf diesem Weg entstanden sind, hat die größere Stichprobe
+hinterher umgedreht. Zwei Archetypen unterscheiden sich erst dann,
+wenn ihre Intervalle sich nicht überlappen.
 
 | Archetyp | Voralpen-Runde | Hochgebirgs-Marathon | Flachetappe Nordsee | Nordroute Langstrecke |
 |---|---|---|---|---|
-| Zeitfahr-Spezialist | 19,1 (0) | 21,1 (0) | 17,8 (0) | 17,9 (0) |
-| Kletterer | 13,6 (0) | 11,7 (0) | 16,0 (1) | 11,2 (0) |
-| Diesel / Ultra-Maschine | 18,1 (0) | 19,7 (0) | 16,4 (1) | 19,4 (1) |
-| Schlafgeiziger | 18,2 (0) | 16,2 (0) | 17,1 (0) | 14,0 (0) |
-| Fettverbrenner | 16,1 (0) | 15,1 (0) | 16,7 (0) | 15,0 (0) |
-| Draufgänger | 13,1 (5) | 13,6 (4) | 14,6 (3) | 12,9 (4) |
-| Allrounder | 18,3 (0) | 18,6 (0) | 16,0 (0) | 16,8 (0) |
-| Rohdiamant | 12,7 (1) | 13,1 (2) | 12,9 (1) | 12,4 (1) |
+| Zeitfahr-Spezialist | 84,9 ±3,8 (5 %) | 86,6 ±3,6 (7 %) | 74,5 ±3,9 (8 %) | 76,1 ±3,7 (9 %) |
+| Kletterer | 53,2 ±3,9 (23 %) | 46,6 ±3,5 (28 %) | 65,5 ±3,8 (16 %) | 56,7 ±3,8 (20 %) |
+| Diesel / Ultra-Maschine | 84,5 ±4,0 (6 %) | 88,3 ±4,1 (5 %) | 82,5 ±4,2 (8 %) | 77,6 ±4,1 (11 %) |
+| Schlafgeiziger | 90,5 ±4,2 (9 %) | 89,2 ±4,2 (8 %) | 92,1 ±4,2 (8 %) | 77,3 ±4,1 (12 %) |
+| Fettverbrenner | 59,5 ±3,5 (13 %) | 63,0 ±3,3 (10 %) | 63,9 ±3,9 (15 %) | 57,0 ±3,6 (13 %) |
+| Draufgänger | 91,4 ±4,3 (8 %) | 87,0 ±4,3 (10 %) | 87,6 ±4,3 (10 %) | 82,4 ±4,1 (11 %) |
+| Allrounder | 81,8 ±4,0 (8 %) | 75,5 ±4,1 (7 %) | 76,4 ±3,9 (7 %) | 68,5 ±3,9 (8 %) |
+| Rohdiamant | 84,9 ±4,1 (9 %) | 82,7 ±4,2 (9 %) | 79,7 ±4,3 (12 %) | 80,6 ±3,8 (6 %) |
 
-Feldgröße je Rennen: 32 Fahrer, 6 Rennen je Strecke.
+Feldgröße je Rennen: 160 Fahrer, 6 Rennen je Strecke, Neutral wäre Platz 80,5.
 
 Die Platzierung allein wäre irreführend, denn das gleiche Budget
 heißt nicht gleicher Körperbau: Ein Archetyp bringt Größe, Gewicht
@@ -51,14 +70,14 @@ und damit W/kg mit. Was jeder tatsächlich auf die Straße bringt:
 
 | Archetyp | W/kg | FTP | Frontfläche |
 |---|---|---|---|
-| Zeitfahr-Spezialist | 4,12 | 268 W | 0,2455 m² |
-| Kletterer | 4,51 | 292 W | 0,2413 m² |
-| Diesel / Ultra-Maschine | 4,20 | 282 W | 0,2487 m² |
-| Schlafgeiziger | 4,27 | 292 W | 0,2561 m² |
-| Fettverbrenner | 4,21 | 280 W | 0,2480 m² |
-| Draufgänger | 4,27 | 284 W | 0,2511 m² |
-| Allrounder | 4,15 | 288 W | 0,2553 m² |
-| Rohdiamant | 4,23 | 291 W | 0,2515 m² |
+| Zeitfahr-Spezialist | 4,26 | 295 W | 0,2560 m² |
+| Kletterer | 4,48 | 291 W | 0,2423 m² |
+| Diesel / Ultra-Maschine | 4,17 | 297 W | 0,2613 m² |
+| Schlafgeiziger | 4,20 | 283 W | 0,2501 m² |
+| Fettverbrenner | 4,27 | 307 W | 0,2624 m² |
+| Draufgänger | 4,27 | 294 W | 0,2562 m² |
+| Allrounder | 4,26 | 285 W | 0,2503 m² |
+| Rohdiamant | 4,21 | 288 W | 0,2534 m² |
 
 ## 3 · Was ein Attribut wert ist
 
@@ -87,31 +106,31 @@ heißt, das Attribut hält Fahrer im Rennen.
 
 | Attribut | Voralpen-Runde | Hochgebirgs-Marathon | Flachetappe Nordsee | Nordroute Langstrecke | wirkt | Ausfälle |
 |---|---|---|---|---|---|---|
-| magenvertraeglichkeit | 347 s | 928 s | 403 s | 975 s | ja | -1 |
-| fettverbrennung | 187 s | 514 s | 142 s | 432 s | ja | +0 |
-| ausdauer | 84 s | 222 s | 65 s | 430 s | ja | +0 |
-| flach | 61 s | 107 s | 121 s | 329 s | ja | +0 |
-| abfahrtstechnik | 118 s° | 238 s° | · | · | ja | +2 |
-| hitzetoleranz | · | · | 39 s° | · | ja | -1 |
-| materialpflege | · | · | · | · | ja | -2 |
-| pacing_disziplin | 71 s | 175 s | 48 s | 146 s | ja | +0 |
-| berg | 44 s | 161 s | · | 83 s | ja | +0 |
-| schlaftoleranz | · | · | · | 116 s | ja | +0 |
-| seitenwindfestigkeit | 21 s | 32 s | 41 s | 105 s | ja | +0 |
-| erfahrung | · | 9 s | · | 98 s° | ja | +0 |
-| risikobereitschaft | · | · | · | · | ja | -1 |
-| sitzkomfort | · | 61 s | · | 84 s | ja | +0 |
-| navigationssicherheit | · | · | · | · | ja | +0 |
-| oberflaechenkompetenz | 76 s | · | · | · | ja | +0 |
-| kohlenhydratverbrennung | 23 s° | 62 s° | · | · | ja | +0 |
-| hoehenanpassung | · | 61 s | · | · | ja | +0 |
-| regeneration | 8 s | 28 s | 6 s | 55 s | ja | +0 |
-| mechanikerfaehigkeit | 20 s° | 30 s | 29 s | 55 s | ja | +0 |
+| magenvertraeglichkeit | 370 s | 961 s | 425 s | 980 s | ja | -2 |
+| fettverbrennung | 205 s | 482 s | 156 s | 508 s | ja | +0 |
+| ausdauer | 98 s | 222 s | 69 s | 391 s | ja | +0 |
+| flach | 65 s | 107 s | 128 s | 334 s | ja | +0 |
+| materialpflege | · | · | · | · | ja | +0 |
+| abfahrtstechnik | 104 s° | 302 s° | · | · | ja | +3 |
+| hitzetoleranz | · | · | 42 s° | · | ja | -1 |
+| navigationssicherheit | · | · | · | · | ja | +2 |
+| berg | 72 s | 182 s | 3 s | 114 s | ja | +0 |
+| pacing_disziplin | 76 s | 169 s | 48 s | 146 s | ja | +0 |
+| schlaftoleranz | · | · | · | 158 s° | ja | +0 |
+| risikobereitschaft | · | · | · | · | ja | -3 |
+| seitenwindfestigkeit | 22 s | 31 s | 44 s | 113 s | ja | +0 |
+| sitzkomfort | · | 48 s | · | 88 s | ja | +0 |
+| oberflaechenkompetenz | 81 s | · | · | · | ja | +0 |
+| erfahrung | · | 10 s | · | 67 s° | ja | +0 |
+| hoehenanpassung | · | 60 s | · | · | ja | +0 |
+| regeneration | 8 s | 28 s | 6 s | 56 s | ja | +0 |
+| kohlenhydratverbrennung | 23 s° | 56 s° | · | · | ja | +0 |
 | konstanz | · | · | · | · | ja | +0 |
-| kaeltetoleranz | · | 5 s | · | · | ja | +0 |
+| mechanikerfaehigkeit | 25 s° | 27 s | 27 s | 35 s | ja | +0 |
+| spritzigkeit | · | 29 s | · | · | ja | +0 |
+| kaeltetoleranz | · | 3 s | · | · | ja | +0 |
 | mentale_widerstandsfaehigkeit | · | · | · | · | ja | +0 |
 | naesseresistenz | · | · | · | · | ja | +0 |
-| spritzigkeit | · | · | · | · | ja | +0 |
 
 Die letzte Spalte ist die Selbstauskunft der Simulation:
 `ACTIVE_ATTRIBUTES` sagt, welche Attribute der Code liest, und die
@@ -131,7 +150,7 @@ Wirkung des Attributs. Wer die messen will, braucht ein anderes
 Werkzeug: den Vergleich zweier Verteilungen über viele Rennen
 statt einer Paardifferenz.
 
-**In keinem Lauf messbar, obwohl als aktiv geführt:** `spritzigkeit`, `mentale_widerstandsfaehigkeit`, `risikobereitschaft`, `navigationssicherheit`, `materialpflege`.
+**In keinem Lauf messbar, obwohl als aktiv geführt:** `mentale_widerstandsfaehigkeit`, `navigationssicherheit`, `materialpflege`.
 Entweder fehlt die Lage, in der das Attribut greift — dann gehört
 eine Strecke oder ein Wetter in diesen Lauf —, oder es wirkt
 nicht, und dann ist die Selbstauskunft der Oberfläche falsch.
@@ -155,12 +174,12 @@ Chaos verschwindet.
 
 | Attribut | hitze | kalt | regen | sturm |
 |---|---|---|---|---|
-| hitzetoleranz | 260 s | · | · | · |
-| kaeltetoleranz | · | 15 s | · | · |
-| naesseresistenz | · | · | 36 s | · |
-| seitenwindfestigkeit | 20 s | 39 s | 52 s | 188 s |
-| abfahrtstechnik | 37 s† | 45 s† | 58 s† | · |
-| risikobereitschaft | · | · | · | · |
+| hitzetoleranz | 252 s | · | · | · |
+| kaeltetoleranz | · | 17 s | · | · |
+| naesseresistenz | · | · | 37 s | · |
+| seitenwindfestigkeit | 31 s | 40 s | 51 s | 198 s |
+| abfahrtstechnik | 8 s† | 16 s† | 29 s† | · |
+| risikobereitschaft | 38 s† | · | · | · |
 
 Ein † markiert Zahlen, die nicht über den Standardfehler, sondern
 über den **Vorzeichentest** nachgewiesen sind: Das Mittel ist klein
@@ -169,12 +188,12 @@ allen Fahrern in dieselbe Richtung.
 
 In dieser Tabelle ist `abfahrtstechnik` bei „kalt" der Fall, für den
 es die zweite Nachweisform gibt: 39 von 47 Fahrern gewinnen Zeit, im
-Mittel stehen davon 45 Sekunden und im Median 14. Der Standardfehler
-ist mit 45 Sekunden größer als das Mittel selbst — die Differenz sind
+Mittel stehen davon 16 Sekunden und im Median 16. Der Standardfehler
+ist mit 50 Sekunden größer als das Mittel selbst — die Differenz sind
 einzelne Fahrer, denen das Attribut nicht geholfen hat.
 
-`risikobereitschaft` zeigt bei „regen" ein Mittel von -67 Sekunden und
-einen Median von +12: 30 von 46 Fahrern kommen schneller durch, und
+`risikobereitschaft` zeigt bei „regen" ein Mittel von -61 Sekunden und
+einen Median von +15: 29 von 46 Fahrern kommen schneller durch, und
 die übrigen verlieren mehr, als jene gewinnen. Beides ist wahr, und
 deshalb steht keine der beiden Zahlen als „die Wirkung" in der Zeile —
 das Attribut ist eine Entscheidung, kein Bonus.

@@ -685,8 +685,8 @@ ausgewiesen habe und den die größere Stichprobe hinterher umgedreht hat:
 | | vier Fahrer je Typ | zwanzig Fahrer je Typ |
 |---|---|---|
 | Draufgänger | „dominiert, 16 von 24 Siegen" | **88,9 von 160** — unterdurchschnittlich |
-| Fettverbrenner | unauffällig, 0 Siege | **46,7** — mit Abstand der stärkste |
-| Diesel | unauffällig | **102,5** — mit Abstand der schwächste |
+| Fettverbrenner | unauffällig, 0 Siege | **59,5** — unter den zwei stärksten |
+| Diesel | unauffällig | **84,5** — im schwachen Drittel |
 
 Die Siegzahl war dabei die schlimmere der beiden Größen: Sechs Rennen
 ergeben sechs Sieger, verteilt auf acht Archetypen. Daraus lässt sich
@@ -701,10 +701,37 @@ Balancing-Entscheidungen ableitet.** Die Archetyp-Tabelle weist jetzt
 sich erst unterscheiden, wenn ihre Intervalle sich nicht überlappen.
 
 **Was dabei über das Balancing herauskam**, ist eine andere und
-unbequemere Geschichte: Der Fettverbrenner ist zu stark, weil die
-Ernährungsattribute die Matrix anführen — `magenvertraeglichkeit` ist
-mit 413–969 s der größte Einzelwert der ganzen Tabelle. Das ist bislang
-gemessen und nicht behoben.
+unbequemere Geschichte — und der frisch erhobene Bericht hat sie noch
+einmal verschoben. Mit zwanzig Fahrern je Typ über vier Strecken,
+Neutral wäre Platz 80,5 von 160:
+
+| Archetyp | Voralpen | Hochgebirge | Flachetappe | Nordroute |
+|---|---|---|---|---|
+| Kletterer | **53,2** ±3,9 | **46,6** ±3,5 | **65,5** ±3,8 | **56,7** ±3,8 |
+| Fettverbrenner | 59,5 ±3,5 | 63,0 ±3,3 | 63,9 ±3,9 | 57,0 ±3,6 |
+| Allrounder | 81,8 ±4,0 | 75,5 ±4,1 | 76,4 ±3,9 | 68,5 ±3,9 |
+| Zeitfahr-Spezialist | 84,9 ±3,8 | 86,6 ±3,6 | 74,5 ±3,9 | 76,1 ±3,7 |
+| Rohdiamant | 84,9 ±4,1 | 82,7 ±4,2 | 79,7 ±4,3 | 80,6 ±3,8 |
+| Diesel / Ultra-Maschine | 84,5 ±4,0 | 88,3 ±4,1 | 82,5 ±4,2 | 77,6 ±4,1 |
+| Draufgänger | 91,4 ±4,3 | 87,0 ±4,3 | 87,6 ±4,3 | 82,4 ±4,1 |
+| Schlafgeiziger | 90,5 ±4,2 | 89,2 ±4,2 | 92,1 ±4,2 | 77,3 ±4,1 |
+
+Der **Kletterer** führt auf jeder der vier Strecken, auch auf der
+flachsten — sein Abstand zum Fettverbrenner ist auf dem
+Hochgebirgs-Marathon größer als beide Fehlerbalken zusammen. Damit ist
+auch die frühere Aussage „der Fettverbrenner ist mit Abstand der
+stärkste" überholt: Er ist der zweitstärkste, und die beiden sind auf
+drei von vier Strecken nicht sicher zu trennen.
+
+Am unteren Ende liegen **Schlafgeiziger, Draufgänger und Diesel**
+zwischen 77 und 92, ihre Intervalle überlappen sich durchweg — sie sind
+gemeinsam zu schwach, aber untereinander nicht unterscheidbar.
+
+Die Ernährungsattribute führen die Matrix weiterhin an:
+`magenvertraeglichkeit` ist mit 370–980 s der größte Einzelwert der
+ganzen Tabelle. Das erklärt, warum der Fettverbrenner oben mitfährt —
+es erklärt nicht mehr, warum er führt, denn das tut er nicht.
+**Gemessen und nicht behoben.**
 
 **Alle Varianten in einem Rennen.** Naheliegend wäre, je Attribut zwei
 komplette Rennen zu rechnen — bei 25 Attributen, zwei Richtungen und
@@ -1039,7 +1066,7 @@ war. Nicht die Werkzeuge waren zu viel — es gab nur eine Stufe.
 |---|---|---|
 | beim Tippen | `ruff check ultrasim tools tests` und `pytest -q -m "not slow"` | **~55 s** |
 | vor dem Commit | `pytest -q` — dasselbe, was CI rechnet | ~4 min |
-| vor einem Balancing-Commit | `python -m ultrasim.cli.calibrate` | ~1 h |
+| vor einem Balancing-Commit | `python -m ultrasim.cli.calibrate` | **~45 min** |
 
 ```bash
 pytest -q                    # 534 Tests, rund 250 s

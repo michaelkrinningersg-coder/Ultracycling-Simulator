@@ -91,21 +91,28 @@
             → {{ '%.1f'|format(climb.summit_m / 1000) }}</span>
           <span class="faint">{{ '%.1f'|format(climb.length_m / 1000) }} km · {{ climb.ascent_m|round|int }} hm</span>
         </div>
-        <table>
+        {# Feste Spaltenbreiten: Nur so stehen die Zahlen aller drei
+           Karten in einer Flucht. Zu lange Namen werden abgeschnitten
+           statt umgebrochen — eine Zeile je Fahrer, sonst zerfällt die
+           Karte in ein Textfeld. Der volle Name steht im Titel. #}
+        <table class="climbtable">
           <thead>
-            <tr><th></th><th>Fahrer</th><th></th>
-                <th class="right" title="Reine Anstiegszeit vom Fuß bis zum Gipfel">Zeit</th>
-                <th class="right" title="Höhenmeter je Stunde">VAM<span class="faint"> m/h</span></th><th></th></tr>
+            <tr><th class="c-nr"></th>
+                <th class="c-name">Fahrer</th>
+                <th class="c-team">Team</th>
+                <th class="c-time right" title="Reine Anstiegszeit vom Fuß bis zum Gipfel">Zeit</th>
+                <th class="c-vam right" title="VAM — erreichte Höhenmeter je Stunde">VAM</th>
+                <th class="c-pts right" title="Bergpunkte">Pkt</th></tr>
           </thead>
           <tbody>
             {% for row in climb.rows[:6] %}
             <tr>
-              <td class="right mono faint">{{ loop.index }}</td>
-              <td>{{ row.name }}</td>
-              <td class="dim">{{ row.team }}</td>
-              <td class="right mono">{{ row.time_s|hms }}</td>
-              <td class="right mono faint">{{ row.vam_mh|round|int }}</td>
-              <td class="right mono {% if row.points %}warn{% endif %}">{{ row.points or '' }}</td>
+              <td class="c-nr right mono faint">{{ loop.index }}</td>
+              <td class="c-name" title="{{ row.name }}">{{ row.name }}</td>
+              <td class="c-team dim" title="{{ row.team }}">{{ row.team }}</td>
+              <td class="c-time right mono">{{ row.time_s|hms }}</td>
+              <td class="c-vam right mono faint">{{ row.vam_mh|round|int }}</td>
+              <td class="c-pts right mono {% if row.points %}warn{% endif %}">{{ row.points or '' }}</td>
             </tr>
             {% endfor %}
           </tbody>

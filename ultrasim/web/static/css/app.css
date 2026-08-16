@@ -643,15 +643,43 @@ details.why[open] > summary::before { content: "▾ "; }
 /* Die Anstiege einzeln: kurze Tabellen nebeneinander statt einer
    langen untereinander — jede ist für sich vollständig. */
 .climbgrid { display: grid; gap: .6rem;
-             grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr)); }
-/* Etwas kleiner als die Haupttabellen: Die Karte trägt sechs Zeilen mit
-   Name, Team, Zeit und VAM, und ein umbrechender Teamname kostet mehr
-   Lesbarkeit, als zwei Punkt Schriftgröße einbringen. */
-.climbcard table { font-size: .76rem; }
-.climbcard td, .climbcard th { padding: .12rem .3rem; }
-.climbcard .mono { white-space: nowrap; }
+             grid-template-columns: repeat(auto-fill, minmax(34rem, 1fr)); }
+/* 34rem ist die gemessene Breite, ab der nichts mehr abgeschnitten wird:
+   Nummer, Name, Team, Zeit, VAM und Punkte brauchen zusammen rund 520 px.
+   Damit stehen zwei Anstiege nebeneinander statt drei — lieber eine
+   Karte weniger je Zeile als „Sebastian Huf…" in jeder zweiten. */
 .climbcard { background: var(--bg-panel-2); border: 1px solid var(--line);
              border-radius: var(--radius); padding: .4rem .5rem; }
+/* Etwas kleiner als die Haupttabellen, und ``table-layout: fixed``:
+   Ohne das bestimmt jede Karte ihre Spaltenbreiten aus dem eigenen
+   Inhalt, und zwei Karten nebeneinander haben zwei verschiedene Raster.
+   Mit ihm stehen die Zahlen aller Anstiege in einer Flucht.
+
+   Was doch nicht passt, wird abgeschnitten statt umgebrochen: Eine
+   Zeile je Fahrer ist die ganze Idee der Karte. Der volle Text steht
+   im Titel des Feldes. */
+.climbtable { table-layout: fixed; width: 100%; font-size: .76rem; }
+.climbtable th, .climbtable td {
+  padding: .12rem .3rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Die Zahlenspalten bekommen feste Breiten nach ihrem Inhalt, Name und
+   Team teilen sich den Rest. Prozentwerte für alle sechs wären hier
+   falsch: Eine Zeitspalte braucht 82 px, egal wie breit die Karte ist,
+   und jedes Prozent, das sie darüber hinaus bekommt, fehlt dem Team.
+
+   Gemessen an diesem Feld: Nummer 32 px, Zeit 82, VAM 45, Punkte 41 —
+   der längste Fahrername 137, der längste Teamname 180. */
+.climbtable .c-nr { width: 2.2rem; }
+.climbtable .c-time { width: 5.6rem; }
+.climbtable .c-vam { width: 3.1rem; }
+.climbtable .c-pts { width: 2.9rem; }
+/* Auch das Team fest, obwohl es Text ist: Es ist die einzige Spalte,
+   deren längster Wert (180 px) breiter ist als der längste Fahrername
+   (137 px). Teilten sich beide den Rest gleichmäßig, schnitte auf
+   mittelbreiten Bildschirmen immer das Team ab und nie der Name. Der
+   Name bekommt hier den Überschuss — er ist die wichtigere Spalte. */
+.climbtable .c-team { width: 11.6rem; }
 .climbhead { display: flex; align-items: center; gap: .5rem; font-size: .75rem;
              margin-bottom: .25rem; }
 .badge.cat { border-color: #b0453f; color: #ff8f88; font-family: var(--mono); }

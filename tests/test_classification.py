@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
@@ -108,22 +109,61 @@ def climbed(route_medium):
     return result, route_medium, view_riders, view_teams
 
 
-def test_the_mountain_points_go_to_the_fastest_at_the_summit(climbed):
-    """Zeit am Gipfel, nicht Reihenfolge der Ankunft.
+def test_the_mountain_points_go_to_the_fastest_climber(climbed):
+    """Die reine Anstiegszeit, nicht die Zeit am Gipfel.
 
-    Beim Einzelzeitfahren startet jeder zu einer anderen Stunde — wer
-    zuerst oben stand, sagt nichts darüber, wer am schnellsten dort war.
+    Die Zeit *am* Gipfel trägt alles mit, was vorher passiert ist — eine
+    Panne bei km 40 entschiede dann über den Berg bei km 200.
     """
     result, route, riders, teams = climbed
     climbs, ranking = cls.mountain_ranking(result, route, riders, teams)
     assert climbs, "die mittlere Teststrecke hat kategorisierte Anstiege"
     for climb in climbs:
-        times = [row[2] for row in climb.rows]
+        times = [row.time_s for row in climb.rows]
         assert times == sorted(times)
-        points = [row[3] for row in climb.rows]
+        points = [row.points for row in climb.rows]
         assert points == sorted(points, reverse=True)
     assert ranking and ranking[0].rank == 1
     assert ranking[0].points >= ranking[-1].points
+
+
+def test_the_climb_time_is_the_gap_between_foot_and_summit(climbed):
+    """Nachgerechnet: Gipfelzeit minus Fußzeit, Fahrer für Fahrer."""
+    result, route, riders, _ = climbed
+    climbs, _ = cls.mountain_ranking(result, route, riders, {})
+    climb = next(c for c in climbs if c.rows)
+    source = next(c for c in route.climbs if c.idx == climb.idx)
+    foot = cls.times_at_distance(result.telemetry, source.dist_start_m)
+    summit = cls.times_at_distance(result.telemetry, source.dist_end_m)
+
+    by_name = {riders[e.rider_id].name: e.entry_id for e in result.entries}
+    for row in climb.rows:
+        i = by_name[row.name]
+        assert row.time_s == pytest.approx(summit[i] - foot[i], abs=0.01)
+        # Und die Anstiegszeit ist deutlich kürzer als die Rennzeit dort.
+        assert row.time_s < summit[i]
+
+
+def test_the_climb_ranking_is_not_the_general_ranking(climbed):
+    """Die Wertung misst etwas Eigenes.
+
+    Wäre die Reihenfolge nach Anstiegszeit dieselbe wie die nach
+    Gipfelzeit, wäre die Bergwertung nur eine zweite Gesamtwertung mit
+    anderer Überschrift. In einem echten Feld ist sie es nicht: Was ein
+    Fahrer vor dem Anstieg verloren hat, steht in der einen Reihenfolge
+    und in der anderen nicht.
+    """
+    result, route, _, _ = climbed
+    source = route.climbs[0]
+    foot = cls.times_at_distance(result.telemetry, source.dist_start_m)
+    summit = cls.times_at_distance(result.telemetry, source.dist_end_m)
+    climbing = summit - foot
+
+    ok = np.isfinite(climbing)
+    assert ok.sum() >= 3
+    by_climb = list(np.argsort(np.where(ok, climbing, np.inf))[: ok.sum()])
+    by_summit = list(np.argsort(np.where(ok, summit, np.inf))[: ok.sum()])
+    assert by_climb != by_summit
 
 
 def test_the_points_table_favours_the_harder_climb():
@@ -137,8 +177,10 @@ def test_riders_who_never_reached_the_summit_score_nothing(climbed):
     result, route, riders, teams = climbed
     climbs, _ = cls.mountain_ranking(result, route, riders, teams)
     for climb in climbs:
-        for _, _, time_s, _ in climb.rows:
-            assert time_s == time_s, "NaN darf nicht in der Wertung stehen"
+        for row in climb.rows:
+            assert row.time_s == row.time_s, "NaN darf nicht in der Wertung stehen"
+            assert row.time_s > 0.0
+            assert row.vam_mh > 0.0
 
 
 def test_the_summit_times_come_from_the_telemetry(climbed):
@@ -150,6 +192,21 @@ def test_the_summit_times_come_from_the_telemetry(climbed):
         if entry.finish_time_s is not None:
             assert times[i] == times[i], "wer im Ziel ist, war auch am Gipfel"
             assert 0.0 < times[i] < entry.finish_time_s
+
+
+def test_the_marker_times_are_interpolated(climbed):
+    """Nicht auf das Abtastraster gerundet.
+
+    Auf einem Ultra liegt das Raster bei 30 s. Eine Bergzeit aus zwei
+    gerundeten Marken hätte damit bis zu einer Minute Fehler — die
+    Wertung wäre eine Aussage über das Raster.
+    """
+    result, route, _, _ = climbed
+    step = result.telemetry.sample_dt_s
+    times = cls.times_at_distance(result.telemetry, route.climbs[0].dist_end_m)
+    finite = [t for t in times if t == t]
+    assert finite
+    assert any(abs(t / step - round(t / step)) > 1e-6 for t in finite)
 
 
 # ----------------------------------------------------------------------

@@ -61,7 +61,8 @@
   <div class="panel">
     <div class="panel-title">
       <span>Bergwertung</span>
-      <span class="faint">{{ climbs|length }} kategorisierte Anstiege · Punkte nach Zeit am Gipfel</span>
+      <span class="faint">{{ climbs|length }} kategorisierte Anstiege ·
+        Punkte nach Fahrzeit vom Fuß bis zum Gipfel</span>
     </div>
     <table>
       <thead>
@@ -86,18 +87,25 @@
       <div class="climbcard">
         <div class="climbhead">
           <span class="badge cat">{{ climb.category }}</span>
-          <span class="mono">km {{ '%.1f'|format(climb.summit_m / 1000) }}</span>
+          <span class="mono">km {{ '%.1f'|format(climb.foot_m / 1000) }}
+            → {{ '%.1f'|format(climb.summit_m / 1000) }}</span>
           <span class="faint">{{ '%.1f'|format(climb.length_m / 1000) }} km · {{ climb.ascent_m|round|int }} hm</span>
         </div>
         <table>
+          <thead>
+            <tr><th></th><th>Fahrer</th><th></th>
+                <th class="right" title="Reine Anstiegszeit vom Fuß bis zum Gipfel">Zeit</th>
+                <th class="right" title="Höhenmeter je Stunde">VAM<span class="faint"> m/h</span></th><th></th></tr>
+          </thead>
           <tbody>
-            {% for name, team, time_s, points in climb.rows[:6] %}
+            {% for row in climb.rows[:6] %}
             <tr>
               <td class="right mono faint">{{ loop.index }}</td>
-              <td>{{ name }}</td>
-              <td class="dim">{{ team }}</td>
-              <td class="right mono">{{ time_s|hms }}</td>
-              <td class="right mono {% if points %}warn{% endif %}">{{ points or '' }}</td>
+              <td>{{ row.name }}</td>
+              <td class="dim">{{ row.team }}</td>
+              <td class="right mono">{{ row.time_s|hms }}</td>
+              <td class="right mono faint">{{ row.vam_mh|round|int }}</td>
+              <td class="right mono {% if row.points %}warn{% endif %}">{{ row.points or '' }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -106,10 +114,16 @@
       {% endfor %}
     </div>
     <p class="dim" style="margin-top:.5rem">
-      Gewertet wird die <strong>Zeit</strong> am Gipfel, nicht die
-      Reihenfolge der Ankunft: Beim Einzelzeitfahren startet jeder zu
-      einer anderen Stunde, und wer als Erster oben stand, sagt nichts
-      darüber, wer am schnellsten dort war.
+      Gewertet wird die <strong>reine Anstiegszeit vom Fuß bis zum
+      Gipfel</strong>, jeder Anstieg für sich. Das ist der Unterschied
+      zwischen einer Bergwertung und einer zweiten Gesamtwertung: Die
+      Zeit <em>am</em> Gipfel trägt alles mit, was vorher passiert ist —
+      eine Panne bei km 40 entschiede dann über den Berg bei km 200. Die
+      Zeit <em>im</em> Anstieg trägt nur den Anstieg.
+      <strong>VAM</strong> sind die dabei erreichten Höhenmeter je
+      Stunde; sie macht verschieden lange Anstiege vergleichbar.
+      Die Uhr läuft durch: Wer im Anstieg hält, verliert die Zeit —
+      sie ist genauso verloren wie die eines Fahrers, der langsam tritt.
     </p>
   </div>
   {% endif %}

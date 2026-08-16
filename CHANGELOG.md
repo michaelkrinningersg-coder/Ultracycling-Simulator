@@ -55,7 +55,7 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
   Straßen, und öffentliche Straßen haben Ampeln. Rot und Grün dauern je
   90 s; wer rot ankommt, wartet den Rest der Phase ab. Höchstens zwei
   Ampeln je hundert Kilometer, mindestens fünf Kilometer Abstand, keine
-  in einem kategorisierten Anstieg und keine über 1500 m — auf einem
+  in einem kategorisierten Anstieg und keine über 1200 m — auf einem
   Pass steht keine Kreuzung. Im Mittel kostet eine Ampel 22,5 s; über
   die Weltserie sind das drei Minuten auf der kürzesten und sechzehn
   auf der längsten Strecke.
@@ -97,9 +97,16 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
   * *je Rennen* (`/race/…/statistik`): **Teamwertung** aus der Summe
     der drei besten Zielzeiten je Mannschaft — ein Team ohne drei
     Ankünfte bekommt keine Summe, sonst gewönne die Mannschaft mit den
-    meisten Ausfällen. Dazu die **Bergwertung** mit Punkten an jedem
-    kategorisierten Gipfel, gewertet nach *Zeit* am Gipfel und nicht
-    nach Reihenfolge der Ankunft. Dazu die **Energiebilanz**:
+    meisten Ausfällen. Dazu die **Bergwertung**: Punkte an jedem
+    kategorisierten Anstieg, gewertet nach der **reinen Anstiegszeit
+    vom Fuß bis zum Gipfel**, jeder Anstieg für sich, dazu die
+    erreichten Höhenmeter je Stunde. Das ist der Unterschied zwischen
+    einer Bergwertung und einer zweiten Gesamtwertung: Die Zeit *am*
+    Gipfel trägt alles mit, was vorher passiert ist — eine Panne bei
+    km 40 entschiede dann über den Berg bei km 200. Damit die Wertung
+    nicht das Abtastraster misst (auf einem Ultra 30 s), werden die
+    Marken zwischen zwei Abtastpunkten interpoliert. Dazu die
+    **Energiebilanz**:
     aufgenommene gegen verbrannte Kohlenhydrate. Hundert Prozent gibt
     es nie — der Magen lässt weniger durch, als hartes Fahren
     verbrennt, und genau diese Lücke ist der Grund, warum ein Ultra

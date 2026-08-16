@@ -25,6 +25,7 @@ __all__ = [
     "MOUNTAIN_POINTS",
     "TeamResult",
     "GroupStanding",
+    "ClimbRow",
     "ClimbResult",
     "effective_scorers",
     "team_race_ranking",
@@ -85,32 +86,56 @@ class GroupStanding:
 
 
 @dataclass
+class ClimbRow:
+    """Eine Zeile der Wertung eines einzelnen Anstiegs."""
+
+    name: str
+    team: str
+    #: Reine **Anstiegszeit**: vom Fuß bis zum Gipfel.
+    time_s: float
+    #: Höhenmeter je Stunde — die Zahl, in der Kletterer sich messen.
+    #: Sie macht Anstiege verschiedener Länge vergleichbar.
+    vam_mh: float
+    points: int
+
+
+@dataclass
 class ClimbResult:
     """Ein kategorisierter Anstieg mit seiner Wertung."""
 
     idx: int
     category: str
+    foot_m: float
     summit_m: float
     length_m: float
     ascent_m: float
-    #: ``(rider_name, team_name, time_s, points)`` in Reihenfolge.
-    rows: list[tuple[str, str, float, int]] = field(default_factory=list)
+    rows: list[ClimbRow] = field(default_factory=list)
 
 
 def times_at_distance(telemetry, dist_m: float) -> np.ndarray:
-    """Eigenzeit je Fahrer beim ersten Erreichen einer Distanzmarke.
+    """Eigenzeit je Fahrer beim Erreichen einer Distanzmarke.
 
-    ``NaN`` für alle, die nie so weit gekommen sind. Der Wert ist auf
-    das Abtastraster gerundet — für eine Bergwertung reicht das: Der
-    Abstand zweier Fahrer an einem Gipfel liegt selten unter einer
-    halben Minute, und das Raster ist gröber als die Auflösung, die
-    irgendjemand ablesen würde.
+    ``NaN`` für alle, die nie so weit gekommen sind.
+
+    **Zwischen den Abtastpunkten wird interpoliert**, und das ist keine
+    Verzierung: Auf einem Ultra liegt das Raster bei 30 Sekunden. Eine
+    Bergzeit aus zwei gerundeten Marken hätte damit bis zu einer Minute
+    Fehler — bei Anstiegen, die in fünf Sekunden entschieden werden, wäre
+    die Wertung dann eine Aussage über das Abtastraster.
     """
-    reached = telemetry.dist_m >= dist_m
+    dist = telemetry.dist_m
+    reached = dist >= dist_m
     ever = reached.any(axis=1)
-    idx = reached.argmax(axis=1).astype(np.float64)
-    out = np.where(ever, idx * telemetry.sample_dt_s, np.nan)
-    return out
+    idx = reached.argmax(axis=1)
+    prev = np.maximum(idx - 1, 0)
+    rows = np.arange(dist.shape[0])
+
+    d0 = dist[rows, prev].astype(np.float64)
+    d1 = dist[rows, idx].astype(np.float64)
+    span = d1 - d0
+    frac = np.where(span > 0.0, (dist_m - d0) / np.where(span > 0.0, span, 1.0), 0.0)
+    frac = np.clip(frac, 0.0, 1.0)
+    return np.where(ever, (prev + frac) * telemetry.sample_dt_s, np.nan)
 
 
 def effective_scorers(
@@ -237,12 +262,18 @@ def group_season_points(
 def mountain_ranking(
     result: Any, route: Any, riders: dict[int, Any], teams: dict[int, Any], top: int = 8
 ) -> tuple[list[ClimbResult], list[GroupStanding]]:
-    """Bergwertung: Punkte an jedem kategorisierten Gipfel.
+    """Bergwertung: Punkte an jedem kategorisierten Anstieg.
 
-    Gewertet wird nach **Zeit am Gipfel**, nicht nach Reihenfolge der
-    Ankunft: Beim Einzelzeitfahren startet jeder zu einer anderen
-    Stunde, und wer als Erster oben stand, sagt dann nichts darüber, wer
-    am schnellsten dort war.
+    Gewertet wird die **reine Anstiegszeit vom Fuß bis zum Gipfel**,
+    jeder Anstieg für sich. Das ist der Unterschied zwischen einer
+    Bergwertung und einer zweiten Gesamtwertung: Die Zeit *am* Gipfel
+    trägt alles mit, was vorher passiert ist — eine Panne bei km 40
+    entschiede dann über den Berg bei km 200. Die Zeit *im* Anstieg
+    trägt nur den Anstieg.
+
+    Die Uhr läuft dabei durch: Wer im Anstieg an einem Servicepunkt
+    hält, verliert die Zeit. Das ist gewollt — sie ist genauso
+    verloren wie die eines Fahrers, der langsam tritt.
 
     Zurück kommen die Anstiege einzeln und die Gesamtwertung — dieselben
     Zahlen, einmal als Chronik und einmal als Tabelle.
@@ -254,9 +285,13 @@ def mountain_ranking(
         table = MOUNTAIN_POINTS.get(climb.category)
         if not table:
             continue
-        times = times_at_distance(result.telemetry, climb.dist_end_m)
-        order = [i for i in np.argsort(times) if np.isfinite(times[i])]
-        rows: list[tuple[str, str, float, int]] = []
+        foot = times_at_distance(result.telemetry, climb.dist_start_m)
+        summit = times_at_distance(result.telemetry, climb.dist_end_m)
+        # Ohne Gipfelzeit keine Wertung: Wer den Anstieg nicht zu Ende
+        # gefahren ist, hat ihn nicht gefahren.
+        climbing = np.where(np.isfinite(summit), summit - foot, np.nan)
+        order = [i for i in np.argsort(climbing) if np.isfinite(climbing[i])]
+        rows: list[ClimbRow] = []
         for place, entry_id in enumerate(order[: max(len(table), top)]):
             entry = result.entries[int(entry_id)]
             rider = riders.get(entry.rider_id)
@@ -264,8 +299,15 @@ def mountain_ranking(
                 continue
             team = teams.get(rider.team_id)
             points = table[place] if place < len(table) else 0
+            seconds = float(climbing[entry_id])
             rows.append(
-                (rider.name, team.name if team else "", float(times[entry_id]), points)
+                ClimbRow(
+                    name=rider.name,
+                    team=team.name if team else "",
+                    time_s=seconds,
+                    vam_mh=climb.ascent_m / (seconds / 3600.0) if seconds > 0 else 0.0,
+                    points=points,
+                )
             )
             if points:
                 key = str(rider.id)
@@ -280,6 +322,7 @@ def mountain_ranking(
             ClimbResult(
                 idx=climb.idx,
                 category=climb.category,
+                foot_m=climb.dist_start_m,
                 summit_m=climb.dist_end_m,
                 length_m=climb.length_m,
                 ascent_m=climb.ascent_m,

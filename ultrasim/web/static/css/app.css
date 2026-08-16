@@ -643,7 +643,13 @@ details.why[open] > summary::before { content: "▾ "; }
 /* Die Anstiege einzeln: kurze Tabellen nebeneinander statt einer
    langen untereinander — jede ist für sich vollständig. */
 .climbgrid { display: grid; gap: .6rem;
-             grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
+             grid-template-columns: repeat(auto-fill, minmax(23rem, 1fr)); }
+/* Etwas kleiner als die Haupttabellen: Die Karte trägt sechs Zeilen mit
+   Name, Team, Zeit und VAM, und ein umbrechender Teamname kostet mehr
+   Lesbarkeit, als zwei Punkt Schriftgröße einbringen. */
+.climbcard table { font-size: .76rem; }
+.climbcard td, .climbcard th { padding: .12rem .3rem; }
+.climbcard .mono { white-space: nowrap; }
 .climbcard { background: var(--bg-panel-2); border: 1px solid var(--line);
              border-radius: var(--radius); padding: .4rem .5rem; }
 .climbhead { display: flex; align-items: center; gap: .5rem; font-size: .75rem;

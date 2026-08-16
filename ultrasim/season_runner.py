@@ -279,6 +279,28 @@ def carry_work_kj(
     return out
 
 
+def reverse_standings_order(riders: list[Rider], table: list[sn.Standing]) -> list[Rider]:
+    """Startreihenfolge nach umgekehrtem Saisonstand — der Erste zuletzt.
+
+    Ab dem zweiten Rennen einer Saison zählt nicht mehr das geschätzte
+    Potenzial, sondern das Erreichte: Wer in der Gesamtwertung führt,
+    startet als Letzter. Das ist die Regel jedes Einzelzeitfahrens und hier
+    doppelt wirksam — der Führende fährt vor Publikum, das seine Zeit schon
+    kennt, und die Übertragung endet mit der Entscheidung statt mit einem
+    Nachzügler.
+
+    Fahrer ohne Saisonpunkte (Neuzugänge, Nichtstarter des Auftakts) stehen
+    davor, untereinander nach Potenzial aufsteigend — dieselbe Ordnung, die
+    ``start_order="seeded"`` beim ersten Rennen herstellt.
+    """
+    rank_of = {s.rider_id: i for i, s in enumerate(table)}
+    unranked = [r for r in riders if r.id not in rank_of]
+    ranked = [r for r in riders if r.id in rank_of]
+    unranked.sort(key=lambda r: r.potential)
+    ranked.sort(key=lambda r: rank_of[r.id], reverse=True)  # Erster zuletzt
+    return unranked + ranked
+
+
 # ----------------------------------------------------------------------
 # Rechnen
 # ----------------------------------------------------------------------
@@ -334,11 +356,20 @@ def run_calendar_race(
     teams, pool = store.load_pool()
     riders = pool[: max(calendar_race.n_riders, 2)]
 
+    # Ab dem zweiten Rennen zählt der Saisonstand, nicht das Potenzial.
+    # ``start_order="list"`` heißt: Die Engine nimmt die Liste, wie sie ist.
+    start_order = "seeded"
+    table = standings(store, season)
+    if table:
+        riders = reverse_standings_order(riders, table)
+        start_order = "list"
+
     config = RaceConfig(
         seed=calendar_race.seed,
         weather_preset=calendar_race.weather_preset,
         race_date=calendar_race.day,
         name=calendar_race.name,
+        start_order=start_order,
         carry_work_kj=carry_work_kj(store, season, calendar_race, riders),
     )
     result = simulate_race(route, riders, teams, config, progress=progress)

@@ -51,6 +51,15 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
+- **Umgekehrte Startreihenfolge ab dem zweiten Saisonrennen.** Der
+  Auftakt startet weiter nach geschätztem Potenzial — es gibt noch nichts
+  anderes. Danach zählt das Erreichte: Wer die Gesamtwertung anführt,
+  startet als Letzter. Fahrer ohne Saisonpunkte stehen davor,
+  untereinander nach Potenzial.
+
+  Das ist nicht nur Regelwerk, sondern Dramaturgie — die Übertragung
+  endet mit der Entscheidung statt mit einem Nachzügler, und der
+  Führende fährt gegen eine Zeit, die schon auf der Tafel steht.
 - **Fünfundzwanzig benannte Teams à zwölf Fahrer, 300 Starter.** Die
   Mannschaften hießen bisher aus zufällig kombinierten Bausteinen und
   wechselten mit jedem Seed; jetzt sind es feste Paare aus Ausrüster und

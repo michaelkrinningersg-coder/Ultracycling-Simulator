@@ -329,6 +329,66 @@ def test_a_race_outside_a_season_shows_no_points(client, store):
 
 
 # ----------------------------------------------------------------------
+# Startreihenfolge
+# ----------------------------------------------------------------------
+def _start_order(store: Store, season: sn.Season, key: str) -> list[int]:
+    """Fahrer-IDs eines gerechneten Termins, nach Startzeit."""
+    summary = store.load_race_summary(season.race(key).race_id)
+    return [e.rider_id for e in sorted(summary.entries, key=lambda e: e.start_offset_s)]
+
+
+def test_the_first_race_starts_by_potential(client, store):
+    """Am Auftakt gibt es keinen Saisonstand — es zählt die Einschätzung."""
+    season = store.load_season("2031-serie")
+    order = _start_order(store, season, "01-lauf")
+    _, riders = store.load_pool()
+    potential = {r.id: r.potential for r in riders}
+    assert order == sorted(order, key=lambda rid: potential[rid])
+
+
+def test_from_the_second_race_the_leader_starts_last(client, store):
+    """Ab Rennen zwei startet der Saisonführende zuletzt.
+
+    Geprüft wird an den gespeicherten Startzeiten, nicht an der Absicht:
+    Die Rangliste nach dem Auftakt muss genau die umgekehrte Startliste
+    des zweiten Laufs sein.
+    """
+    season = store.load_season("2031-serie")
+
+    # Rangliste, wie sie vor dem zweiten Lauf stand: nur der Auftakt zählt.
+    after_first = sn.Season(id=season.id, name=season.name, year=season.year)
+    after_first.races = [season.race("01-lauf")]
+    table = runner.standings(store, after_first)
+    assert table, "der Auftakt muss eine Wertung ergeben haben"
+
+    order = _start_order(store, season, "02-lauf")
+    assert order[-1] == table[0].rider_id, "der Führende startet zuletzt"
+    assert order == [s.rider_id for s in reversed(table)]
+
+    # Und die Reihenfolge hat sich gegenüber dem Auftakt wirklich geändert.
+    assert order != _start_order(store, season, "01-lauf")
+
+
+def test_riders_without_points_start_first():
+    """Wer noch keine Punkte hat, steht vor dem gewerteten Feld."""
+    from ultrasim.core.rider import generate_pool
+
+    _, riders = generate_pool(6, n_teams=2, seed=7)
+    table = [
+        sn.Standing(
+            rider_id=r.id, name=r.name, nation=r.nation, team_id=r.team_id, team_name="T"
+        )
+        for r in riders[:3]
+    ]
+    order = runner.reverse_standings_order(riders, table)
+
+    newcomers, ranked = order[:3], order[3:]
+    assert {r.id for r in ranked} == {s.rider_id for s in table}
+    assert [r.id for r in ranked] == [s.rider_id for s in reversed(table)]
+    assert [r.potential for r in newcomers] == sorted(r.potential for r in newcomers)
+
+
+# ----------------------------------------------------------------------
 # Der Simulationshorizont
 # ----------------------------------------------------------------------
 def test_the_simulation_outlasts_the_time_limit():

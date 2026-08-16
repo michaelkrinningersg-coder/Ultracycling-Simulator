@@ -52,9 +52,12 @@
           <td class="right mono">
             {% if row.standing %}
             <span class="stand"
-                  title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle">
+                  title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle · {{ row.standing.signal_s|hms }} Ampeln">
               {{ row.standing.total_s|hms }}
-              <span class="standbar"><i style="width: {{ (100 * row.standing.sleep_share)|round(1) }}%"></i></span>
+              <span class="standbar">
+                <i class="sleep" style="width: {{ (100 * row.standing.sleep_share)|round(1) }}%"></i
+                ><i class="signal" style="width: {{ (100 * row.standing.signal_share)|round(1) }}%"></i>
+              </span>
             </span>
             {% else %}<span class="faint">—</span>{% endif %}
           </td>
@@ -73,6 +76,7 @@
       <strong>Stand</strong> ist die Zeit, in der der Fahrer nicht gefahren ist.
       Der Balken teilt sie auf:
       <i style="background:var(--accent-2)"></i>Notschlaf am Straßenrand,
+      <i style="background:#e0574f"></i>rote Ampeln,
       <i style="background:#6c7a94"></i>Zwischenfälle.
       Vier Stunden Panne und vier Stunden Schlaf stehen als dieselbe Zahl
       da und sind zwei verschiedene Rennen.
@@ -87,7 +91,7 @@
             <td class="right mono faint">{% if row.entry.dnf_dist_m %}km {{ '%.0f'|format(row.entry.dnf_dist_m / 1000) }}{% endif %}</td>
             <td class="right mono faint">
               {%- if row.standing %}
-              <span title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle">
+              <span title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle · {{ row.standing.signal_s|hms }} Ampeln">
                 {{ row.standing.total_s|hms }}</span>
               {%- endif %}</td>
             <td class="dim">{{ row.entry.dnf_reason }}</td></tr>

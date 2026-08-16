@@ -259,6 +259,18 @@ export class ProfileView {
       c.fillRect(xx - 1.5, baseY - 4, 3, 4);
     }
 
+    // Ampeln. Bewusst klein und ohne Phase: Ob sie gerade rot ist, weiß
+    // erst der Fahrer, der davorsteht — und der Zuschauer, wenn er
+    // stehenbleibt.
+    for (const light of (this.showMarkers ? (this.route.traffic_lights || []) : [])) {
+      if (light.dist_m < this.viewStart || light.dist_m > this.viewEnd) continue;
+      const xx = this.x(light.dist_m);
+      c.fillStyle = '#e0574f';
+      c.beginPath();
+      c.arc(xx, this.padTop + 3, 2.2, 0, Math.PI * 2);
+      c.fill();
+    }
+
     // Kilometerachse
     c.fillStyle = '#5c6880';
     c.font = '9px ui-monospace, monospace';

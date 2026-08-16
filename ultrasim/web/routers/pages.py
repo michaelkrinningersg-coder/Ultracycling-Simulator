@@ -168,12 +168,16 @@ def _standing_split(entry) -> dict | None:
     if total < 60.0:
         return None
     incidents = float(entry.lost_incident_s or 0.0)
+    signals = float(getattr(entry, "lost_signal_s", 0.0) or 0.0)
+    sleep = max(total - incidents - signals, 0.0)
     return {
         "total_s": total,
         "incident_s": incidents,
-        "sleep_s": max(total - incidents, 0.0),
-        # Anteil des Notschlafs, für den Balken in der Zelle.
-        "sleep_share": max(total - incidents, 0.0) / total,
+        "signal_s": signals,
+        "sleep_s": sleep,
+        # Anteile für den dreigeteilten Balken in der Zelle.
+        "sleep_share": sleep / total,
+        "signal_share": signals / total,
     }
 
 

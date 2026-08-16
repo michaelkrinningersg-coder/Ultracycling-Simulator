@@ -495,9 +495,12 @@ tr.report.podium td { color: var(--fg); font-size: .82rem; font-style: normal;
 /* Standzeit: Zahl plus Balken. Der gefüllte Teil ist Notschlaf, der
    Rest sind Zwischenfälle — dieselbe Zahl, zwei völlig andere Rennen. */
 .stand { display: inline-flex; flex-direction: column; align-items: flex-end; gap: .12rem; }
+/* Dreigeteilt: Notschlaf, Ampeln, Rest = Zwischenfälle (der Untergrund). */
 .standbar { display: block; width: 3rem; height: 3px; border-radius: 2px;
-            background: #6c7a94; overflow: hidden; }
-.standbar i { display: block; height: 100%; background: var(--accent-2); }
+            background: #6c7a94; overflow: hidden; font-size: 0; }
+.standbar i { display: inline-block; height: 3px; vertical-align: top; }
+.standbar i.sleep { background: var(--accent-2); }
+.standbar i.signal { background: #e0574f; }
 .standkey i { display: inline-block; width: .6rem; height: 3px; border-radius: 2px;
               margin: 0 .25rem 0 .6rem; vertical-align: middle; }
 

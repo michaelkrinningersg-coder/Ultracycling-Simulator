@@ -26,7 +26,14 @@ from typing import Any
 import numpy as np
 
 from ..core.engine import STATE_DNF, STATE_FINISHED, RaceResult, Telemetry
-from ..core.events import BEST_TIME, DECISION, DNF, MAJOR_EVENTS, RaceEvent
+from ..core.events import (
+    BEST_TIME,
+    DECISION,
+    DNF,
+    DRAMATIC_EVENTS,
+    MAJOR_EVENTS,
+    RaceEvent,
+)
 from ..geo.route import Route
 
 #: Angebotene Zeitrafferstufen.
@@ -90,6 +97,11 @@ class PlaybackSession:
     sort_desc: bool = False
     #: Angeheftete Fahrer: stehen über dem Board, egal wo sie liegen.
     pinned: list[int] = field(default_factory=list)
+    #: Automatischer Fokus: Der Server wählt den Fahrer, bei dem gerade
+    #: etwas passiert ist. Aus wie ``split_follow``, sobald der Nutzer
+    #: selbst jemanden anklickt — eine Regie, die sich nicht abschalten
+    #: lässt, ist keine Hilfe, sondern eine Entmündigung.
+    auto_focus: bool = False
     anchor: float = field(default_factory=time.monotonic)
     horizon_s: float = 0.0  # Ende des Rennens; darüber hinaus läuft nichts
 
@@ -172,6 +184,7 @@ class PlaybackSession:
             "sort": self.sort,
             "sort_desc": self.sort_desc,
             "pinned": list(self.pinned),
+            "auto_focus": self.auto_focus,
             "horizon_s": round(self.horizon_s, 1),
         }
 
@@ -495,6 +508,27 @@ class RaceView:
             # anderes mehr durch.
             out = focused + others[:20]
         return out[:60]
+
+    def dramatic_focus(self, t_wall: float, window_s: float, current: int) -> int:
+        """Wer gerade die Aufmerksamkeit verdient — der automatische Fokus.
+
+        Gesucht wird das **letzte** dramatische Ereignis im Fenster
+        hinter der Wanduhr: eine Aufgabe, ein Sturz, ein Defekt, ein
+        Hungerast, eine Bestzeit, ein Zieleinlauf. Zurück kommt der
+        Fahrer, dem es widerfahren ist.
+
+        Ist nichts passiert, bleibt der Fokus, wo er ist. Das ist
+        wichtiger, als es aussieht: Eine Regie, die in jeder ruhigen
+        Minute auf den Führenden zurückspringt, macht das Verfolgen
+        eines einzelnen Fahrers unmöglich — und ruhige Minuten sind
+        beim Ultracycling die Regel.
+        """
+        lo = int(np.searchsorted(self._event_wall, t_wall - window_s, side="left"))
+        hi = int(np.searchsorted(self._event_wall, t_wall, side="right"))
+        for i in range(hi - 1, lo - 1, -1):
+            if self._events[i].type in DRAMATIC_EVENTS:
+                return int(self._events[i].entry_id)
+        return current
 
     def next_event_time(self, t_wall: float, focus: int | None = None) -> float | None:
         """Wanduhrzeit des nächsten Ereignisses (für 'Sprung zum Ereignis')."""

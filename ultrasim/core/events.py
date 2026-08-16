@@ -36,6 +36,12 @@ DECISION = "DECISION"
 #: der Art im Payload statt acht Konstanten: Die UI behandelt sie alle
 #: gleich, und ein neuer Katalogeintrag soll keine Codeänderung sein.
 INCIDENT = "INCIDENT"
+#: Halt an einer roten Ampel. Der einzige Halt im Modell, den weder der
+#: Fahrer noch sein Material zu verantworten hat — deshalb steht er
+#: nicht in ``MAJOR_EVENTS``: Bei 1000-fachem Zeitraffer ist eine Ampel
+#: kein Ereignis, sondern Rauschen.
+TRAFFIC_LIGHT = "TRAFFIC_LIGHT"
+
 #: Neue Bestzeit an einem Split. Kein Ereignis der Simulation, sondern
 #: eines der Betrachtung: Es entsteht erst dadurch, dass jemand zuschaut
 #: und die Zeiten in der Reihenfolge sieht, in der sie fallen. Erzeugt
@@ -58,6 +64,16 @@ MAJOR_EVENTS = frozenset(
         BEST_TIME,
     }
 )
+
+
+#: Ereignisse, die eine Übertragung umschalten lassen würden.
+#:
+#: Enger als ``MAJOR_EVENTS``: Ein Split ist wichtig genug, um gesendet
+#: zu werden, aber kein Grund, die Kamera zu schwenken — sonst springt
+#: der automatische Fokus im Feld von dreihundert Startern im
+#: Sekundentakt. Was hier steht, ist das, worüber ein Kommentator den
+#: Satz unterbräche.
+DRAMATIC_EVENTS = frozenset({DNF, INCIDENT, MECHANICAL, BONK, BEST_TIME, FINISH})
 
 
 @dataclass(slots=True)
@@ -106,6 +122,11 @@ def format_event(event: RaceEvent, rider_name: str = "") -> str:
         return (
             f"{who}{p.get('reason', 'Stopp')} bei km {p.get('dist_km', 0):.0f} "
             f"({p.get('duration_s', 0):.0f} s)"
+        )
+    if event.type == TRAFFIC_LIGHT:
+        return (
+            f"{who}rote Ampel bei km {p.get('dist_km', 0):.0f} "
+            f"({p.get('wait_s', 0):.0f} s)"
         )
     if event.type == STOP_END:
         return f"{who}weiter bei km {p.get('dist_km', 0):.0f}"

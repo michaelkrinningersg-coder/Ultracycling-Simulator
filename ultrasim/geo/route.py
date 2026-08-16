@@ -24,6 +24,8 @@ from typing import Any
 
 import numpy as np
 
+from . import signals
+
 SCHEMA_VERSION = 1
 
 #: Halbe Basislänge der zentralen Differenz für die Steigungsberechnung,
@@ -123,6 +125,11 @@ class Route:
     grade: np.ndarray = field(init=False, repr=False)
     _ascent_m: float = field(init=False, repr=False, default=0.0)
     _descent_m: float = field(init=False, repr=False, default=0.0)
+    #: Ampeln auf der Strecke. Nicht gespeichert, sondern beim Aufbau
+    #: aus Name und Länge abgeleitet — dieselbe Strecke bekommt so in
+    #: jedem Prozess dieselben Ampeln, und Streckendateien von vor
+    #: dieser Mechanik funktionieren unverändert weiter.
+    traffic_lights: list = field(init=False, repr=False, default_factory=list)
 
     def __post_init__(self) -> None:
         self.ele_dm = np.asarray(self.ele_dm, dtype=np.int32)
@@ -133,6 +140,9 @@ class Route:
         # würde als Property bei jedem Zugriff über alle Rasterpunkte laufen.
         self._ascent_m = accumulate_ascent(self.ele_m)
         self._descent_m = accumulate_ascent(-self.ele_m)
+        # Nach den Anstiegen: Die Platzierung braucht sie, um keine Ampel
+        # in eine Rampe zu setzen.
+        self.traffic_lights = signals.place(self)
 
     # ------------------------------------------------------------------
     # Kennzahlen

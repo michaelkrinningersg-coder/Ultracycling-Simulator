@@ -48,6 +48,11 @@ def _np_default(value: Any) -> Any:
 #: völlig aus – der Bildschirm hat nicht mehr Pixel.
 PROFILE_POINTS = 1200
 
+#: So viele **Realzeit**-Sekunden schaut der automatische Fokus zurück.
+#: Mit dem Zeitraffer multipliziert ergibt das das Rennzeitfenster: bei
+#: 1× fünf Sekunden, bei 1000× knapp anderthalb Stunden.
+AUTO_FOCUS_LOOKBACK_S = 5.0
+
 
 def _state(request: Request):
     return request.app.state.ultrasim
@@ -122,6 +127,11 @@ def route_data(request: Request, race_id: str) -> JSONResponse:
             ],
             "service_points": [
                 {"idx": p.idx, "dist_m": p.dist_m, "name": p.name} for p in route.service_points
+            ],
+            # Der Phasenversatz geht bewusst nicht mit: Der Client soll
+            # nicht ausrechnen können, ob eine Ampel gleich rot wird.
+            "traffic_lights": [
+                {"idx": lt.idx, "dist_m": lt.dist_m} for lt in route.traffic_lights
             ],
         }
     )
@@ -208,6 +218,11 @@ async def control(request: Request, token: str) -> JSONResponse:
         session.seek(float(value))
     elif action == "focus":
         session.focus_entry = int(np.clip(int(value), 0, view.n - 1))
+        # Wer selbst wählt, schaltet die Regie ab — sonst hätte sie den
+        # Fahrer beim nächsten Bild wieder weggezogen.
+        session.auto_focus = False
+    elif action == "auto_focus":
+        session.auto_focus = bool(value)
     elif action == "split":
         session.split_idx = int(np.clip(int(value), 0, len(view.route.splits) - 1))
         session.split_follow = False
@@ -266,6 +281,16 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
     Der Client bekommt nie einen Blick nach vorn.
     """
     t = session.now()
+    # Die Regie zuerst: Der Fokus entscheidet über Board-Fenster, Split
+    # und Profil-Ausschnitt, also muss er feststehen, bevor irgendetwas
+    # davon gerechnet wird. Das Fenster ist an den Zeitraffer gekoppelt —
+    # bei 1000× sind fünf Sekunden Realzeit anderthalb Stunden Rennen,
+    # und ein festes Fenster in Rennsekunden würde entweder ständig
+    # umschalten oder nie.
+    if session.auto_focus:
+        session.focus_entry = view.dramatic_focus(
+            t, max(session.speed * AUTO_FOCUS_LOOKBACK_S, 60.0), session.focus_entry
+        )
     snap = view.snapshot(t)
     focus = session.focus_entry
     result = view.result
@@ -314,6 +339,7 @@ def build_frame(view: RaceView, session: PlaybackSession, t_from: float | None =
         "sort": session.sort,
         "sort_desc": session.sort_desc,
         "pinned": list(session.pinned),
+        "auto_focus": session.auto_focus,
         "horizon_s": round(session.horizon_s, 1),
         "positions": positions,
         "board": board,

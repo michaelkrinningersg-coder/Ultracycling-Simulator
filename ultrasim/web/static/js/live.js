@@ -31,6 +31,7 @@ const TICKER_GROUPS = [
   { key: 'aus', label: 'Ausfälle', types: ['DNF', 'BONK'] },
   { key: 'panne', label: 'Zwischenfälle', types: ['INCIDENT', 'MECHANICAL', 'CONDITION_START', 'CONDITION_END'] },
   { key: 'pause', label: 'Stopps & Schlaf', types: ['SLEEP', 'STOP_START', 'STOP_END'] },
+  { key: 'ampel', label: 'Ampeln', types: ['TRAFFIC_LIGHT'] },
   { key: 'takt', label: 'Taktik', types: ['DECISION', 'BIKE_CHANGE'] },
   { key: 'ziel', label: 'Start & Ziel', types: ['START', 'FINISH'] },
 ];
@@ -406,6 +407,8 @@ function raceLive(raceId) {
           body: JSON.stringify({ action, value }),
         });
       if (Number.isInteger(saved.focus)) await send('focus', saved.focus);
+      // Nach dem Fokus, nicht davor: ``focus`` schaltet die Regie ab.
+      if (saved.autoFocus) await send('auto_focus', true);
       if (saved.mode === 'virtual') await send('mode', 'virtual');
       if (Number.isInteger(saved.split)) await send('split', saved.split);
       if (saved.speed) await send('speed', saved.speed);
@@ -423,6 +426,7 @@ function raceLive(raceId) {
           mode: this.frame.mode,
           split: this.frame.board && this.frame.board.split ? this.frame.board.split.idx : null,
           playing: this.frame.playing,
+          autoFocus: this.frame.auto_focus,
         }));
       } catch (e) { /* privater Modus: dann eben ohne Gedächtnis */ }
     },

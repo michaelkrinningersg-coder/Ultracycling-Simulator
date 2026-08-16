@@ -689,3 +689,43 @@ def test_the_control_endpoint_sorts_and_pins(client):
     control("pin", 1)
     frame = client.get(f"/api/playback/{token}/frame").json()
     assert [r["entry_id"] for r in frame["board"]["pinned"]] == [1]
+
+
+# ----------------------------------------------------------------------
+# Automatischer Fokus
+# ----------------------------------------------------------------------
+def test_the_auto_focus_follows_the_drama(view):
+    """Wer gerade einen Zwischenfall hatte, bekommt die Kamera."""
+    from ultrasim.core.events import DRAMATIC_EVENTS
+
+    hit = None
+    for event, wall in zip(view._events, view._event_wall, strict=True):
+        if event.type in DRAMATIC_EVENTS:
+            hit = (event, float(wall))
+            break
+    assert hit is not None, "in einem Rennen passiert immer etwas"
+    event, wall = hit
+    assert view.dramatic_focus(wall, 60.0, current=0) == event.entry_id
+
+
+def test_a_quiet_stretch_leaves_the_focus_alone(view):
+    """Ohne Ereignis bleibt der Fokus stehen.
+
+    Sonst risse die Regie in jeder ruhigen Minute zum Führenden zurück —
+    und ruhige Minuten sind beim Ultracycling die Regel.
+    """
+    assert view.dramatic_focus(0.0, 1.0, current=7) == 7
+
+
+def test_choosing_a_rider_switches_the_direction_off(client):
+    """Eine Regie, die sich nicht abschalten lässt, ist eine Entmündigung."""
+    token = client.post("/api/race/testrennen/session").json()["token"]
+
+    def control(action, value=None):
+        return client.post(
+            f"/api/playback/{token}/control", json={"action": action, "value": value}
+        ).json()
+
+    assert control("auto_focus", True)["auto_focus"] is True
+    assert control("focus", 3)["auto_focus"] is False
+    assert control("focus", 3)["focus_entry"] == 3

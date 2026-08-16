@@ -29,6 +29,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 
+from ..geo import signals as sig
 from ..geo.route import Route
 from . import conditions as cond
 from . import fatigue as fat
@@ -56,6 +57,7 @@ from .events import (
     START,
     STOP_END,
     STOP_START,
+    TRAFFIC_LIGHT,
     RaceEvent,
 )
 from .rider import Rider, Team, season_form
@@ -186,6 +188,12 @@ class RaceEntry:
     #: als eine Panne: Der Aufgabedruck rechnet deshalb nur mit dieser
     #: Zahl. ``0.0`` bei Rennen von vor dieser Trennung.
     lost_incident_s: float = 0.0
+    #: An **Ampeln** verlorene Zeit. Sie steckt in ``lost_s`` mit drin,
+    #: aber nicht in ``lost_incident_s``: Eine rote Ampel ist weder ein
+    #: Zwischenfall noch ein Versäumnis, sondern gleichmäßig verteiltes
+    #: Pech. Sie darf den Aufgabedruck nicht anheben — sonst gäbe ein
+    #: Fahrer auf, weil zu viele Kreuzungen auf seiner Strecke lagen.
+    lost_signal_s: float = 0.0
     #: Im Rennen geleistete Arbeit. Grundlage der Restermüdung fürs
     #: nächste Rennen der Saison (Abschnitt 14).
     work_kj: float = 0.0
@@ -213,6 +221,7 @@ class RaceEntry:
             "dnf_reason": self.dnf_reason,
             "lost_s": round(self.lost_s, 1),
             "lost_incident_s": round(self.lost_incident_s, 1),
+            "lost_signal_s": round(self.lost_signal_s, 1),
             "work_kj": round(self.work_kj, 1),
             "freshness": round(self.freshness, 4),
             "give_up_score": round(self.give_up_score, 4),
@@ -495,6 +504,7 @@ class LiveSnapshot:
     finish_t: np.ndarray
     state: np.ndarray
     lost_s: np.ndarray
+    lost_signal_s: np.ndarray
     lost_incident_s: np.ndarray
     dnf_reason: list[str]
     carry_j: np.ndarray
@@ -580,6 +590,7 @@ class LiveSnapshot:
                 dnf_dist_m=None if self.state[i] != STATE_DNF else float(dist[i]),
                 dnf_reason="" if self.state[i] != STATE_DNF else self.dnf_reason[i],
                 lost_s=float(self.lost_s[i]),
+                lost_signal_s=float(self.lost_signal_s[i]),
                 lost_incident_s=float(self.lost_incident_s[i]),
                 give_up_score=float(give_up[i]),
                 work_kj=float(work_j[i] - self.carry_j[i]) / 1000.0,
@@ -846,6 +857,14 @@ def run_race(
     split_guard = np.append(split_dist, np.inf)
     sp_dist = np.array([s.dist_m for s in route.service_points], dtype=np.float64)
     sp_guard = np.append(sp_dist, np.inf)
+    # Ampeln. Dieselbe Mechanik wie bei Splits und Servicepunkten: ein
+    # Zeiger je Fahrer auf die nächste Marke vor ihm, dahinter ein
+    # ``inf``, damit der Zeiger nach der letzten Marke ins Leere zeigt
+    # statt aus dem Array zu laufen.
+    light_offset = np.array([lt.offset_s for lt in route.traffic_lights], dtype=np.float64)
+    light_guard = np.append(
+        np.array([lt.dist_m for lt in route.traffic_lights], dtype=np.float64), np.inf
+    )
 
     n_sections = max(len(sp_dist) + 1, 1)
     planned_bike = np.zeros((n, n_sections), dtype=np.int8)
@@ -901,6 +920,8 @@ def run_race(
     #: zählt nicht — den hat der Fahrer selbst so gewollt. Das ist die
     #: Zahl für die Ergebnisliste: „vier Stunden liegengeblieben".
     lost_s = np.zeros(n)
+    #: Davon der Teil, der an **Ampeln** steht.
+    lost_signal_s = np.zeros(n)
     #: Davon der Teil, der auf **Zwischenfälle** geht — ohne Notschlaf.
     #:
     #: Der Aufgabedruck rechnet mit dieser Zahl und nicht mit ``lost_s``,
@@ -948,6 +969,7 @@ def run_race(
     finish_t = np.full(n, np.nan)
     next_split = np.zeros(n, dtype=np.int64)
     next_sp = np.zeros(n, dtype=np.int64)
+    next_light = np.zeros(n, dtype=np.int64)
 
     bike_mass = np.array([ph.BIKES[name]["mass_kg"] for name in ph.BIKE_NAMES])
     bike_cda_f = np.array([ph.BIKES[name]["cda_factor"] for name in ph.BIKE_NAMES])
@@ -1253,6 +1275,7 @@ def run_race(
         finish_t=finish_t,
         state=state,
         lost_s=lost_s,
+        lost_signal_s=lost_signal_s,
         lost_incident_s=lost_incident_s,
         dnf_reason=dnf_reason,
         carry_j=carry_j,
@@ -1914,6 +1937,41 @@ def run_race(
                         )
                     )
                 next_sp[at_sp] += 1
+                running = state == STATE_RIDING
+
+            # --- Ampeln ----------------------------------------------
+            # Der erste Halt im Modell, den niemand plant und niemand
+            # verschuldet. Die Phase läuft in Fahrer-Eigenzeit — warum,
+            # steht im Modulkopf von ``geo.signals``.
+            #
+            # Kein Mehrfachdurchgang wie bei den Splits: Zwischen zwei
+            # Ampeln liegen mindestens fünf Kilometer, und in einer
+            # Sekunde fährt niemand fünf Kilometer.
+            if light_offset.size:
+                at_light = running & (dist >= light_guard[next_light])
+                if at_light.any():
+                    for i in np.flatnonzero(at_light):
+                        wait = sig.wait_s(float(light_offset[next_light[i]]), t_next)
+                        if wait <= 0.0:
+                            continue  # grün, weiterfahren
+                        stop_left[i] = wait
+                        state[i] = STATE_STOPPED
+                        v[i] = 0.0
+                        lost_s[i] += wait
+                        lost_signal_s[i] += wait
+                        events.append(
+                            RaceEvent(
+                                int(i),
+                                t_next,
+                                TRAFFIC_LIGHT,
+                                {
+                                    "wait_s": round(wait, 1),
+                                    "dist_km": round(float(dist[i]) / 1000.0, 2),
+                                },
+                            )
+                        )
+                    next_light[at_light] += 1
+                    running = state == STATE_RIDING
 
             # --- Ziel ------------------------------------------------
             arrived = running & (dist >= total_distance)
@@ -2003,6 +2061,7 @@ def run_race(
             dnf_dist_m=None if state[i] == STATE_FINISHED else float(dist[i]),
             dnf_reason="" if state[i] == STATE_FINISHED else dnf_reason[i],
             lost_s=float(lost_s[i]),
+            lost_signal_s=float(lost_signal_s[i]),
             lost_incident_s=float(lost_incident_s[i]),
             give_up_score=float(give_up[i]),
             # Nur die *eigene* Arbeit, ohne den Übertrag – sonst würde

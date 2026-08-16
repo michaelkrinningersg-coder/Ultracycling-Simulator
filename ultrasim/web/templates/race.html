@@ -234,6 +234,11 @@
         </template>
         <button @click="control('next_split')" title="Sprung zum nächsten Split des Fokusfahrers">▸ Split</button>
         <button @click="control('next_event')" title="Sprung zum nächsten Ereignis des Fokusfahrers">▸ Ereignis</button>
+        <button @click="control('auto_focus', !(frame && frame.auto_focus))"
+                :class="{on: frame && frame.auto_focus}"
+                title="Regie: Der Fokus folgt dem, bei dem gerade etwas passiert — Aufgabe, Sturz, Defekt, Hungerast, Bestzeit, Ziel. Ein Klick auf einen Fahrer schaltet sie wieder ab.">
+          ◉ Regie
+        </button>
         <input class="scrub" type="range" min="0" max="1000" step="1"
                :value="frame ? (frame.t_wall / Math.max(frame.horizon_s,1)) * 1000 : 0"
                @input="seekFraction($event.target.value / 1000)">
@@ -260,6 +265,7 @@
           <span><i style="background:rgba(217,83,79,.35)"></i>kategorisierter Anstieg</span>
           <span><i style="background:#a78bfa"></i>ab 1500 m kostet Höhe Leistung</span>
           <span><i style="background:#47b4ff"></i>Servicepunkt</span>
+          <span><i style="background:#e0574f"></i>Ampel</span>
           <span><i style="background:#ffc247"></i>Fokusfahrer</span>
           <span><i style="background:#f8717a"></i>Zustand des Fokusfahrers</span>
         </div>

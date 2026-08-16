@@ -203,6 +203,13 @@ def _standing_time(entry: Any, biggest_stop_s: float = 0.0) -> str:
     if total < NOTABLE_LOSS_S:
         return ""
     incidents = float(getattr(entry, "lost_incident_s", 0.0) or 0.0)
+    # Ampeln stehen nicht im Satz. Sie treffen jeden ungefähr gleich und
+    # erzählen deshalb nichts über diesen Fahrer — sie stehen in der
+    # Spalte, wo man sie nachsehen kann, wenn man sie sucht.
+    signals = float(getattr(entry, "lost_signal_s", 0.0) or 0.0)
+    total = max(total - signals, 0.0)
+    if total < NOTABLE_LOSS_S:
+        return ""
     sleep = max(total - incidents, 0.0)
     if sleep < NOTABLE_LOSS_S:
         # War der größte Halt praktisch die ganze Standzeit, steht sie

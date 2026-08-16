@@ -122,6 +122,21 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geändert
 
+- **Der Fokusfahrer im Seitenstreifen steht jetzt im Raster.** Die zwölf
+  Kennzahlen lagen in einer umbrechenden Flexbox: Jede Zelle so breit
+  wie ihr Inhalt, also in jeder Zeile andere Spaltenpositionen, und der
+  Umbruch kam von der Fensterbreite statt von der Bedeutung — „Hydration
+  und Glykogen" landeten zusammen, „Rad" allein darunter.
+
+  Jetzt drei gleich breite Spalten, vier Zeilen, drei Gruppen mit einer
+  Linie dazwischen: **wo er ist** (gefahren, Rest, Fahrerzeit), **was er
+  gerade tut** (Tempo, Steigung, Leistung), **wie es ihm geht** (Form,
+  W′, Schlaf, Wasser, Glykogen, Rad). Die Einheit steht in der
+  Beschriftung, im Wert nur die Zahl — damit stehen die Ziffern
+  untereinander statt hinter unterschiedlich langen Einheiten.
+
+  Nebenbei: Einheiten in Kleinschreibung trotz Versalbeschriftung.
+  „KM/H" ist keine Einheit, „km/h" ist eine.
 - **Zeitlimit von 1,4 auf 2,0 × Siegerzeit.** Abschnitt 15 führt den
   Wert als offenen Punkt und schlägt 1,4 vor; gemessen war das zu eng.
   Auf den Dolomiten-Vierpässen fielen damit 32 % des Feldes aus der

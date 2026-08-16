@@ -108,6 +108,38 @@ button:disabled { opacity: .4; cursor: default; }
 .readout .v { font-family: var(--mono); font-size: 1.05rem; }
 .readout .v.big { font-size: 1.6rem; color: var(--accent); font-weight: 600; }
 
+/* ---------- Kennzahlengitter des Fokusfahrers ----------
+   Vorher war das eine umbrechende Flexbox: Jede Zelle so breit wie ihr
+   Inhalt, also in jeder Zeile andere Spaltenpositionen und ein Umbruch,
+   den die Fensterbreite bestimmt hat statt wir. Hier steht ein festes
+   Raster — drei gleich breite Spalten, vier Zeilen, Gruppen durch eine
+   Linie getrennt. Die Einheit gehört in die Beschriftung, damit im Wert
+   nur die Zahl steht und die Ziffern untereinander stehen. */
+.statgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem .5rem; }
+.statgrid .cell { display: flex; flex-direction: column; min-width: 0; }
+.statgrid .k {
+  font-size: .58rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--fg-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Einheiten in Kleinschreibung, obwohl die Beschriftung in Versalien
+   steht: „KM/H" ist keine Einheit, „km/h" ist eine. Das SI-System
+   unterscheidet Groß- und Kleinschreibung, und ein Board, das Physik
+   anzeigt, sollte sich daran halten. */
+.statgrid .k .u { color: #414c63; margin-left: .2em; text-transform: none; letter-spacing: 0; }
+.statgrid .v { font-family: var(--mono); font-size: 1.02rem; line-height: 1.3; }
+/* Das Rad ist der einzige Wert, der keine Zahl ist. Der Chip muss
+   deshalb in eine Spalte passen, die für dreistellige Zahlen bemessen
+   ist — sonst schiebt er das Raster auseinander, das er eigentlich
+   nutzen soll. */
+.statgrid .v.wide { font-size: .82rem; line-height: 1.4; }
+.statgrid .v.wide .chip {
+  font-size: .55rem; padding: .05rem .28rem; letter-spacing: .02em;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Trennlinie zwischen zwei Gruppen. Sie kostet drei Pixel Höhe und
+   ersetzt drei Überschriften, für die im Seitenstreifen kein Platz ist. */
+.statgrid .sep { grid-column: 1 / -1; height: 1px; background: var(--line); margin: .1rem 0; }
+
 .chip {
   display: inline-block; padding: .05rem .4rem; border-radius: 3px;
   font-size: .68rem; letter-spacing: .04em; text-transform: uppercase;
@@ -420,7 +452,13 @@ details.why { margin-top: .5rem; border-top: 1px solid var(--line); padding-top:
 details.why > summary { cursor: pointer; display: flex; justify-content: space-between;
   gap: .5rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;
   color: var(--fg-dim); list-style: none; white-space: nowrap; }
+/* Zwei Beschriftungen, eine Zeile: Links steht, worum es geht, rechts
+   der teuerste Faktor. Ohne die Gewichtung kürzt der Browser beide
+   gleichmäßig, und dann steht dort „Warum 10… Langzeitermüdung…" —
+   zwei halbe Wörter statt einer Aussage. */
 details.why > summary > span { overflow: hidden; text-overflow: ellipsis; }
+details.why > summary > span:first-child { flex: 0 0 auto; }
+details.why > summary > span + span { flex: 0 1 auto; min-width: 0; }
 details.why > summary::-webkit-details-marker { display: none; }
 details.why > summary::before { content: "▸ "; color: var(--fg-faint); }
 details.why[open] > summary::before { content: "▾ "; }

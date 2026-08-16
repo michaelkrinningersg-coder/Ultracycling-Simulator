@@ -59,38 +59,44 @@
             <div class="item"><span class="k">Gefahrene Zeit</span>
               <span class="v big" x-text="hms(liveOwnTime)"></span></div>
           </div>
-          <div class="readout" style="margin-top:.4rem">
-            <div class="item"><span class="k">Fahrerzeit</span>
-              <span class="v" x-text="focus.own_clock || '—'"></span></div>
-            <div class="item"><span class="k">Kilometer</span>
+          <!-- Drei Gruppen in einem festen Raster: wo er ist, was er
+               gerade tut, wie es ihm geht. Die Trennlinien machen die
+               Gruppierung zu einer Entscheidung — vorher hat sie der
+               Zeilenumbruch getroffen. -->
+          <div class="statgrid" style="margin-top:.55rem">
+            <div class="cell"><span class="k">Gefahren<span class="u">km</span></span>
               <span class="v" x-text="(focus.dist_m/1000).toFixed(1)"></span></div>
-            <div class="item"><span class="k">Rest</span>
+            <div class="cell"><span class="k">Rest<span class="u">km</span></span>
               <span class="v" x-text="(focus.remaining_m/1000).toFixed(1)"></span></div>
-          </div>
-          <div class="readout" style="margin-top:.4rem">
-            <div class="item"><span class="k">Tempo</span>
-              <span class="v" x-text="focus.v_kmh.toFixed(1) + ' km/h'"></span></div>
-            <div class="item"><span class="k">Steigung</span>
-              <span class="v" x-text="focus.grade_pct.toFixed(1) + ' %'"></span></div>
-            <div class="item"><span class="k">Leistung</span>
-              <span class="v" x-text="focus.power_w + ' W'"></span></div>
-          </div>
-          <div class="readout" style="margin-top:.4rem">
-            <div class="item"><span class="k">Form</span>
-              <span class="v" x-text="focus.form_pct + ' %'"></span></div>
-            <div class="item"><span class="k">W′</span>
-              <span class="v" x-text="focus.wprime_pct + ' %'"></span></div>
-            <div class="item"><span class="k">Schlafdruck</span>
+            <div class="cell"><span class="k">Fahrerzeit</span>
+              <span class="v" x-text="focus.own_clock || '—'"></span></div>
+
+            <div class="sep"></div>
+
+            <div class="cell"><span class="k">Tempo<span class="u">km/h</span></span>
+              <span class="v" x-text="focus.v_kmh.toFixed(1)"></span></div>
+            <div class="cell"><span class="k">Steigung<span class="u">%</span></span>
+              <span class="v" x-text="focus.grade_pct.toFixed(1)"></span></div>
+            <div class="cell"><span class="k">Leistung<span class="u">W</span></span>
+              <span class="v" x-text="focus.power_w"></span></div>
+
+            <div class="sep"></div>
+
+            <div class="cell"><span class="k">Form<span class="u">%</span></span>
+              <span class="v" x-text="focus.form_pct"></span></div>
+            <div class="cell"><span class="k">W′<span class="u">%</span></span>
+              <span class="v" x-text="focus.wprime_pct"></span></div>
+            <div class="cell"><span class="k" title="Schlafdruck">Schlaf<span class="u">%</span></span>
               <span class="v" :class="focus.sleep_pct > 120 ? 'bad' : (focus.sleep_pct > 60 ? 'warn' : '')"
-                    x-text="focus.sleep_pct + ' %'"></span></div>
-            <div class="item"><span class="k">Hydration</span>
+                    x-text="focus.sleep_pct"></span></div>
+            <div class="cell"><span class="k">Wasser<span class="u">%</span></span>
               <span class="v" :class="focus.hydration_pct < 30 ? 'bad' : (focus.hydration_pct < 60 ? 'warn' : '')"
-                    x-text="focus.hydration_pct + ' %'"></span></div>
-            <div class="item"><span class="k">Glykogen</span>
+                    x-text="focus.hydration_pct"></span></div>
+            <div class="cell"><span class="k">Glykogen<span class="u">%</span></span>
               <span class="v" :class="focus.glyco_pct < 15 ? 'bad' : (focus.glyco_pct < 30 ? 'warn' : '')"
-                    x-text="focus.glyco_pct + ' %'"></span></div>
-            <div class="item"><span class="k">Rad</span>
-              <span class="v"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
+                    x-text="focus.glyco_pct"></span></div>
+            <div class="cell"><span class="k">Rad</span>
+              <span class="v wide"><span class="chip" :class="focus.bike === 'tt' ? 'tt' : ''"
                     x-text="focus.bike === 'tt' ? 'Zeitfahrrad' : 'Straßenrad'"></span></span></div>
           </div>
           <!-- Warum-Panel: die Form in ihre Faktoren zerlegt ------- -->

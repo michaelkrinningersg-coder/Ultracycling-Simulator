@@ -164,6 +164,13 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - Startpfad
     parser.add_argument(
         "--demo", action="store_true", help="beim ersten Start ein Demo-Rennen rechnen"
     )
+    # ``--no-demo`` war nötig, solange beim Start vorgerechnet wurde. Das
+    # ist jetzt der Normalfall, die Option also wirkungslos — sie wird
+    # trotzdem angenommen und aus der Hilfe ausgeblendet: Eine Verknüpfung
+    # oder ein Skript, das sie noch mitgibt, soll nicht mit einem
+    # Argumentfehler abbrechen, statt das Programm zu starten. Genau das
+    # ist beim Smoke-Test des Release-Builds passiert.
+    parser.add_argument("--no-demo", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     root = ensure_user_data()

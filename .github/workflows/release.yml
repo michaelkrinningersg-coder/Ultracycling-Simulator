@@ -45,7 +45,7 @@ jobs:
         shell: pwsh
         run: |
           $proc = Start-Process -FilePath dist\UltracyclingSimulator.exe `
-            -ArgumentList "--no-browser","--no-demo","--port","8765" -PassThru
+            -ArgumentList "--no-browser","--port","8765" -PassThru
           try {
             $ok = $false
             foreach ($i in 1..30) {

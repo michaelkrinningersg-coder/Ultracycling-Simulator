@@ -49,12 +49,14 @@ dist/UltracyclingSimulator.exe
 ```
 
 Beim ersten Start legt die EXE neben sich ein Verzeichnis
-`ultrasim-daten/` an, kopiert die mitgelieferten Strecken hinein und
-rechnet ein Demo-Rennen (40 Fahrer auf der kürzesten Strecke, rund fünf
-Sekunden). Danach öffnet sich der Browser auf
+`ultrasim-daten/` an und kopiert die mitgelieferten Strecken hinein.
+Vorgerechnet wird dabei nichts — die Übersicht führt direkt zum Start
+einer Saison. Danach öffnet sich der Browser auf
 `http://127.0.0.1:8000/`.
 
-Optionen: `--no-browser`, `--no-demo`, `--port 8080`.
+Optionen: `--no-browser`, `--port 8080`, `--demo` (rechnet beim ersten
+Start ein Demo-Rennen vor: 40 Fahrer auf der kürzesten Strecke, rund
+fünf Sekunden).
 
 ## Fallstricke
 

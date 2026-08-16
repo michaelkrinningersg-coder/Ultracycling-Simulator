@@ -11,13 +11,13 @@
   <div class="panel">
     <div class="panel-title"><span>Noch kein Fahrerpool</span></div>
     <form method="post" action="/pool/reset" class="form-row">
-      <label>Fahrer<input type="number" name="riders" value="250" min="2" max="2000"></label>
+      <label>Fahrer<input type="number" name="riders" value="300" min="2" max="2000"></label>
       <label>Teams<input type="number" name="teams" value="0" min="0" max="200" placeholder="automatisch"></label>
       <label>Seed<input type="number" name="seed" value="1"></label>
       <button class="primary" type="submit">Pool erzeugen</button>
     </form>
     <p class="dim" style="max-width:80ch;margin-top:.6rem">
-      Bei 250 Fahrern sind 25–35 Teams à 7–10 Fahrer plausibel; zu wenige Teams
+      Standard sind 25 Teams à 12 Fahrer, zusammen 300 — alle starten. Zu wenige Teams
       machen die Servicedisziplin zum dominanten Faktor. Teams leer lassen heißt:
       der Generator wählt.
     </p>
@@ -167,7 +167,7 @@
     <div class="panel-title"><span>Pool neu würfeln</span></div>
     <form method="post" action="/pool/reset" class="form-row"
           onsubmit="return confirm('Alle Fahrer und Teams verwerfen und neu erzeugen? Bearbeitete Fahrer gehen verloren.')">
-      <label>Fahrer<input type="number" name="riders" value="250" min="2" max="2000"></label>
+      <label>Fahrer<input type="number" name="riders" value="300" min="2" max="2000"></label>
       <label>Teams<input type="number" name="teams" value="0" min="0" max="200"></label>
       <label>Seed<input type="number" name="seed" value="1"></label>
       <button class="danger" type="submit">Pool neu würfeln</button>

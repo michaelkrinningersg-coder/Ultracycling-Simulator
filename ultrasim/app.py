@@ -76,7 +76,7 @@ def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
     das eigentlich aus?
     """
     from .core.engine import RaceConfig, simulate_race
-    from .core.rider import generate_pool
+    from .core.rider import DEFAULT_FIELD, generate_pool
     from .data.store import Store
 
     store = Store(root)
@@ -97,7 +97,7 @@ def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
     if store.pool_exists():
         teams, pool = store.load_pool()
     else:
-        teams, pool = generate_pool(250, seed=1)
+        teams, pool = generate_pool(DEFAULT_FIELD, seed=1)
         store.save_pool(teams, pool)
 
     route = store.load_route(pick["id"])

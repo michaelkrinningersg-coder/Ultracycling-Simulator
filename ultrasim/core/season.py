@@ -233,7 +233,7 @@ class CalendarRace:
     name: str
     route_id: str
     day: date
-    n_riders: int = 250
+    n_riders: int = 300
     seed: int = 1
     weather_preset: str | None = None
     #: None = aus der Strecke abgeleitet, sobald sie bekannt ist.

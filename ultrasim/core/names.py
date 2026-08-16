@@ -103,17 +103,51 @@ LAST_NAMES: dict[str, tuple[str, ...]] = {
             "Pemberton", "Quimby"),
 }
 
-#: Bausteine für Teamnamen – ergeben zusammen plausible Ultra-Teams.
-TEAM_PREFIXES = (
-    "Nordwind", "Alpenrand", "Meridian", "Kettenreaktion", "Polarstern", "Hinterland",
-    "Rückenwind", "Weitwinkel", "Kilometerfresser", "Tagwerk", "Nachtschicht", "Fernblick",
-    "Steilhang", "Bergstation", "Windkanal", "Dauerlauf", "Randonneur", "Grenzgänger",
-    "Höhenmeter", "Talsohle", "Kurbelwelle", "Sonnenaufgang", "Schotterpiste", "Wegweiser",
-    "Zeitfenster", "Trittfrequenz", "Ausreißer", "Schlafmütze", "Vollgas", "Rollentiefe",
-    "Sattelfest", "Marathon", "Tempomacher", "Kompass", "Nebelbank",
-)
-
-TEAM_SUFFIXES = (
-    "Racing", "Ultra", "Endurance", "Cycling", "Collective", "Project", "Squad",
-    "Team", "Crew", "Werkstatt",
+#: Die fünfundzwanzig Teams der Weltserie, benannt wie im echten
+#: Radsport: **Ausrüster und Radmarke**, durch einen Halbgeviertstrich
+#: verbunden. Genau so heißen reale Mannschaften — Soudal–Quick-Step,
+#: Red Bull–Bora–hansgrohe —, und deshalb liest sich eine Startliste
+#: sofort als Startliste und nicht als Wortliste.
+#:
+#: **Die Marken sind echt, die Teams sind es nicht.** Keine der
+#: genannten Firmen hat mit diesem Programm zu tun, sponsert nichts und
+#: weiß nichts davon; die Namen stehen hier, weil eine erfundene Marke
+#: neben einer erfundenen Mannschaft die Illusion zweimal bricht. Der
+#: Hinweis steht auch im README, weil er dort jemand liest, der die
+#: Namen für eine Partnerschaft halten könnte.
+#:
+#: Fünfundzwanzig feste Paare statt zufälliger Kombinationen: Ein Team
+#: soll über Saisons hinweg dasselbe Team bleiben. Wer "Ortlieb–Cube"
+#: einmal als den Rennstall mit den drei Bergfahrern kennengelernt hat,
+#: findet ihn im nächsten Jahr wieder.
+#:
+#: Die Zuordnung mischt Herkünfte bewusst — deutsche Ausrüster neben
+#: italienischen Rahmen, skandinavische neben spanischen. Ein Feld, in
+#: dem alle Paare aus demselben Land kämen, sähe nach Katalog aus.
+TEAM_NAMES: tuple[str, ...] = (
+    "Vaude–Canyon",
+    "Ortlieb–Cube",
+    "Deuter–Rose",
+    "Osprey–Trek",
+    "Mammut–Scott",
+    "Fjällräven–Bianchi",
+    "Patagonia–Cervélo",
+    "Salomon–Specialized",
+    "Jack Wolfskin–Focus",
+    "Arc'teryx–Pinarello",
+    "Black Diamond–Cannondale",
+    "Petzl–Lapierre",
+    "Thule–Giant",
+    "Exped–BMC",
+    "Sea to Summit–Merida",
+    "Haglöfs–Ridley",
+    "Norrøna–Orbea",
+    "Bergans–Colnago",
+    "Rab–Wilier",
+    "Montane–Storck",
+    "Icebreaker–Stevens",
+    "Buff–Ghost",
+    "Camelbak–Felt",
+    "Salewa–De Rosa",
+    "Schöffel–Kona",
 )

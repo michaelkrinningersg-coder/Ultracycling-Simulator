@@ -20,7 +20,7 @@
         <option value="{{ route.id }}">{{ route.name }} · {{ '%.0f'|format(route.distance_km) }} km</option>
         {% endfor %}
       </select>
-      <label class="dim">Starter <input type="number" name="riders" value="40" min="2" max="250" style="width:5rem"></label>
+      <label class="dim">Starter <input type="number" name="riders" value="40" min="2" max="300" style="width:5rem"></label>
       <label class="dim">Seed <input type="number" name="seed" value="42" style="width:6rem"></label>
       <button class="primary" type="submit">Übertragung starten</button>
     </form>
@@ -47,7 +47,7 @@
     </div>
     {% else %}
     <p class="dim">Noch kein Rennen gerechnet. Auf der Kommandozeile:</p>
-    <pre class="mono dim">python -m ultrasim.cli.simulate pool --riders 250
+    <pre class="mono dim">python -m ultrasim.cli.simulate pool --riders 300
 python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</pre>
     {% endif %}
   </div>

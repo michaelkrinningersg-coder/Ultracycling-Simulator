@@ -23,7 +23,7 @@ hier umgesetzt.
 |---|---|
 | GPX-Import (M1) | Namespace-tolerantes Parsen, Duplikatentfernung, Höheninterpolation, Resampling auf 10 m, Savitzky-Golay-Glättung, Segmentierung, Anstiegserkennung mit Kategorien, Splits und Servicepunkte, gzip-JSON |
 | Physik (M2) | Roll-, Steigungs-, Luft- und Beschleunigungswiderstand, Euler-Integration mit 1 s Tick, höhenabhängige Luftdichte, Abfahrtslogik mit Trittfrequenzgrenze und Kurvenlimit, CdA aus Körpermaßen. Der Rollwiderstand hängt an Oberfläche, Reifen, Tempo und Systemmasse — inklusive Impedanz, also dem Anteil, der als Schwingung verlorengeht |
-| Fahrer (M3) | Generator mit acht Archetypen und Potenzial-Budget, 25 Attribute, Saison-/Tages-/Abschnittsform (OU-Prozess), W′ und Langzeitermüdung, Team-Attribut Servicedisziplin |
+| Fahrer (M3) | Generator mit acht Archetypen und Potenzial-Budget, 25 Attribute, Saison-/Tages-/Abschnittsform (OU-Prozess), W′ und Langzeitermüdung, Team-Attribut Servicedisziplin. Das Standardfeld sind **25 Teams à 12 Fahrer**, zusammen 300 — alle starten in jedem Rennen |
 | Strategie | Rennplan je Fahrer: Ziel-Intensität aus der Distanz, Anstiegs-Aufschlag, Radwahl je Abschnitt zwischen Servicepunkten und Anstiegen, mit Wirtschaftlichkeitsprüfung — jede Entscheidung mit Begründung protokolliert |
 | Rennen (M3) | Vektorisiert über das ganze Feld, Einzelstart, Splitzeiten mit Sub-Tick-Interpolation, Ereignis-Strom, quantisierte Telemetrie |
 | Oberfläche (M4) | Höhenprofil-Canvas mit Übersicht und Ausschnitt, Telemetrie-Board mit 41-Zeilen-Fenster, virtuelle Rangliste, Ticker, Playback-Server mit sieben Zeitrafferstufen (1×, 5×, 10×, 30×, 60×, 300×, 1000×), Ergebnisliste, Fahrerdetail mit Verlaufskurven. Uhr *und* Rückstand zählen zwischen zwei Frames mit, statt im Takt der Frames zu springen; eine eigene Spalte zeigt die Meter bis zur nächsten Zeitmessung |
@@ -311,6 +311,15 @@ Flachetappe sind fast gleich lang und in jeder anderen Hinsicht
 Gegenpole, 13,4 gegen 2,3 Höhenmeter je Kilometer. Nebeneinander in
 derselben Zeile sagt die Sensitivitätsmatrix damit nicht nur, was ein
 Attribut wert ist, sondern *wofür*.
+
+> **Zu den Teamnamen:** Die fünfundzwanzig Mannschaften heißen nach dem
+> Muster des echten Radsports — ein Ausrüster und eine Radmarke,
+> `Vaude–Canyon`, `Ortlieb–Cube`, `Deuter–Rose`. Die **Marken sind
+> echt, die Teams sind es nicht.** Keine der genannten Firmen hat mit
+> diesem Programm zu tun, sponsert nichts und weiß nichts davon; die
+> Namen stehen da, weil eine erfundene Marke neben einer erfundenen
+> Mannschaft die Illusion zweimal bricht. Wer das Programm
+> weitergibt, sollte diesen Absatz mitgeben.
 
 > Diese vier sind **synthetisch erzeugt**, nicht real: Sie entstehen aus
 > `tools/make_demo_gpx.py` und dienen dazu, die Importkette und das Spiel

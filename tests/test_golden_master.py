@@ -90,19 +90,35 @@ GOLDEN_ROUTE = {
 #:   früher greift. Auf diesen welligen 60 km verschiebt sich fast das
 #:   ganze Feld: Startnummer 12 gewinnt zwei Plätze, 5 verliert einen,
 #:   und die Zeiten wandern um bis zu anderthalb Minuten.
+#: **Einmalig neu gesetzt beim Wechsel auf feste Teams.**
+#:
+#: ``generate_pool`` zog Teams und Fahrer aus *einem* Generator. Als die
+#: Teamnamen von zufälligen Kombinationen auf eine feste Liste
+#: umgestellt wurden, zog ein Team drei Zufallszahlen weniger (Präfix,
+#: Suffix, Farbton) — und damit verschob sich jede Ziehung dahinter.
+#: Derselbe Seed lieferte ein anderes Fahrerfeld, obwohl an den Fahrern
+#: nichts geändert war.
+#:
+#: Die Zahlen unten neu zu setzen ist deshalb genau der Griff, den ein
+#: Golden Master verhindern soll — und hier trotzdem richtig, weil die
+#: Ursache verstanden ist und *behoben*: Teams und Fahrer haben seitdem
+#: getrennte Ströme (``spawn_key``), und
+#: ``test_the_team_list_does_not_move_the_riders`` hält das fest. Eine
+#: Änderung an der Teamliste bewegt ab jetzt keinen Fahrer mehr, dieser
+#: Neusatz war der letzte seiner Art.
 GOLDEN_RESULT = [
-    (12, 5941.53),
-    (6, 5973.89),
-    (8, 6103.95),
-    (9, 6168.44),
-    (11, 6206.94),
-    (3, 6263.53),
-    (5, 6320.78),
-    (2, 6498.97),
-    (10, 6569.60),
-    (4, 6579.27),
-    (7, 6937.30),
-    (1, 7063.39),
+    (8, 6117.59),
+    (12, 6119.87),
+    (4, 6251.66),
+    (9, 6306.16),
+    (11, 6335.41),
+    (10, 6369.10),
+    (5, 6497.97),
+    (1, 6572.98),
+    (2, 6593.59),
+    (7, 6646.14),
+    (6, 6736.09),
+    (3, 6923.12),
 ]
 
 TOLERANCE_S = 0.5
@@ -212,34 +228,21 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Offsets und der Körperbau: ``fettverbrennung`` von 24 auf 15 und
 #:   der Diesel von ``wkg_bias=-0.20`` auf 0 bei +4 cm Körpergröße.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (7, 147605.24),
-    (8, 151532.94),
-    (5, 151825.23),
-    (3, 154014.66),
-    (4, 162709.93),
-    (1, 166067.78),
-    (6, 167462.86),
+    (5, 140014.22),
+    (3, 150917.16),
+    (7, 152956.57),
+    (4, 153710.88),
+    (2, 154126.33),
+    (8, 156779.39),
+    (1, 162828.46),
+    (6, 168153.32),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
 #: Gewinn des langen Laufs: Wer am Schlafmodell dreht, sieht hier sofort,
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
-GOLDEN_LONG_EVENTS: dict[str, int] = {
-    "BIKE_CHANGE": 3,
-    "CONDITION_END": 36,
-    "CONDITION_START": 44,
-    "DECISION": 10,
-    "DNF": 1,
-    "FINISH": 7,
-    "INCIDENT": 53,
-    "PLAN": 72,
-    "SLEEP": 3,
-    "SPLIT_PASSED": 315,
-    "START": 8,
-    "STOP_END": 134,
-    "STOP_START": 82,
-}
+GOLDEN_LONG_EVENTS: dict[str, int] = {'CONDITION_END': 29, 'CONDITION_START': 40, 'DECISION': 11, 'FINISH': 8, 'INCIDENT': 50, 'PLAN': 66, 'SLEEP': 2, 'SPLIT_PASSED': 336, 'START': 8, 'STOP_END': 138, 'STOP_START': 88}
 
 TOLERANCE_LONG_S = 2.0
 
@@ -286,3 +289,31 @@ def _compare(
             f"{name} = [\n{block}\n]\n\n"
             f"alt: {golden}\nneu: {actual}"
         )
+
+
+def test_the_team_list_does_not_move_the_riders():
+    """Die Teamliste darf das Fahrerfeld nicht verschieben.
+
+    Der Grund, warum die Zahlen oben einmal neu gesetzt werden mussten:
+    Teams und Fahrer zogen aus demselben Zufallsgenerator. Ein Team mit
+    drei Ziehungen weniger — feste Namen statt zufälliger Kombinationen,
+    berechnete Farbe statt gewürfelter — verschob damit jede Ziehung
+    dahinter, und derselbe Seed lieferte ein anderes Feld.
+
+    Seitdem sind es zwei Ströme über ``spawn_key``. Dieser Test ist die
+    Zusicherung, dass es dabei bleibt: Wer einen Teamnamen ändert, eine
+    Farbe anders rechnet oder ein Team hinzufügt, darf kein einziges
+    Fahrerattribut bewegen.
+    """
+    import ultrasim.core.names as names
+    from ultrasim.core.rider import generate_pool
+
+    _, vorher = generate_pool(40, n_teams=4, seed=31)
+    original = names.TEAM_NAMES
+    try:
+        names.TEAM_NAMES = tuple(f"Umbenannt {i}" for i in range(len(original)))
+        _, nachher = generate_pool(40, n_teams=4, seed=31)
+    finally:
+        names.TEAM_NAMES = original
+
+    assert [r.to_dict() for r in vorher] == [r.to_dict() for r in nachher]

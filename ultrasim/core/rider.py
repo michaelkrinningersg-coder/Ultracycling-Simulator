@@ -19,8 +19,7 @@ from .names import (
     LAST_NAMES,
     NATION_WEIGHTS,
     NATIONS,
-    TEAM_PREFIXES,
-    TEAM_SUFFIXES,
+    TEAM_NAMES,
 )
 
 # ----------------------------------------------------------------------
@@ -479,15 +478,38 @@ def generate_rider(
     )
 
 
+#: Fahrer je Team. Zwölf mal fünfundzwanzig Teams ergibt das Feld der
+#: Weltserie: 300 Starter, alle in jedem Rennen dabei.
+RIDERS_PER_TEAM = 12
+
+#: Das Standardfeld. Wer ``generate_pool()`` ohne Zahl aufruft, bekommt
+#: genau dieses.
+DEFAULT_FIELD = len(TEAM_NAMES) * RIDERS_PER_TEAM
+
+
 def generate_team(rng: np.random.Generator, team_id: int, used: set[str]) -> Team:
-    for _ in range(40):
-        name = f"{rng.choice(TEAM_PREFIXES)} {rng.choice(TEAM_SUFFIXES)}"
-        if name not in used:
-            break
-    else:  # pragma: no cover - praktisch unerreichbar
-        name = f"Team {team_id}"
+    """Ein Team aus der festen Liste, der Reihe nach.
+
+    Die Namen sind nicht mehr zufällig kombiniert, sondern feste Paare
+    aus ``TEAM_NAMES``. Ein Team soll über Saisons hinweg dasselbe Team
+    bleiben — wer es einmal kennengelernt hat, findet es wieder.
+
+    Die Farbe ist es deshalb auch: Sie kommt aus der Position in der
+    Liste statt aus dem Zufall. Fünfundzwanzig Teams über den Farbkreis
+    verteilt liegen 14,4 Grad auseinander, und der Versatz je zweitem
+    Team bricht die Reihenfolge auf, damit nicht alle Nachbarn in der
+    Startliste dieselbe Farbfamilie tragen. Vorher konnten zwei Teams
+    zufällig fast dieselbe Farbe ziehen — und im Board ist der Farbkeil
+    das einzige, was ein Team auf einen Blick unterscheidet.
+    """
+    if team_id < len(TEAM_NAMES):
+        name = TEAM_NAMES[team_id]
+    else:
+        # Mehr Teams als Namen: durchnummerieren statt Namen doppeln.
+        name = f"{TEAM_NAMES[team_id % len(TEAM_NAMES)]} II"
     used.add(name)
-    hue = int(rng.integers(0, 360))
+    step = 360.0 / max(len(TEAM_NAMES), 1)
+    hue = (team_id * step + (180.0 if team_id % 2 else 0.0)) % 360.0
     return Team(
         id=team_id,
         name=name,
@@ -505,19 +527,47 @@ def generate_pool(
 ) -> tuple[list[Team], list[Rider]]:
     """Erzeugt einen kompletten Fahrerpool mit Teams.
 
-    Bei 250 Fahrern sind 25–35 Teams à 7–10 Fahrer plausibel; zu wenige
-    Teams machen die Servicedisziplin zum dominanten Faktor.
+    Der Normalfall ist das Feld der Weltserie: **25 Teams à 12 Fahrer**,
+    zusammen 300. Alle starten, jedes Team ist in jedem Rennen
+    vollzählig da — damit ist die Mannschaft eine Größe, die man über
+    eine Saison verfolgen kann, und nicht eine Zufallsauswahl aus einem
+    Pool.
+
+    Zwölf je Team ist die Zahl, bei der die Servicedisziplin wirkt, ohne
+    zu dominieren: Bei drei Fahrern je Team entscheidet ein einziger
+    schlechter Mechaniker die Teamwertung, bei dreißig mittelt sich
+    jeder Unterschied weg.
     """
-    rng = np.random.default_rng(seed)
     if n_teams is None:
-        n_teams = max(2, min(35, round(n_riders / 8)))
+        n_teams = max(2, min(len(TEAM_NAMES), round(n_riders / RIDERS_PER_TEAM)))
+
+    # Getrennte Ströme für Teams und Fahrer.
+    #
+    # Vorher zogen beide aus demselben Generator, und das hat sich
+    # gerächt, als die Teamnamen von zufälligen Kombinationen auf eine
+    # feste Liste umgestellt wurden: Ein Team zieht seitdem drei
+    # Zufallszahlen weniger (Präfix, Suffix, Farbton), und damit
+    # verschob sich **jede** Ziehung dahinter — derselbe Seed lieferte
+    # ein komplett anderes Fahrerfeld, obwohl an den Fahrern nichts
+    # geändert war. Beide Golden Master sind darüber rot geworden.
+    #
+    # Dieselbe Lehre steht schon eine Ebene tiefer bei ``RiderStreams``:
+    # Wer aus einem gemeinsamen Strom zieht, koppelt Dinge aneinander,
+    # die nichts miteinander zu tun haben. Mit ``spawn_key`` sind es
+    # zwei unabhängige Ströme, und die Teamliste darf sich künftig
+    # ändern, ohne einen einzigen Fahrer zu bewegen.
+    root = np.random.SeedSequence(seed)
+    rng_teams = np.random.default_rng(np.random.SeedSequence(seed, spawn_key=(0,)))
+    rng_riders = np.random.default_rng(np.random.SeedSequence(seed, spawn_key=(1,)))
+    del root
+
     used: set[str] = set()
-    teams = [generate_team(rng, i, used) for i in range(n_teams)]
+    teams = [generate_team(rng_teams, i, used) for i in range(n_teams)]
 
     riders: list[Rider] = []
     for i in range(n_riders):
         team = teams[i % n_teams]
-        riders.append(generate_rider(rng, i, team.id, archetype=archetype))
+        riders.append(generate_rider(rng_riders, i, team.id, archetype=archetype))
     return teams, riders
 
 

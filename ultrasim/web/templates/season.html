@@ -36,7 +36,7 @@
 
   {% if not pool_exists %}
   <div class="panel"><p class="bad">Kein Fahrerpool vorhanden — Rennen lassen sich nicht rechnen.
-    <span class="mono">python -m ultrasim.cli.simulate pool --riders 250</span></p></div>
+    <span class="mono">python -m ultrasim.cli.simulate pool --riders 300</span></p></div>
   {% endif %}
 
   <!-- Jahresband ------------------------------------------------- -->
@@ -173,7 +173,7 @@
                   </select>
                 </label>
                 <label>Datum<input type="date" name="day" value="{{ row.race.day.isoformat() }}" required></label>
-                <label>Feld<input type="number" name="n_riders" value="{{ row.race.n_riders }}" min="2" max="250"></label>
+                <label>Feld<input type="number" name="n_riders" value="{{ row.race.n_riders }}" min="2" max="300"></label>
                 <label>Seed<input type="number" name="seed" value="{{ row.race.seed }}"></label>
                 <label>Wetter
                   <select name="weather_preset">
@@ -236,7 +236,7 @@
         </select>
       </label>
       <label>Datum<input type="date" name="day" value="{{ season.year }}-06-01" required></label>
-      <label>Feld<input type="number" name="n_riders" value="60" min="2" max="250"></label>
+      <label>Feld<input type="number" name="n_riders" value="60" min="2" max="300"></label>
       <label>Seed<input type="number" name="seed" value="1"></label>
       <label>Wetter
         <select name="weather_preset">

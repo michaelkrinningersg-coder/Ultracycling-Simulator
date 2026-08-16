@@ -284,7 +284,7 @@ def pool_generate(
 
 @router.post("/pool/reset")
 def pool_reset(
-    request: Request, riders: int = Form(250), teams: int = Form(0), seed: int = Form(1)
+    request: Request, riders: int = Form(300), teams: int = Form(0), seed: int = Form(1)
 ) -> RedirectResponse:
     """Pool komplett neu würfeln.
 

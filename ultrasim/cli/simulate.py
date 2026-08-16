@@ -1,6 +1,6 @@
 """Kommandozeile: Fahrerpool erzeugen, Rennen rechnen, Ergebnisse ansehen.
 
-    python -m ultrasim.cli.simulate pool   --riders 250
+    python -m ultrasim.cli.simulate pool   --riders 300
     python -m ultrasim.cli.simulate race   voralpen-runde --riders 40 --seed 42
     python -m ultrasim.cli.simulate result <race_id> --top 20
     python -m ultrasim.cli.simulate rider  <race_id> --bib 38
@@ -242,14 +242,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_pool = sub.add_parser("pool", help="Fahrerpool erzeugen")
-    p_pool.add_argument("--riders", type=int, default=250)
+    p_pool.add_argument("--riders", type=int, default=300)
     p_pool.add_argument("--teams", type=int, default=None)
     p_pool.add_argument("--seed", type=int, default=1)
     p_pool.set_defaults(func=cmd_pool)
 
     p_race = sub.add_parser("race", help="Rennen rechnen")
     p_race.add_argument("route", help="Strecken-ID (siehe 'list')")
-    p_race.add_argument("--riders", type=int, default=250)
+    p_race.add_argument("--riders", type=int, default=300)
     p_race.add_argument("--seed", type=int, default=42)
     p_race.add_argument("--id", default=None, help="Renn-ID (Standard: <route>-<seed>)")
     p_race.add_argument("--name", default=None)

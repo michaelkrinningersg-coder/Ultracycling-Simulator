@@ -480,7 +480,7 @@ def _gap_after(route: dict[str, Any]) -> int:
 
 
 def weltserie_calendar(
-    store: Store, year: int, n_riders: int = 250, first_day: date | None = None
+    store: Store, year: int, n_riders: int = 300, first_day: date | None = None
 ) -> list[sn.CalendarRace]:
     """Der Standardkalender: zehn Rennen von 400 bis 2500 km.
 
@@ -534,7 +534,7 @@ def suggest_calendar(
                 name=route["name"],
                 route_id=route["id"],
                 day=day,
-                n_riders=250,
+                n_riders=300,
                 seed=1000 + i,
             )
         )

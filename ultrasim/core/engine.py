@@ -71,7 +71,17 @@ SAMPLE_DT_S: dict[str, int] = {"kurz": 5, "mittel": 15, "ultra": 30}
 #: Fahrer gleichzeitig auf der Strecke sind und wie lange die Übertragung
 #: dauert. Bei 250 Startern spannt sich das Feld damit über fünf Tage
 #: Wanduhr; im Zeitraffer sind das Minuten.
-START_INTERVAL_S: dict[str, int] = {"kurz": 1800, "mittel": 1800, "ultra": 1800}
+#: Fünfzehn Minuten auf allen Distanzen. Bis zum Feld der Weltserie
+#: standen hier dreißig; mit 300 Startern statt 250 wäre das Startfenster
+#: damit auf 149 Stunden gewachsen — der letzte Fahrer rollt sechs Tage
+#: nach dem ersten los, und die Übertragung der Transkontinental spannte
+#: sich über elf Tage Rennuhr.
+#:
+#: Fünfzehn Minuten halten das Fenster bei 75 Stunden. Die räumliche
+#: Entzerrung, um die es hier geht, bleibt erhalten: Bei 25 km/h liegen
+#: zwei aufeinanderfolgende Starter gut sechs Kilometer auseinander, und
+#: das ist im Höhenprofil immer noch kein Knäuel.
+START_INTERVAL_S: dict[str, int] = {"kurz": 900, "mittel": 900, "ultra": 900}
 
 #: Langsamstes Äquivalenttempo, das der Simulationshorizont noch
 #: abdeckt. Zusammen mit ``RaceConfig.time_limit_factor`` ergibt sich

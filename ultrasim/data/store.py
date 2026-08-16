@@ -139,7 +139,7 @@ class Store:
         if not self.pool_path.exists():
             raise FileNotFoundError(
                 f"Kein Fahrerpool unter {self.pool_path}. "
-                "Erzeugen mit: python -m ultrasim.cli.simulate pool --riders 250"
+                "Erzeugen mit: python -m ultrasim.cli.simulate pool --riders 300"
             )
         data = json.loads(self.pool_path.read_text("utf-8"))
         return (

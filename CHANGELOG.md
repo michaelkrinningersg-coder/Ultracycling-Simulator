@@ -7,6 +7,23 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geprüft
 
+- **Die Feldunabhängigkeit gilt nicht ausnahmslos.** Zwei Tests sichern
+  zu, dass das Rennen eines Fahrers nicht davon abhängt, wie groß das
+  Feld ist. Mit dem neuen Feld findet sich ein Gegenbeispiel: Von acht
+  Fahrern sind sieben bitgleich, einer weicht über 7,5 Stunden um 213 s
+  ab. Sein Plan, sein Ereignisstrom und die gezogene Reparaturdauer sind
+  identisch; die erste messbare Abweichung ist **ein Meter** Distanz und
+  ein Prozentpunkt Glykogen, danach verstärkt das Modell sie.
+
+  Ausgeschlossen sind der Startabstand (der Versatz geht nicht in die
+  Simulation ein), ``np.bincount`` in der Zustandsverwaltung
+  (längenstabil geprüft) und NumPys elementweise Funktionen
+  (power/exp/log/sqrt, bitgleich über Arraylängen von 8 bis 300). **Die
+  Ursache ist offen**; beide Tests stehen als ``xfail(strict=True)``, der
+  Befund steht in ihrer Begründung.
+
+  Nicht betroffen ist die Attributmatrix der Kalibrierung: Sie misst
+  beide Varianten eines Fahrers in *einem* Rennen, also im selben Feld.
 - **Kalibrierungsbericht neu erhoben** (`docs/KALIBRIERUNG.md`, 45 min).
   Alle vier Strecken liegen jetzt im DNF-Korridor — die Flachetappe war
   mit 3,8 % als einzige markiert und steht bei 4,2 %:
@@ -34,6 +51,27 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
+- **Fünfundzwanzig benannte Teams à zwölf Fahrer, 300 Starter.** Die
+  Mannschaften hießen bisher aus zufällig kombinierten Bausteinen und
+  wechselten mit jedem Seed; jetzt sind es feste Paare aus Ausrüster und
+  Radmarke nach dem Muster des echten Radsports — `Vaude–Canyon`,
+  `Ortlieb–Cube`, `Deuter–Rose`. Ein Team bleibt damit über Saisons
+  hinweg dasselbe Team.
+
+  Die **Marken sind echt, die Teams sind es nicht** — der Hinweis steht
+  im README und im Quelltext.
+
+  Auch die Teamfarbe kommt jetzt aus der Listenposition statt aus dem
+  Zufall: fünfundzwanzig Farbtöne über den Kreis, jeder zweite versetzt,
+  damit Nachbarn in der Startliste nicht dieselbe Farbfamilie tragen.
+  Vorher konnten zwei Teams fast identische Farben ziehen — und der
+  Farbkeil ist im Board das Einzige, was ein Team auf einen Blick
+  unterscheidet.
+- **Startabstand 15 statt 30 Minuten.** Mit 300 Startern wäre das
+  Startfenster sonst auf 149 Stunden gewachsen; so bleibt es bei 75. Die
+  räumliche Entzerrung, um die es bei dem Abstand geht, trägt weiter:
+  Bei 25 km/h liegen zwei aufeinanderfolgende Starter gut sechs
+  Kilometer auseinander.
 - **Die Ultra-Weltserie**: zehn neue Strecken von 396 bis 2469 km und
   ein Standardkalender darüber. Zehn verschiedene Anforderungen, nicht
   zehn Längen — flaches Zeitfahren, Rampenrennen, Kehrenpässe, Schotter,
@@ -80,6 +118,19 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Behoben
 
+- **`generate_pool` koppelte Teams und Fahrer an einen Zufallsstrom.**
+  Aufgefallen beim Umbau auf feste Teamnamen: Ein Team zieht seitdem
+  drei Zufallszahlen weniger (Präfix, Suffix, Farbton), und damit
+  verschob sich jede Ziehung dahinter — derselbe Seed lieferte ein
+  komplett anderes Fahrerfeld, obwohl an den Fahrern nichts geändert
+  war. Beide Golden Master wurden rot.
+
+  Dieselbe Lehre steht eine Ebene tiefer schon bei ``RiderStreams``.
+  Teams und Fahrer haben jetzt getrennte Ströme über ``spawn_key``, und
+  ``test_the_team_list_does_not_move_the_riders`` hält fest, dass eine
+  Änderung an der Teamliste kein Fahrerattribut mehr bewegt. Die Golden
+  Master mussten dafür einmalig neu gesetzt werden — mit der Begründung
+  im Test, und es war der letzte Neusatz dieser Art.
 - **Notschlaf zählte als Grund aufzugeben.** Der Aufgabe-Term heißt
   „kein Anschluss mehr an den eigenen Plan" und meint laut seinem
   eigenen Kommentar den Satz eines Aussteigers — *drei Pannen und

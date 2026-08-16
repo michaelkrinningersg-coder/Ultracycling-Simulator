@@ -28,6 +28,7 @@
         <tr><th class="right">Rg</th><th class="right">Nr</th><th>Fahrer</th><th>Nat</th><th>Team</th>
             <th>Archetyp</th><th class="right">Zeit</th><th class="right">Rückstand</th>
             {% if season_link %}<th class="right">Punkte</th>{% endif %}
+            <th class="right" title="Verlorene Zeit: Notschlaf am Straßenrand und Zwischenfälle">Stand</th>
             <th class="right">Ziel-IF</th><th class="right">Tagesform</th><th></th></tr>
       </thead>
       <tbody>
@@ -45,16 +46,37 @@
           <td class="right mono {% if row.points %}warn{% else %}faint{% endif %}">
             {{ '%.0f'|format(row.points or 0) }}</td>
           {% endif %}
+          {# Standzeit als Zahl plus Balken: Der Balken zeigt in einem
+             Blick, wie viel davon Notschlaf war — vier Stunden Panne und
+             vier Stunden Schlaf sind zwei verschiedene Rennen. #}
+          <td class="right mono">
+            {% if row.standing %}
+            <span class="stand"
+                  title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle">
+              {{ row.standing.total_s|hms }}
+              <span class="standbar"><i style="width: {{ (100 * row.standing.sleep_share)|round(1) }}%"></i></span>
+            </span>
+            {% else %}<span class="faint">—</span>{% endif %}
+          </td>
           <td class="right mono faint">{{ '%.2f'|format(row.entry.target_if) }}</td>
           <td class="right mono faint">{{ '%.3f'|format(row.entry.day_form) }}</td>
           <td><a href="/race/{{ race_id }}/rider/{{ row.entry.entry_id }}">Detail</a></td>
         </tr>
         {% if row.report %}
-        <tr class="report"><td></td><td></td><td colspan="9">{{ row.report }}</td></tr>
+        <tr class="report {% if row.podium %}podium{% endif %}">
+          <td></td><td></td><td colspan="10">{{ row.report }}</td></tr>
         {% endif %}
         {% endfor %}
       </tbody>
     </table>
+    <p class="dim standkey" style="margin-top:.5rem">
+      <strong>Stand</strong> ist die Zeit, in der der Fahrer nicht gefahren ist.
+      Der Balken teilt sie auf:
+      <i style="background:var(--accent-2)"></i>Notschlaf am Straßenrand,
+      <i style="background:#6c7a94"></i>Zwischenfälle.
+      Vier Stunden Panne und vier Stunden Schlaf stehen als dieselbe Zahl
+      da und sind zwei verschiedene Rennen.
+    </p>
     {% if dnf %}
     <div class="panel-title" style="margin-top:1rem"><span>Nicht im Ziel</span></div>
     <table>
@@ -63,9 +85,14 @@
         <tr><td class="mono faint">{{ row.entry.bib }}</td><td>{{ row.rider.name }}</td>
             <td class="bad">{{ row.entry.status }}</td>
             <td class="right mono faint">{% if row.entry.dnf_dist_m %}km {{ '%.0f'|format(row.entry.dnf_dist_m / 1000) }}{% endif %}</td>
+            <td class="right mono faint">
+              {%- if row.standing %}
+              <span title="{{ row.standing.sleep_s|hms }} Notschlaf · {{ row.standing.incident_s|hms }} Zwischenfälle">
+                {{ row.standing.total_s|hms }}</span>
+              {%- endif %}</td>
             <td class="dim">{{ row.entry.dnf_reason }}</td></tr>
         {% if row.report %}
-        <tr class="report"><td></td><td colspan="5">{{ row.report }}</td></tr>
+        <tr class="report"><td></td><td colspan="6">{{ row.report }}</td></tr>
         {% endif %}
         {% endfor %}
       </tbody>
@@ -113,6 +140,48 @@
       links nach rechts rot wird, ist ein Einbruch — und eine, die grün
       wird, eine Aufholjagd. Genau das steht auch im Satz über der
       Tabelle, hier sieht man es über die Distanz.
+    </p>
+  </div>
+  {% endif %}
+
+  <!-- Derselbe Datensatz als Verlauf ------------------------------- -->
+  {% if matrix.chart %}
+  <div class="panel">
+    <div class="panel-title">
+      <span>Rangverlauf</span>
+      <span class="faint">die ersten {{ matrix.chart.lines|length }} · oben ist vorn</span>
+    </div>
+    {# Beschriftung als HTML neben dem SVG statt darin: Die Zeichenfläche
+       wird auf die Fensterbreite gestreckt (``preserveAspectRatio=none``),
+       und mitgestreckte Schrift sieht aus wie ein Druckfehler. #}
+    <div class="rankchart">
+      <span class="rankaxis top">1</span>
+      <span class="rankaxis bottom">{{ matrix.chart.n_ranked }}</span>
+      <div class="rankplot">
+        <svg viewBox="0 0 {{ matrix.chart.w }} {{ matrix.chart.h }}"
+             preserveAspectRatio="none" role="img"
+             aria-label="Rangverlauf der ersten Fahrer über die Zeitmesspunkte">
+          {% for tick in matrix.chart.ticks %}
+          <line x1="{{ tick.x }}" y1="0" x2="{{ tick.x }}" y2="{{ matrix.chart.h }}" class="grid"/>
+          {% endfor %}
+          {% for line in matrix.chart.lines %}
+          <polyline points="{{ line.points }}" fill="none" stroke="{{ line.color }}"
+                    class="rankline" vector-effect="non-scaling-stroke">
+            <title>{{ line.rank }}. {{ line.name }}</title>
+          </polyline>
+          {% endfor %}
+        </svg>
+      </div>
+      <div class="rankticks">
+        {% for tick in matrix.chart.ticks %}
+        <span style="left: {{ (100 * tick.x / matrix.chart.w)|round(2) }}%">{{ tick.label }}</span>
+        {% endfor %}
+      </div>
+    </div>
+    <p class="dim">
+      Eine Linie, die nach oben läuft, ist eine Aufholjagd; ein Knick nach
+      unten ist der Moment, in dem es zu Ende war. Die Farbe ist die des
+      Teams — dieselbe wie im Live-Board.
     </p>
   </div>
   {% endif %}

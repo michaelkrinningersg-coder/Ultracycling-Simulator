@@ -23,7 +23,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .events import BONK, DECISION, INCIDENT, SLEEP, RaceEvent
+from .events import BIKE_CHANGE, BONK, DECISION, INCIDENT, SLEEP, RaceEvent
 from .incidents import CATALOG
 
 __all__ = ["RaceReport", "build_report", "build_reports"]
@@ -41,6 +41,17 @@ MOVE_PLACES = 4
 #: Bericht mehr, sondern ein Protokoll.
 MAX_CLAUSES = 3
 
+#: So viele Bausteine trägt der ausführliche Bericht.
+#:
+#: Er ist für die ersten drei gedacht, und dort gilt das Gegenteil der
+#: Regel oben: Über den Sieger eines 2500-km-Rennens will man mehr
+#: wissen als einen Satz — wo er verloren hat, wie oft er geschlafen
+#: hat, wann er vorn war. Für Rang 87 wäre dieselbe Länge Protokoll.
+MAX_CLAUSES_LONG = 9
+
+#: So viele Bausteine stehen in einem Satz des ausführlichen Berichts.
+CLAUSES_PER_SENTENCE = 2
+
 
 @dataclass(frozen=True)
 class RaceReport:
@@ -49,19 +60,46 @@ class RaceReport:
     entry_id: int
     #: Die Bausteine in Erzählreihenfolge.
     clauses: list[str] = field(default_factory=list)
+    #: Name des Fahrers — Subjekt der Folgesätze im langen Bericht.
+    #: Ohne ihn müsste dort ein Pronomen stehen, und das hieße, den
+    #: Fahrern ein Geschlecht anzudichten, das das Modell nicht kennt.
+    name: str = ""
+
+    @staticmethod
+    def _sentence(parts: Sequence[str], subject: str = "") -> str:
+        chain = ", ".join(parts)
+        if subject:
+            return f"{subject} {chain}." if not chain.endswith(".") else f"{subject} {chain}"
+        chain = chain[0].upper() + chain[1:]
+        # Endet der letzte Baustein schon auf einen Punkt — etwa bei
+        # einer Ordnungszahl —, keinen zweiten anhängen.
+        return chain if chain.endswith(".") else chain + "."
 
     @property
     def text(self) -> str:
         if not self.clauses:
             return ""
-        parts = self.clauses[:MAX_CLAUSES]
-        sentence = parts[0]
-        for part in parts[1:]:
-            sentence += ", " + part
-        sentence = sentence[0].upper() + sentence[1:]
-        # Endet der letzte Baustein schon auf einen Punkt — etwa bei
-        # einer Ordnungszahl —, keinen zweiten anhängen.
-        return sentence if sentence.endswith(".") else sentence + "."
+        return self._sentence(self.clauses[:MAX_CLAUSES])
+
+    @property
+    def paragraph(self) -> str:
+        """Alle Bausteine als mehrere Sätze.
+
+        Der erste Satz beginnt ohne Subjekt — er steht unter der
+        Ergebniszeile, in der der Name schon fällt. Ab dem zweiten ist
+        der Name das Subjekt: Ein Satz, der mit „verlor" anfängt, ist
+        nach dem ersten kein Bericht mehr, sondern eine Stichwortliste.
+        """
+        if not self.clauses:
+            return ""
+        chunks = [
+            self.clauses[i : i + CLAUSES_PER_SENTENCE]
+            for i in range(0, len(self.clauses), CLAUSES_PER_SENTENCE)
+        ]
+        out = [self._sentence(chunks[0])]
+        for chunk in chunks[1:]:
+            out.append(self._sentence(chunk, subject=self.name))
+        return " ".join(out)
 
 
 def _km(value: Any) -> str:
@@ -101,6 +139,32 @@ def _biggest_incident(events: Sequence[RaceEvent]) -> RaceEvent | None:
     return worst
 
 
+def _further_incidents(
+    events: Sequence[RaceEvent], biggest: RaceEvent | None
+) -> list[str]:
+    """Die übrigen nennenswerten Zwischenfälle, in Reihenfolge.
+
+    Zusammengefasst, sobald es mehr als einer ist: Drei Nebensätze über
+    drei Platten hintereinander erzählen nichts, was „drei weitere
+    Halte, zusammen 40 min" nicht besser sagt.
+    """
+    rest = [
+        e
+        for e in events
+        if e.type == INCIDENT
+        and e is not biggest
+        and float(e.payload.get("stop_s", 0.0)) >= NOTABLE_LOSS_S
+    ]
+    if not rest:
+        return []
+    total = sum(float(e.payload.get("stop_s", 0.0)) for e in rest)
+    if len(rest) == 1:
+        spec = CATALOG.get(str(rest[0].payload.get("typ", "")))
+        cause = spec.as_cause() if spec else "einen weiteren Zwischenfall"
+        return [f"hielt bei {_km(rest[0].payload.get('dist_km', 0))} noch einmal {_minutes(total)} für {cause}"]
+    return [f"verlor an {len(rest)} weiteren Halten zusammen {_minutes(total)}"]
+
+
 def _trajectory(ranks: Sequence[int], splits: Sequence[Any]) -> str:
     """Wie sich die Platzierung über die Splits bewegt hat.
 
@@ -127,18 +191,52 @@ def _trajectory(ranks: Sequence[int], splits: Sequence[Any]) -> str:
     return ""
 
 
+def _standing_time(entry: Any, biggest_stop_s: float = 0.0) -> str:
+    """Standzeit, aufgeschlüsselt nach Zwischenfall und Notschlaf.
+
+    „Vier Stunden verloren" ist eine ganz andere Geschichte als „vier
+    Stunden verloren, davon dreieinhalb am Straßenrand geschlafen" — und
+    beide Zahlen stehen seit der Trennung von ``lost_s`` und
+    ``lost_incident_s`` in jedem Ergebnis.
+    """
+    total = float(getattr(entry, "lost_s", 0.0) or 0.0)
+    if total < NOTABLE_LOSS_S:
+        return ""
+    incidents = float(getattr(entry, "lost_incident_s", 0.0) or 0.0)
+    sleep = max(total - incidents, 0.0)
+    if sleep < NOTABLE_LOSS_S:
+        # War der größte Halt praktisch die ganze Standzeit, steht sie
+        # schon im Satz davor. „Verlor 14 min durch eine Sperrung, stand
+        # insgesamt 14 min" sagt dieselbe Zahl zweimal.
+        if total - biggest_stop_s < NOTABLE_LOSS_S:
+            return ""
+        return f"stand insgesamt {_minutes(total)}"
+    if incidents < NOTABLE_LOSS_S:
+        return f"stand insgesamt {_minutes(total)}, fast alles Notschlaf"
+    return (
+        f"stand insgesamt {_minutes(total)}, davon {_minutes(sleep)} Notschlaf "
+        f"und {_minutes(incidents)} an Zwischenfällen"
+    )
+
+
 def build_report(
     entry: Any,
     events: Sequence[RaceEvent],
     ranks: Sequence[int],
     splits: Sequence[Any],
     winner_margin_s: float | None = None,
+    name: str = "",
+    detail: bool = False,
 ) -> RaceReport:
     """Bericht für einen einzelnen Fahrer.
 
     ``events`` sind **seine** Ereignisse, ``ranks`` **seine** Zeile aus
-    ``split_ranks``.
+    ``split_ranks``. ``detail`` schaltet die lange Fassung frei: mehr
+    Bausteine, und die Dinge, für die im Einzeiler kein Platz ist —
+    jeder nennenswerte Zwischenfall statt nur des größten, der
+    Radwechsel, die aufgeschlüsselte Standzeit.
     """
+    limit = MAX_CLAUSES_LONG if detail else MAX_CLAUSES
     clauses: list[str] = []
 
     incident = _biggest_incident(events)
@@ -147,6 +245,9 @@ def build_report(
         cause = spec.as_cause() if spec else incident.payload.get("label", "einen Zwischenfall")
         lost = _minutes(float(incident.payload.get("stop_s", 0.0)))
         clauses.append(f"verlor {lost} durch {cause} bei {_km(incident.payload.get('dist_km', 0))}")
+
+    if detail:
+        clauses.extend(_further_incidents(events, incident))
 
     bonk = next((e for e in events if e.type == BONK), None)
     if bonk is not None:
@@ -165,6 +266,18 @@ def build_report(
     if chase is not None and incident is None:
         clauses.append(f"ging bei {_km(chase.payload.get('dist_km', 0))} in die Aufholjagd")
 
+    if detail:
+        bike = next((e for e in events if e.type == BIKE_CHANGE), None)
+        if bike is not None:
+            target = "aufs Zeitfahrrad" if bike.payload.get("bike") == "tt" else "aufs Straßenrad"
+            clauses.append(f"wechselte bei {_km(bike.payload.get('dist_km', 0))} {target}")
+        biggest_stop = (
+            0.0 if incident is None else float(incident.payload.get("stop_s", 0.0))
+        )
+        standing = _standing_time(entry, biggest_stop)
+        if standing:
+            clauses.append(standing)
+
     trajectory = _trajectory(ranks, splits)
     if trajectory:
         clauses.append(trajectory)
@@ -175,14 +288,14 @@ def build_report(
         reason = (entry.dnf_reason or "").split(":")[-1].strip()
         where = _km((entry.dnf_dist_m or 0.0) / 1000.0)
         tail = f"gab bei {where} auf" + (f" ({reason})" if reason else "")
-        clauses = clauses[: MAX_CLAUSES - 1] + [tail]
+        clauses = clauses[: limit - 1] + [tail]
     elif entry.rank == 1:
         margin = f" mit {_minutes(winner_margin_s)} Vorsprung" if winner_margin_s else ""
-        clauses = clauses[: MAX_CLAUSES - 1] + [f"gewann{margin}"]
+        clauses = clauses[: limit - 1] + [f"gewann{margin}"]
     elif entry.rank is not None:
-        clauses = clauses[: MAX_CLAUSES - 1] + [_placing(int(entry.rank))]
+        clauses = clauses[: limit - 1] + [_placing(int(entry.rank))]
 
-    return RaceReport(entry_id=entry.entry_id, clauses=clauses)
+    return RaceReport(entry_id=entry.entry_id, clauses=clauses, name=name)
 
 
 def build_reports(
@@ -190,8 +303,14 @@ def build_reports(
     events: Sequence[RaceEvent],
     split_ranks: Any,
     splits: Sequence[Any],
+    names: dict[int, str] | None = None,
+    detail_ranks: int = 0,
 ) -> dict[int, RaceReport]:
-    """Berichte für ein ganzes Feld, nach ``entry_id``."""
+    """Berichte für ein ganzes Feld, nach ``entry_id``.
+
+    ``detail_ranks`` schaltet die lange Fassung für die vordersten Ränge
+    frei — 3 heißt: Podium ausführlich, der Rest in einem Satz.
+    """
     by_entry: dict[int, list[RaceEvent]] = {}
     for event in events:
         by_entry.setdefault(event.entry_id, []).append(event)
@@ -208,5 +327,7 @@ def build_reports(
             ranks,
             splits,
             winner_margin_s=margin if entry.rank == 1 else None,
+            name=(names or {}).get(entry.entry_id, ""),
+            detail=bool(detail_ranks and entry.rank and entry.rank <= detail_ranks),
         )
     return out

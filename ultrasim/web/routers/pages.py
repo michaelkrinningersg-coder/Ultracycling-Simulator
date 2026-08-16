@@ -130,6 +130,31 @@ def race_live(request: Request, race_id: str) -> HTMLResponse:
 #: zwar, aber niemand liest sie.
 MATRIX_ROWS = 25
 
+#: So viele Ränge bekommen den ausführlichen Rennbericht.
+PODIUM = 3
+
+
+def _standing_split(entry) -> dict | None:
+    """Verlorene Zeit, getrennt nach Zwischenfall und Notschlaf.
+
+    Die Ergebnisliste zeigte bisher gar keine Standzeit. Dabei ist sie
+    auf einer Strecke mit fünf Nächten die Zahl, die den Ausgang
+    erklärt — und seit der Trennung der beiden Ursachen erklärt sie
+    auch, *woran* es lag. ``None``, wenn nichts Nennenswertes steht:
+    Eine Spalte voller Nullen sagt nichts.
+    """
+    total = float(entry.lost_s or 0.0)
+    if total < 60.0:
+        return None
+    incidents = float(entry.lost_incident_s or 0.0)
+    return {
+        "total_s": total,
+        "incident_s": incidents,
+        "sleep_s": max(total - incidents, 0.0),
+        # Anteil des Notschlafs, für den Balken in der Zelle.
+        "sleep_share": max(total - incidents, 0.0) / total,
+    }
+
 
 def _split_matrix(result, route, view, finished: list) -> dict:
     """Splitzeiten als Fahrer × Split, mit Rang je Zelle.
@@ -161,7 +186,77 @@ def _split_matrix(result, route, view, finished: list) -> dict:
         rows.append(
             {"entry": entry, "name": view.riders[entry.rider_id].name, "cells": cells}
         )
-    return {"splits": route.splits, "rows": rows, "shown": len(order), "total": len(finished)}
+    return {
+        "splits": route.splits,
+        "rows": rows,
+        "shown": len(order),
+        "total": len(finished),
+        "chart": _rank_chart(result, route, view, finished),
+    }
+
+
+#: So viele Linien trägt das Verlaufsdiagramm. Bei fünfundzwanzig wäre
+#: es ein Knäuel; zehn sind die, um die es im Rennen ging.
+CHART_ROWS = 10
+
+#: Zeichenfläche des Verlaufs in Nutzerkoordinaten.
+CHART_W, CHART_H = 1000.0, 300.0
+
+
+def _rank_chart(result, route, view, finished: list) -> dict | None:
+    """Die Splitmatrix als Linienzug: Rang über Distanz.
+
+    Dieselben Zahlen wie in der Tabelle, aber als Form. In der Tabelle
+    muss man fünfundzwanzig Zeilen mal dreißig Zellen vergleichen, um zu
+    sehen, wo einer nach vorn gefahren ist; hier ist es eine Linie, die
+    steigt. Als SVG im Dokument statt als Canvas: Es ist eine
+    Nachbetrachtung, es bewegt sich nichts, und so bleibt es beim
+    Drucken und ohne JavaScript lesbar.
+    """
+    order = finished[:CHART_ROWS]
+    splits = route.splits
+    if len(order) < 2 or len(splits) < 2:
+        return None
+    ranks = result.split_ranks
+    n_ranked = max(int(ranks.max()), 2)
+    lines = []
+    for entry in order:
+        points = []
+        for split_idx in range(len(splits)):
+            rank = int(ranks[entry.entry_id, split_idx])
+            if not rank:
+                continue
+            x = split_idx / (len(splits) - 1) * CHART_W
+            y = (rank - 1) / (n_ranked - 1) * CHART_H
+            points.append(f"{x:.1f},{y:.1f}")
+        if len(points) < 2:
+            continue
+        rider = view.riders[entry.rider_id]
+        team = view.teams.get(rider.team_id)
+        lines.append(
+            {
+                "name": rider.name,
+                "rank": entry.rank,
+                "color": team.color if team else "#8f9cb5",
+                "points": " ".join(points),
+            }
+        )
+    if not lines:
+        return None
+    # Nur ein paar Marken beschriften: dreißig Splitnamen nebeneinander
+    # sind auf tausend Einheiten Breite ein grauer Streifen.
+    step = max(1, len(splits) // 6)
+    ticks = [
+        {"x": i / (len(splits) - 1) * CHART_W, "label": splits[i].name}
+        for i in range(0, len(splits), step)
+    ]
+    return {
+        "w": CHART_W,
+        "h": CHART_H,
+        "lines": lines,
+        "ticks": ticks,
+        "n_ranked": n_ranked,
+    }
 
 
 @router.get("/race/{race_id}/results", response_class=HTMLResponse)
@@ -197,19 +292,32 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
     )
     best = finished[0].finish_time_s if finished else None
     reports = narrative.build_reports(
-        result.entries, result.events, result.split_ranks, route.splits
+        result.entries,
+        result.events,
+        result.split_ranks,
+        route.splits,
+        names={e.entry_id: view.riders[e.rider_id].name for e in result.entries},
+        detail_ranks=PODIUM,
     )
     rows = []
     for entry in finished:
         rider = view.riders[entry.rider_id]
         team = view.teams.get(rider.team_id)
+        podium = bool(entry.rank and entry.rank <= PODIUM)
         rows.append(
             {
                 "entry": entry,
                 "rider": rider,
                 "team": team,
                 "gap": None if best is None else entry.finish_time_s - best,
-                "report": reports[entry.entry_id].text,
+                # Für das Podium der lange Bericht, für den Rest der Satz.
+                "report": (
+                    reports[entry.entry_id].paragraph
+                    if podium
+                    else reports[entry.entry_id].text
+                ),
+                "podium": podium,
+                "standing": _standing_split(entry),
                 "points": season_points.get(entry.rider_id),
             }
         )
@@ -221,6 +329,7 @@ def race_results(request: Request, race_id: str) -> HTMLResponse:
                 "entry": e,
                 "rider": view.riders[e.rider_id],
                 "report": reports[e.entry_id].text,
+                "standing": _standing_split(e),
             }
             for e in result.entries
             if e.finish_time_s is None

@@ -67,13 +67,17 @@ def ensure_user_data(verbose: bool = True) -> Path:
 
 
 def ensure_demo_race(root: Path, verbose: bool = True) -> str | None:
-    """Beim ersten Start ein Rennen rechnen, damit es etwas zu sehen gibt.
+    """Ein Rennen vorrechnen, damit es etwas zu sehen gibt (``--demo``).
 
-    Ohne das stünde der Nutzer nach dem Doppelklick vor einer leeren
-    Übersicht. Alles andere – eigene Strecken, Fahrerpool, Saison,
-    Karriere – setzt eine Entscheidung voraus; dieses eine Rennen setzt
-    keine voraus und beantwortet die erste Frage von selbst: Wie sieht
-    das eigentlich aus?
+    Stand lange im Startpfad und hat die erste Frage beantwortet — „wie
+    sieht das eigentlich aus?" —, indem es beim ersten Start vierzehn
+    Sekunden lang ein Rennen durchrechnete.
+
+    Die Übersicht beantwortet sie inzwischen selbst: Sie zeigt die
+    Weltserie und einen Knopf, der das erste Rennen **live** startet.
+    Damit ist das Demo-Rennen nicht mehr der Einstieg, sondern ein
+    vorgerechneter Fremdkörper neben einem Programm, das nichts
+    vorrechnet — es läuft deshalb nur noch auf Verlangen.
     """
     from .core.engine import RaceConfig, simulate_race
     from .core.rider import DEFAULT_FIELD, generate_pool
@@ -157,12 +161,19 @@ def main(argv: list[str] | None = None) -> int:  # pragma: no cover - Startpfad
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-browser", action="store_true")
-    parser.add_argument("--no-demo", action="store_true", help="kein Demo-Rennen rechnen")
+    parser.add_argument(
+        "--demo", action="store_true", help="beim ersten Start ein Demo-Rennen rechnen"
+    )
     args = parser.parse_args(argv)
 
     root = ensure_user_data()
     os.environ["ULTRASIM_DATA"] = str(root)
-    if not args.no_demo:
+    # Standardmäßig wird beim Start **nichts** gerechnet. Der Weg durch
+    # dieses Programm führt über die Saison, und deren Rennen entstehen
+    # live — ein vorgerechnetes Demo-Rennen wäre die eine Ausnahme davon
+    # und stünde als Fremdkörper in der Übersicht. Über ``--demo`` gibt
+    # es sie weiterhin.
+    if args.demo:
         ensure_demo_race(root)
     ensure_weltserie(root)
 

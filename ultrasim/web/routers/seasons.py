@@ -24,6 +24,7 @@ from ...core.rider import DEFAULT_FIELD, pool_mismatch
 from ...core.season import CalendarRace, Season
 from ...core.weather import PRESETS
 from ..jobs import Job, race_progress
+from ..livesim import LiveRoom
 
 router = APIRouter()
 
@@ -229,13 +230,26 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
         pool_size = len(pool_riders)
         mismatch = pool_mismatch(pool_teams, pool_riders)
 
+    # Ein Termin, dessen Rennen gerade live entsteht, ist nicht fertig —
+    # auch wenn er schon eine ``race_id`` und eine Datei hat. Der Raum
+    # weiß es, die Saisondatei nicht.
+    live_now = {
+        r.race_id
+        for r in season.races
+        if r.race_id and (room := state.live.get(r.race_id)) and not room.finished
+    }
+
     standings = runner.standings(store, season)
     pending = runner.pending_races(season)
     # Der Titel steht erst, wenn der letzte Termin gefahren ist. Vorher
     # ist die Rangliste ein Zwischenstand, und den Führenden schon
     # „Ultrameister" zu nennen wäre genau die Vorwegnahme, die dieses
     # Programm sonst überall vermeidet.
-    champion = standings[0] if (season.races and not pending and standings) else None
+    champion = (
+        standings[0]
+        if (season.races and not pending and not live_now and standings)
+        else None
+    )
 
     return _tpl(request).TemplateResponse(
         request,
@@ -250,6 +264,7 @@ def season_detail(request: Request, season_id: str) -> HTMLResponse:
             "champion": champion,
             "runner_up": standings[1] if champion and len(standings) > 1 else None,
             "pending": len(pending),
+            "live_now": live_now,
             "pool_exists": store.pool_exists(),
             # Warum starten weniger Fahrer als geplant? Die Antwort ist
             # fast immer ein Pool aus einer älteren Fassung — und der
@@ -384,6 +399,51 @@ def race_run(request: Request, season_id: str, race_key: str) -> RedirectRespons
 
     _submit_race(state, season_id, calendar_race)
     return _back(season_id, "#kalender")
+
+
+@router.post("/season/{season_id}/race/{race_key}/live")
+def race_live(request: Request, season_id: str, race_key: str) -> RedirectResponse:
+    """Einen Kalendertermin **live** fahren, statt ihn vorzurechnen.
+
+    Dasselbe Rennen wie über ``/run`` — dieselbe Aufstellung, derselbe
+    Seed, dieselbe Restermüdung; das sichert ``race_setup`` zu, aus dem
+    beide Wege kommen. Der Unterschied ist, wann gerechnet wird: hier
+    erst, wenn jemand hinsieht.
+
+    Die ``race_id`` steht sofort im Kalender, obwohl das Rennen noch
+    läuft. Das ist Absicht: Der Raum sichert von der ersten Sekunde an
+    auf die Platte, und ohne den Verweis wäre das laufende Rennen vom
+    Kalender aus nicht wiederzufinden. Dass es noch nicht fertig ist,
+    weiß die Saisonseite vom Raum, nicht von der Datei — und solange es
+    läuft, wird kein Ultrameister gekürt.
+    """
+    state = _state(request)
+    if not state.store.pool_exists():
+        raise HTTPException(status_code=400, detail="Kein Fahrerpool vorhanden")
+    season = state.store.load_season(season_id)
+    try:
+        setup = runner.race_setup(state.store, season, race_key)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Kein Termin '{race_key}'") from exc
+
+    existing = state.live.get(setup.race_id)
+    if existing is not None and not existing.finished:
+        return RedirectResponse(f"/race/{setup.race_id}", status_code=303)
+
+    room = LiveRoom.start(
+        race_id=setup.race_id,
+        route_id=setup.calendar_race.route_id,
+        route=setup.route,
+        riders=setup.riders,
+        teams=setup.teams,
+        config=setup.config,
+        store=state.store,
+    )
+    state.live.add(room)
+    state.invalidate(setup.race_id)
+    setup.calendar_race.race_id = setup.race_id
+    state.store.save_season(season)
+    return RedirectResponse(f"/race/{setup.race_id}", status_code=303)
 
 
 @router.post("/season/{season_id}/run-all")

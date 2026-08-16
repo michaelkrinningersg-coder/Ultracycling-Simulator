@@ -176,14 +176,24 @@
             {% else %}<span class="faint">—</span>{% endif %}
           </td>
           <td class="right nowrap">
-            {% if row.race.computed %}
-              <a href="/race/{{ row.race.race_id }}"><button>Live</button></a>
+            {% if row.race.race_id in live_now %}
+              {# Läuft gerade: Der Kalender hat schon eine race_id, aber
+                 das Rennen ist nicht fertig. #}
+              <a href="/race/{{ row.race.race_id }}"><button class="primary">▶ Zusehen</button></a>
+              <span class="badge running">live</span>
+            {% elif row.race.computed %}
+              <a href="/race/{{ row.race.race_id }}"><button>Wiedergabe</button></a>
               <a href="/race/{{ row.race.race_id }}/results"><button>Ergebnis</button></a>
+              <a href="/race/{{ row.race.race_id }}/statistik"><button>Statistik</button></a>
             {% elif row.job %}
               <span class="chip">in Arbeit</span>
             {% elif pool_exists and row.route %}
-              <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}/run" class="inline">
-                <button class="primary" type="submit">Rechnen</button>
+              {# Live statt vorrechnen: Ein Rennen entsteht, während man
+                 zusieht. Vorberechnen gibt es weiter über die CLI, aber
+                 nicht mehr als Knopf — es ist nicht der Weg, den dieses
+                 Programm anbietet. #}
+              <form method="post" action="/season/{{ season.id }}/race/{{ row.race.id }}/live" class="inline">
+                <button class="primary" type="submit">▶ Live starten</button>
               </form>
             {% endif %}
             <details class="edit">
@@ -239,13 +249,13 @@
     {% endif %}
 
     {% if pending and pool_exists %}
-    <form method="post" action="/season/{{ season.id }}/run-all" style="margin-top:.7rem">
-      <button class="primary" type="submit">Alle {{ pending }} offenen Termine rechnen</button>
-      <span class="dim" style="margin-left:.6rem">
-        Nacheinander in Terminreihenfolge — die Restermüdung eines Rennens steht
-        erst fest, wenn das vorherige gerechnet ist.
-      </span>
-    </form>
+    <p class="dim" style="margin-top:.7rem;max-width:82ch">
+      Die Termine werden <strong>nicht vorgerechnet</strong>. Jeder wird
+      live gefahren: Der erste Tick fällt, wenn jemand hinsieht. Die
+      Reihenfolge ist trotzdem verbindlich — die Restermüdung eines
+      Rennens steht erst fest, wenn das vorherige gefahren ist, und die
+      Startaufstellung ab Rennen zwei kommt aus dem Saisonstand.
+    </p>
     {% endif %}
   </div>
 

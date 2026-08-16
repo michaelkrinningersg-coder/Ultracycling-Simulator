@@ -51,6 +51,38 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Geändert
 
+- **Die Übersicht zeigt eine Saison und einen Knopf.** Sie hat alles
+  gezeigt, was das Programm kann — Einzelrennen starten, Strecken,
+  Fahrer, Rekorde, Saisons, den Stand des Aufbaus. Das war eine
+  Inhaltsangabe, kein Einstieg: sieben Möglichkeiten und keine Antwort
+  auf die Frage, womit man anfängt.
+
+  Jetzt steht dort die **Ultra-Weltserie** — zehn Rennen, ein Knopf —,
+  danach die laufende Saison mit ihrem nächsten Termin, der aktuellen
+  Gesamtwertung und laufenden Übertragungen. Alles andere ist über die
+  Kopfzeile erreichbar und nicht verschwunden.
+- **Saisonrennen werden live gefahren statt vorgerechnet.** Der Kalender
+  hatte „Rechnen" und „Alle offenen Termine rechnen"; beides ließ einen
+  vor einem Fortschrittsbalken warten, bevor es etwas zu sehen gab.
+  Jetzt startet jeder Termin als Übertragung: Der erste Tick fällt, wenn
+  jemand hinsieht.
+
+  Beide Wege ergeben **dasselbe Rennen** — dieselbe Aufstellung,
+  derselbe Seed, dieselbe Restermüdung, dieselbe umgekehrte
+  Startreihenfolge. Dafür ist die Aufstellung als eigener Schritt
+  herausgezogen (`race_setup`), aus dem Batch- und Livepfad gemeinsam
+  kommen; die Batch-Variante bleibt über CLI und Endpunkt erhalten.
+
+  Die `race_id` steht ab dem ersten Tick im Kalender — ohne sie wäre die
+  laufende Übertragung von dort nicht wiederzufinden. Dass das Rennen
+  noch nicht fertig ist, weiß die Saisonseite vom Übertragungsraum und
+  nicht von der Datei: Solange eines läuft, wird **kein Ultrameister
+  gekürt**.
+- **Beim Programmstart wird nichts mehr vorgerechnet.** Das Demo-Rennen
+  kostete beim ersten Start vierzehn Sekunden und beantwortete die
+  Frage „wie sieht das aus?". Die Übersicht beantwortet sie jetzt
+  selbst, mit einem Knopf, der ein echtes Rennen live startet. Über
+  `--demo` gibt es das Demo-Rennen weiterhin.
 - **Höchstens zwanzig Splits, bei jeweils fünf Prozent der Strecke.**
   Der Abstand war in Kilometern gestaffelt (10 / 25 / 50 km nach Länge)
   und ergab auf den langen Strecken bis zu **52** Zeitmessungen: Die

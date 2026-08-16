@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import numpy as np
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -22,23 +24,80 @@ def _tpl(request: Request):
 
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request) -> HTMLResponse:
+    """Die Übersicht: eine Saison, ein nächster Termin, ein Knopf.
+
+    Sie hat lange alles gezeigt, was das Programm kann — Strecken,
+    Fahrer, Einzelrennen, Rekorde, den Stand des Aufbaus. Das war eine
+    Inhaltsangabe, kein Einstieg: Wer sie zum ersten Mal öffnete, hatte
+    sieben Möglichkeiten und keine Antwort auf die Frage, womit man
+    anfängt.
+
+    Jetzt beantwortet sie genau diese eine Frage. Alles andere ist über
+    die Kopfzeile erreichbar und nicht verschwunden.
+    """
     state = request.app.state.ultrasim
-    races = state.store.list_races()
-    # Ein laufendes Rennen sticht seine Datei: Auf der Platte steht der
-    # Stand der letzten Sicherung, im Speicher der von jetzt.
-    rooms = {race_id: state.live.get(race_id) for race_id in state.live.ids()}
-    races = [r for r in races if r["race_id"] not in rooms]
-    races = [room.summary() for room in rooms.values() if room] + races
+    seasons = state.store.list_seasons()
+
+    # Die zuletzt angelegte Saison ist die, an der gerade gespielt wird.
+    current = None
+    if seasons:
+        current = _season_overview(state, seasons[-1]["id"])
+
+    # Laufende Übertragungen stehen obenauf — sie sind das Einzige, was
+    # gerade wirklich passiert.
+    rooms = [state.live.get(race_id) for race_id in state.live.ids()]
     return _tpl(request).TemplateResponse(
         request,
         "index.html",
         {
-            "routes": state.store.list_routes(),
-            "races": races,
-            "seasons": state.store.list_seasons(),
+            "seasons": seasons,
+            "current": current,
+            "live_rooms": [room.summary() for room in rooms if room],
             "pool_exists": state.store.pool_exists(),
+            "has_routes": bool(state.store.list_routes()),
+            "this_year": date.today().year,
         },
     )
+
+
+def _season_overview(state, season_id: str) -> dict | None:
+    """Die laufende Saison in der Form, die die Übersicht braucht.
+
+    Sie zeigt genau drei Dinge: wie weit die Saison ist, was als
+    Nächstes ansteht, und ob gerade etwas läuft.
+    """
+    try:
+        season = state.store.load_season(season_id)
+    except (FileNotFoundError, ValueError):
+        return None
+
+    routes = {r["id"]: r for r in state.store.list_routes()}
+    pending = runner.pending_races(season)
+    running = next(
+        (
+            r
+            for r in season.sorted_races()
+            if r.race_id
+            and (room := state.live.get(r.race_id)) is not None
+            and not room.finished
+        ),
+        None,
+    )
+    nxt = pending[0] if pending else None
+    # Das laufende Rennen ist nicht gefahren, auch wenn es schon eine
+    # ``race_id`` hat: Die steht seit dem ersten Tick im Kalender, damit
+    # die Übertragung wiederzufinden ist.
+    done = len(season.races) - len(pending) - (1 if running is not None else 0)
+    return {
+        "season": season,
+        "n_races": len(season.races),
+        "n_done": max(done, 0),
+        "next": nxt,
+        "next_route": routes.get(nxt.route_id) if nxt else None,
+        "running": running,
+        "standings": runner.standings(state.store, season)[:5],
+        "finished": not pending and not running and bool(season.races),
+    }
 
 
 @router.post("/race/live")

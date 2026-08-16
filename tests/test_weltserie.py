@@ -559,3 +559,62 @@ def test_the_history_starts_at_zero(store):
         assert first.startswith("0.0,")
         # y = Höhe heißt: unten, also null Punkte.
         assert float(first.split(",")[1]) == chart["h"]
+
+
+# ----------------------------------------------------------------------
+# Live statt vorrechnen
+# ----------------------------------------------------------------------
+def test_a_calendar_race_can_be_ridden_live(client, store):
+    """Der Weg, den das Programm anbietet: nichts vorrechnen, zusehen.
+
+    Dasselbe Rennen wie über ``/run`` — dieselbe Aufstellung, derselbe
+    Seed, dieselbe Restermüdung, weil beide Wege aus ``race_setup``
+    kommen. Der Unterschied ist, wann gerechnet wird.
+    """
+    season = sn.Season(id="2033-live", name="Liveserie", year=2033)
+    season.races = [
+        sn.CalendarRace(
+            id="01-lauf", name="Auftakt", route_id="teststrecke",
+            day=date(2033, 4, 1), n_riders=8, seed=77,
+        ),
+        sn.CalendarRace(
+            id="02-lauf", name="Zweiter", route_id="teststrecke",
+            day=date(2033, 6, 1), n_riders=8, seed=78,
+        ),
+    ]
+    store.save_season(season)
+
+    started = client.post("/season/2033-live/race/01-lauf/live", follow_redirects=False)
+    assert started.status_code == 303
+    race_id = started.headers["location"].removeprefix("/race/")
+    assert race_id == runner.race_id_for(season, season.race("01-lauf"))
+
+    # Der Termin trägt den Verweis sofort — sonst wäre die laufende
+    # Übertragung vom Kalender aus nicht wiederzufinden.
+    assert store.load_season("2033-live").race("01-lauf").race_id == race_id
+    assert client.get(f"/race/{race_id}").status_code == 200
+
+    # … aber solange sie läuft, wird kein Titel vergeben.
+    page = client.get("/season/2033-live")
+    assert "Ultrameister" not in page.text
+    assert "Zusehen" in page.text
+
+
+def test_the_overview_offers_exactly_one_next_step(client, store):
+    """Die Übersicht beantwortet eine Frage: Womit fängt man an?"""
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Live starten" in page.text or "Zusehen" in page.text
+    # Was früher alles hier stand, steht jetzt in der Kopfzeile.
+    assert "Stand des Aufbaus" not in page.text
+
+
+def test_starting_the_same_live_race_twice_does_not_restart_it(client, store):
+    """Ein zweiter Klick führt zur laufenden Übertragung, nicht zu einer neuen."""
+    first = client.post("/season/2033-live/race/01-lauf/live", follow_redirects=False)
+    again = client.post("/season/2033-live/race/01-lauf/live", follow_redirects=False)
+    assert first.headers["location"] == again.headers["location"]
+
+
+def test_an_unknown_calendar_race_cannot_be_started(client):
+    assert client.post("/season/2033-live/race/gibtsnicht/live").status_code == 404

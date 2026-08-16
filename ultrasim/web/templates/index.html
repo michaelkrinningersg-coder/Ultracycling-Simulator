@@ -4,142 +4,134 @@
 {% block body %}
 <div class="page">
 
-  {% if routes and pool_exists %}
-  <div class="panel">
-    <div class="panel-title"><span>Live rechnen</span><span class="faint">Abweichung von Abschnitt 8.2</span></div>
-    <p class="dim" style="max-width:70ch;margin-bottom:.6rem">
-      Ein Rennen, das erst entsteht, während man zusieht: Es wird nichts
-      vorberechnet, der erste Tick fällt beim Aufruf der Seite. Zeitraffer,
-      Pause und Rücksprung funktionieren wie gewohnt — nur ein Sprung nach
-      vorn kostet die Rechenzeit, die er überspringt. Der Zwischenstand
-      wird laufend gesichert, mit Platzierungen und Telemetrie.
-    </p>
-    <form method="post" action="/race/live" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-      <select name="route_id" required>
-        {% for route in routes %}
-        <option value="{{ route.id }}">{{ route.name }} · {{ '%.0f'|format(route.distance_km) }} km</option>
-        {% endfor %}
-      </select>
-      <label class="dim">Starter <input type="number" name="riders" value="40" min="2" max="300" style="width:5rem"></label>
-      <label class="dim">Seed <input type="number" name="seed" value="42" style="width:6rem"></label>
-      <button class="primary" type="submit">Übertragung starten</button>
-    </form>
+  {# Die Übersicht beantwortet eine Frage: Womit fängt man an?
+     Alles, was das Programm sonst noch kann — Strecken, Fahrer,
+     Statistik, Rekorde, Karriere — steht in der Kopfzeile. #}
+
+  {% if not pool_exists or not has_routes %}
+  <div class="panel notice">
+    <div class="panel-title"><span>Es fehlt noch etwas</span></div>
+    {% if not has_routes %}
+    <p>Keine Strecken gefunden. <a href="/routes">GPX importieren ▸</a></p>
+    {% endif %}
+    {% if not pool_exists %}
+    <p>Kein Fahrerpool. <a href="/pool">300 Fahrer in 25 Teams erzeugen ▸</a></p>
+    {% endif %}
   </div>
   {% endif %}
 
+  {# Was gerade wirklich passiert, steht ganz oben. #}
+  {% for race in live_rooms %}
+  <div class="panel titlepanel">
+    <div class="panel-title">
+      <span><span class="badge running">live</span> {{ race.name }}</span>
+      <span class="faint">{{ race.route_name }} · {{ race.n_entries }} Starter</span>
+    </div>
+    <div class="actions">
+      <a href="/race/{{ race.race_id }}"><button class="primary">▶ Zusehen</button></a>
+      <form method="post" action="/race/{{ race.race_id }}/close" style="display:inline">
+        <button title="Rechnen anhalten und den Stand sichern. Das Rennen bleibt erhalten.">
+          Übertragung beenden
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if current %}
+  <!-- Die laufende Saison ------------------------------------------ -->
   <div class="panel">
-    <div class="panel-title"><span>Gerechnete Rennen</span><span class="faint">{{ races|length }}</span></div>
-    {% if races %}
-    <div class="cards">
-      {% for race in races %}
-      <div class="card">
-        <h2>{{ race.name }}{% if race.live %} <span class="badge running">live</span>{% endif %}</h2>
-        <div class="meta">
-          {{ race.route_name }} · {{ race.n_entries }} Starter · Seed {{ race.seed }}<br>
-          {% if race.live %}läuft gerade{% else %}Siegerzeit {{ race.winner_time_s|hms }}{% endif %}
-        </div>
-        <div class="actions">
-          <a href="/race/{{ race.race_id }}"><button class="primary">Live ansehen</button></a>
-          <a href="/race/{{ race.race_id }}/results"><button>Ergebnis</button></a>
-          {% if race.live %}
-          {# Beenden heißt: aus dem Speicher nehmen, nicht löschen. Der
-             Stand geht vorher auf die Platte, das Rennen bleibt in
-             dieser Liste — nur eben ohne mitlaufenden Rechner. Ohne
-             diesen Knopf ist die Obergrenze von drei Übertragungen eine
-             Sackgasse, aus der nur ein Neustart führt. #}
-          <form method="post" action="/race/{{ race.race_id }}/close" style="display:inline">
-            <button title="Rechnen anhalten und den Stand sichern. Das Rennen bleibt erhalten.">
-              Übertragung beenden
-            </button>
-          </form>
+    <div class="panel-title">
+      <span>{{ current.season.name }} {{ current.season.year }}</span>
+      <span class="faint">{{ current.n_done }} von {{ current.n_races }} Rennen gefahren</span>
+    </div>
+
+    <div class="seasonbar">
+      <i style="width: {{ (100 * current.n_done / current.n_races)|round(1) if current.n_races else 0 }}%"></i>
+    </div>
+
+    {% if current.running %}
+    <p style="margin-top:.7rem">
+      <strong>{{ current.running.name }}</strong> läuft gerade.
+      <a href="/race/{{ current.running.race_id }}">Zur Übertragung ▸</a>
+    </p>
+    {% elif current.next %}
+    <div class="nextrace">
+      <div>
+        <div class="faint">Nächstes Rennen · {{ current.next.day|de_date }}</div>
+        <div class="nextname">{{ current.next.name }}</div>
+        <div class="dim">
+          {% if current.next_route %}
+            {{ current.next_route.name }} ·
+            {{ '%.0f'|format(current.next_route.distance_km) }} km ·
+            {{ current.next_route.ascent_m|round|int }} hm
           {% endif %}
+          · {{ current.next.n_riders }} Starter
         </div>
       </div>
-      {% endfor %}
+      <form method="post" action="/season/{{ current.season.id }}/race/{{ current.next.id }}/live">
+        <button class="primary big" type="submit">▶ Live starten</button>
+      </form>
     </div>
+    <p class="dim" style="max-width:78ch">
+      Nichts wird vorgerechnet: Der erste Tick fällt, wenn du hinsiehst.
+      Zeitraffer bis 1000×, Pause und Rücksprung funktionieren trotzdem —
+      nur ein Sprung nach vorn kostet die Rechenzeit, die er überspringt.
+    </p>
     {% else %}
-    <p class="dim">Noch kein Rennen gerechnet. Auf der Kommandozeile:</p>
-    <pre class="mono dim">python -m ultrasim.cli.simulate pool --riders 300
-python -m ultrasim.cli.simulate race &lt;strecken-id&gt; --riders 40 --seed 42</pre>
+    <p class="dim" style="margin-top:.7rem">
+      Alle Rennen gefahren. <a href="/season/{{ current.season.id }}">Zur Gesamtwertung ▸</a>
+    </p>
     {% endif %}
-  </div>
 
-  <div class="panel">
-    <div class="panel-title"><span>Strecken</span><span class="faint">{{ routes|length }}</span></div>
-    {% if routes %}
+    {% if current.standings %}
+    <div class="panel-title" style="margin-top:1rem"><span>Gesamtwertung</span></div>
     <table>
-      <thead>
-        <tr><th>ID</th><th>Name</th><th class="right">Distanz</th><th class="right">Höhenmeter</th>
-            <th>Klasse</th><th class="right">Anstiege</th><th class="right">Splits</th></tr>
-      </thead>
       <tbody>
-        {% for route in routes %}
+        {% for row in current.standings %}
         <tr>
-          <td class="mono faint">{{ route.id }}</td>
-          <td>{{ route.name }}</td>
-          <td class="right mono">{{ '%.1f'|format(route.distance_km) }} km</td>
-          <td class="right mono">{{ route.ascent_m }} m</td>
-          <td><span class="badge {{ route.distance_class }}">{{ route.distance_class }}</span></td>
-          <td class="right mono">{{ route.n_climbs }}</td>
-          <td class="right mono">{{ route.n_splits }}</td>
+          <td class="right mono rank" style="width:2.5rem">{{ row.rank }}</td>
+          <td>{{ row.name }}</td>
+          <td class="dim">{{ row.team_name }}</td>
+          <td class="right mono">{{ '%.0f'|format(row.points) }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% else %}
-    <p class="dim">Keine Strecken gefunden.</p>
     {% endif %}
-    <p class="dim" style="margin-top:.5rem">
-      <a href="/routes">GPX importieren und Strecken bearbeiten ▸</a>
+
+    <p class="dim" style="margin-top:.6rem">
+      <a href="/season/{{ current.season.id }}">Kalender und ganze Wertung ▸</a>
     </p>
   </div>
+  {% else %}
 
-  <div class="panel">
-    <div class="panel-title"><span>Streckenrekorde</span></div>
-    <p class="dim">Die schnellste je gefahrene Zeit auf jeder Strecke, über alle
-      Saisons und Einzelrennen hinweg. <a href="/rekorde">Bestenliste öffnen ▸</a></p>
-  </div>
-
-  <div class="panel">
-    <div class="panel-title"><span>Saisons</span><span class="faint">{{ seasons|length }}</span></div>
+  <!-- Noch keine Saison ------------------------------------------- -->
+  <div class="panel titlepanel">
+    <div class="panel-title"><span>Ultra-Weltserie</span></div>
+    <p style="max-width:78ch">
+      Zehn Rennen von 396 bis 2469 Kilometern, in steigender Distanz über
+      ein Jahr verteilt — die Termine stehen dort, wo das Erholungsfenster
+      des vorherigen Rennens endet. Gefahren wird jedes einzeln und live.
+      Wer nach dem letzten Rennen die Gesamtwertung anführt, ist
+      <strong>Ultrameister</strong>.
+    </p>
+    <form method="post" action="/seasons" class="form-row">
+      <input type="hidden" name="name" value="Ultra-Weltserie">
+      <input type="hidden" name="calendar" value="weltserie">
+      <label>Jahr<input type="number" name="year" value="{{ this_year + 1 }}"
+                        min="1900" max="2999" style="width:6rem"></label>
+      <button class="primary big" type="submit" {% if not pool_exists or not has_routes %}disabled{% endif %}>
+        Saison starten
+      </button>
+    </form>
     {% if seasons %}
-    <div class="cards">
-      {% for season in seasons %}
-      <div class="card">
-        <h2>{{ season.name }}</h2>
-        <div class="meta">{{ season.year }} · {{ season.n_races }} Termine ·
-          {{ season.n_computed }} gerechnet</div>
-        <div class="actions">
-          <a href="/season/{{ season.id }}"><button class="primary">Kalender</button></a>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p class="dim">Noch keine Saison angelegt.
-      <a href="/seasons">Kalender-Editor öffnen ▸</a></p>
+    <p class="dim" style="margin-top:.6rem">
+      Ältere Saisons: {% for s in seasons %}<a href="/season/{{ s.id }}">{{ s.name }} {{ s.year }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+    </p>
     {% endif %}
   </div>
-
-  <div class="panel">
-    <div class="panel-title"><span>Stand des Aufbaus</span></div>
-    <p class="dim" style="max-width:70ch">
-      Diese Fassung deckt die Meilensteine M1–M7 samt Editoren (M5b) ab:
-      GPX-Import mit Glättung und Segmentierung, Physikmodell, Fahrergenerator mit
-      Archetypen, Form- und Ermüdungsmodell, Rennplan des Strategiemoduls,
-      Verpflegung, Glykogen und Schlaf, Wetter, Wind und Tag-Nacht-Zyklus,
-      den Ereigniskatalog samt Aufgabe sowie Saisonkalender, Wertung und
-      Fahrerentwicklung — dazu die Live-Telemetrie mit Höhenprofil und
-      Playback bis 1000×, wahlweise über ein fertig gerechnetes Rennen
-      oder über eines, das erst beim Zusehen entsteht.
-      Dazu die Editoren: <a href="/routes">Strecken</a> mit GPX-Import und
-      verschiebbaren Splits, <a href="/pool">Fahrer und Teams</a>, und der
-      <a href="/seasons">Kalender</a>.
-      Noch offen ist das Strategiemodul der zweiten Stufe (M7b) — der Regelkreis,
-      mit dem Fahrer im Rennen auf Rückstand, Wetter und Magen reagieren statt
-      einem festen Plan zu folgen.
-    </p>
-  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

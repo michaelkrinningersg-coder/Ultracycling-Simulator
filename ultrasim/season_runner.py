@@ -312,6 +312,64 @@ class RunOutcome:
     compute_seconds: float
 
 
+@dataclass
+class RaceSetup:
+    """Alles, was ein Kalendertermin zum Rennen braucht.
+
+    Der Termin steht im Kalender, die Fahrer im Pool, die Restermüdung
+    in den vorherigen Rennen und die Startreihenfolge im Saisonstand —
+    vier Quellen, die zusammengeführt werden müssen, **bevor** die erste
+    Sekunde gerechnet ist.
+
+    Als eigener Schritt, weil es zwei Wege gibt, ein Saisonrennen zu
+    fahren: am Stück durchrechnen oder live zusehen, wie es entsteht.
+    Beide müssen dasselbe Rennen ergeben, und das tun sie nur, wenn sie
+    aus derselben Aufstellung kommen.
+    """
+
+    calendar_race: sn.CalendarRace
+    route: Any
+    riders: list[Rider]
+    teams: list[Team]
+    config: RaceConfig
+    race_id: str
+
+
+def race_setup(store: Store, season: sn.Season, race_key: str) -> RaceSetup:
+    """Strecke, Feld, Startreihenfolge und Konfiguration eines Termins."""
+    calendar_race = season.race(race_key)
+    if calendar_race is None:
+        raise KeyError(f"Kein Termin '{race_key}' in Saison '{season.id}'")
+
+    route = store.load_route(calendar_race.route_id)
+    teams, pool = store.load_pool()
+    riders = pool[: max(calendar_race.n_riders, 2)]
+
+    # Ab dem zweiten Rennen zählt der Saisonstand, nicht das Potenzial.
+    # ``start_order="list"`` heißt: Die Engine nimmt die Liste, wie sie ist.
+    start_order = "seeded"
+    table = standings(store, season)
+    if table:
+        riders = reverse_standings_order(riders, table)
+        start_order = "list"
+
+    return RaceSetup(
+        calendar_race=calendar_race,
+        route=route,
+        riders=riders,
+        teams=teams,
+        config=RaceConfig(
+            seed=calendar_race.seed,
+            weather_preset=calendar_race.weather_preset,
+            race_date=calendar_race.day,
+            name=calendar_race.name,
+            start_order=start_order,
+            carry_work_kj=carry_work_kj(store, season, calendar_race, riders),
+        ),
+        race_id=race_id_for(season, calendar_race),
+    )
+
+
 def race_id_for(season: sn.Season, calendar_race: sn.CalendarRace) -> str:
     return f"{season.id}-{calendar_race.id}"
 
@@ -348,34 +406,14 @@ def run_calendar_race(
     fortgeschrieben. Bricht die Rechnung ab, steht im Kalender weiterhin
     „geplant" und kein Verweis auf ein halbes Rennen.
     """
-    calendar_race = season.race(race_key)
-    if calendar_race is None:
-        raise KeyError(f"Kein Termin '{race_key}' in Saison '{season.id}'")
-
-    route = store.load_route(calendar_race.route_id)
-    teams, pool = store.load_pool()
-    riders = pool[: max(calendar_race.n_riders, 2)]
-
-    # Ab dem zweiten Rennen zählt der Saisonstand, nicht das Potenzial.
-    # ``start_order="list"`` heißt: Die Engine nimmt die Liste, wie sie ist.
-    start_order = "seeded"
-    table = standings(store, season)
-    if table:
-        riders = reverse_standings_order(riders, table)
-        start_order = "list"
-
-    config = RaceConfig(
-        seed=calendar_race.seed,
-        weather_preset=calendar_race.weather_preset,
-        race_date=calendar_race.day,
-        name=calendar_race.name,
-        start_order=start_order,
-        carry_work_kj=carry_work_kj(store, season, calendar_race, riders),
+    setup = race_setup(store, season, race_key)
+    result = simulate_race(
+        setup.route, setup.riders, setup.teams, setup.config, progress=progress
     )
-    result = simulate_race(route, riders, teams, config, progress=progress)
+    calendar_race = setup.calendar_race
 
-    race_id = race_id_for(season, calendar_race)
-    store.save_race(race_id, calendar_race.route_id, result, route=route)
+    race_id = setup.race_id
+    store.save_race(race_id, calendar_race.route_id, result, route=setup.route)
     calendar_race.race_id = race_id
     if save_season:
         store.save_season(season)

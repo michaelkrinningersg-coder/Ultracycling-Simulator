@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Streckenrekorde{% endblock %}
+{% block subtitle %}{{ rows|length }} Strecke{{ 'n' if rows|length != 1 }} ·
+  {{ total }} gerechnete{{ 's' if total == 1 }} Rennen{% endblock %}
+{% block topbar %}
+<a class="faint" href="/">◂ Übersicht</a>
+<a class="faint" href="/seasons">Saisons</a>
+<a class="faint" href="/careers">Karriere</a>
+{% endblock %}
+
+{% block body %}
+<div class="page">
+  <div class="panel">
+    <div class="panel-title">
+      <span>Bestzeiten</span>
+      <span class="faint">die schnellste je Strecke über alle gerechneten Rennen</span>
+    </div>
+    {% if rows %}
+    <table>
+      <thead>
+        <tr><th>Strecke</th><th class="right">Distanz</th><th class="right">Höhenmeter</th>
+            <th class="right">Rekord</th><th class="right">Ø</th>
+            <th>Fahrer</th><th>Team</th><th>Rennen</th><th class="right">gefahren</th></tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>{{ row.route_name }}</td>
+          <td class="right mono">{{ '%.1f'|format(row.distance_km) }} km</td>
+          <td class="right mono faint">{{ row.ascent_m|round|int }} m</td>
+          <td class="right mono warn">{{ row.time_s|hms }}</td>
+          <td class="right mono faint">{% if row.kmh %}{{ '%.1f'|format(row.kmh) }} km/h{% endif %}</td>
+          <td>{{ row.holder }}</td>
+          <td class="dim">{{ row.team }}</td>
+          <td><a href="/race/{{ row.race_id }}/results">{{ row.race_name }}</a></td>
+          <td class="right mono faint">{{ row.races }}×</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem">
+      Ein Rekord ist hier die schnellste Zielzeit, die je auf dieser
+      Strecke gefahren wurde — über alle Saisons und alle Einzelrennen
+      hinweg. Die letzte Spalte sagt, wie oft die Strecke überhaupt
+      gefahren wurde: Ein Rekord aus einem einzigen Rennen ist keiner,
+      sondern ein erster Versuch.
+    </p>
+    {% else %}
+    <p class="dim">Noch kein Rennen gerechnet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

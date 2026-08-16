@@ -110,13 +110,22 @@ def create_app(data_root: str | Path | None = None) -> FastAPI:
     templates.env.filters["de_date"] = _de_date
     app.state.templates = templates
 
-    from .routers import api, careers, pages, pool, routes, seasons  # zirkuläre Importe vermeiden
+    from .routers import (  # zirkuläre Importe vermeiden
+        api,
+        careers,
+        pages,
+        pool,
+        routes,
+        seasons,
+        stats,
+    )
 
     app.include_router(pages.router)
     app.include_router(routes.router)
     app.include_router(pool.router)
     app.include_router(seasons.router)
     app.include_router(careers.router)
+    app.include_router(stats.router)
     app.include_router(api.router)
 
     @app.exception_handler(FileNotFoundError)

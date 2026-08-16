@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ season.name }} – UltraSim{% endblock %}
 {% block subtitle %}{{ season.name }} · {{ season.year }} · {{ rows|length }} Termine{% endblock %}
-{% block topbar %}<a class="faint" href="/seasons">◂ Saisons</a>
+{% block topbar %}
+<a class="faint" href="/seasons">◂ Saisons</a>
+<a class="faint" href="/season/{{ season.id }}/statistik">Statistik</a>
 {% if career %}<a class="faint" href="/career/{{ career.id }}">{{ career.name }}</a>{% endif %}{% endblock %}
 
 {% block body %}

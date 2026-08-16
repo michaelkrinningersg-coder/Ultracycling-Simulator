@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ season.name }} {{ season.year }} – Statistik{% endblock %}
+{% block subtitle %}{{ season.name }} · {{ season.year }} · {{ races|length }} gerechnete Termine{% endblock %}
+{% block topbar %}
+<a class="faint" href="/season/{{ season.id }}">◂ Kalender</a>
+<a class="faint" href="/seasons">Saisons</a>
+<a href="/rekorde">Rekorde ▸</a>
+{% endblock %}
+
+{% block body %}
+<div class="page">
+
+  {% if not races %}
+  <div class="panel">
+    <p class="dim">Noch kein Rennen dieser Saison gerechnet — es gibt nichts zu zählen.</p>
+  </div>
+  {% else %}
+
+  <!-- Teamwertung ------------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Teamwertung</span>
+      <span class="faint">die {{ scorers }} besten Fahrer je Team und Rennen · Punkte × Rennkoeffizient</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="right">Rg</th><th>Team</th><th class="right">Punkte</th>
+            <th class="right">Siege</th><th class="right">Podien</th>
+            {% for race in races %}<th class="right" title="{{ race.name }}">{{ loop.index }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in teams %}
+        <tr class="{% if row.rank == 1 %}champion-row{% endif %}">
+          <td class="right mono rank">{{ row.rank }}</td>
+          <td>{{ row.name }}</td>
+          <td class="right mono">{{ row.points|round|int }}</td>
+          <td class="right mono {% if row.wins %}good{% endif %}">{{ row.wins or '' }}</td>
+          <td class="right mono faint">{{ row.podiums or '' }}</td>
+          {% for race in races %}
+          <td class="right mono faint">{{ row.per_race.get(race.id, 0)|round|int or '' }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem">
+      Die nummerierten Spalten sind die Termine in Kalenderreihenfolge:
+      {% for race in races %}<strong>{{ loop.index }}</strong> {{ race.name }}{% if not loop.last %} · {% endif %}{% endfor %}.
+    </p>
+  </div>
+
+  <!-- Nationenwertung --------------------------------------------- -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>Nationenwertung</span>
+      <span class="faint">alle Fahrer eines Landes · Punkte × Rennkoeffizient</span>
+    </div>
+    <table>
+      <thead>
+        <tr><th class="right">Rg</th><th>Nation</th><th class="right">Punkte</th>
+            <th class="right">Siege</th><th class="right">Podien</th>
+            <th class="right">Starts</th></tr>
+      </thead>
+      <tbody>
+        {% for row in nations %}
+        <tr>
+          <td class="right mono rank">{{ row.rank }}</td>
+          <td><span class="flag flag-{{ row.key }}"></span>{{ row.name }}</td>
+          <td class="right mono">{{ row.points|round|int }}</td>
+          <td class="right mono {% if row.wins %}good{% endif %}">{{ row.wins or '' }}</td>
+          <td class="right mono faint">{{ row.podiums or '' }}</td>
+          <td class="right mono faint">{{ row.starters }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="dim" style="margin-top:.5rem">
+      Hier zählen <strong>alle</strong> Fahrer eines Landes, nicht nur
+      die besten drei wie beim Team. Nationen sind verschieden groß
+      besetzt, und eine feste Zahl von Wertern würde das kleine Land
+      bevorzugen, das nur seine Spitze am Start hat.
+    </p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -51,6 +51,69 @@ die Versionierung [SemVer](https://semver.org/lang/de/).
 
 ### Hinzugefügt
 
+- **Ampeln auf der Strecke.** Ein Ultrarennen führt über öffentliche
+  Straßen, und öffentliche Straßen haben Ampeln. Rot und Grün dauern je
+  90 s; wer rot ankommt, wartet den Rest der Phase ab. Höchstens zwei
+  Ampeln je hundert Kilometer, mindestens fünf Kilometer Abstand, keine
+  in einem kategorisierten Anstieg und keine über 1500 m — auf einem
+  Pass steht keine Kreuzung. Im Mittel kostet eine Ampel 22,5 s; über
+  die Weltserie sind das drei Minuten auf der kürzesten und sechzehn
+  auf der längsten Strecke.
+
+  Die Ampel ist der **erste Halt im Modell, den niemand plant und
+  niemand verschuldet**. Panne, Notschlaf und Servicestopp hängen alle
+  am Fahrer — an seinem Material, seiner Müdigkeit, seinem Plan. Die
+  Ampel hängt an nichts davon. Ihre Wartezeit steht deshalb in der
+  Standzeit, aber **nicht im Zwischenfallkonto**, das den Aufgabedruck
+  treibt: Niemand soll aufgeben, weil zu viele Kreuzungen auf seiner
+  Strecke lagen.
+
+  Zwei Entscheidungen, die nicht offensichtlich sind:
+
+  * **Die Phase läuft in Fahrer-Eigenzeit, nicht nach Wanduhr.** Nach
+    der Wanduhr wäre es realistischer, aber die Wanduhr hängt am
+    Startversatz — und der geht in diesem Simulator grundsätzlich nicht
+    in die Simulation ein. Täte er es, hinge das Rennen eines Fahrers
+    daran, wie viele vor ihm gestartet sind.
+  * **Die Ampeln gehören der Strecke, nicht dem Rennen.** Sie werden
+    beim Aufbau aus Streckenname und Länge abgeleitet (CRC-32, nicht
+    `hash()` — das ist je Prozess gesalzen). Dieselbe Strecke hat in
+    jedem Rennen und in jedem Prozess dieselben Ampeln, und
+    Streckendateien von vor dieser Mechanik funktionieren unverändert.
+
+  Der lange Golden Master hat den einen Fehler dieser Änderung sofort
+  gefunden: Der Ampelhalt lief zunächst über dieselbe Freigabe wie jeder
+  andere Halt und erzeugte 69 „weiter"-Meldungen ohne zugehöriges
+  „Stopp". Jetzt schaltet er sie stumm, und die Ereigniszeile hat
+  gegenüber vorher genau **eine** neue Zahl.
+- **Regie: ein abschaltbarer automatischer Fokus.** Der Fokus folgt dem
+  Fahrer, bei dem gerade etwas passiert — Aufgabe, Sturz, Defekt,
+  Hungerast, Bestzeit, Zieleinlauf. Ein Split gehört bewusst nicht dazu:
+  Bei dreihundert Startern schwenkte die Kamera sonst im Sekundentakt.
+  Passiert nichts, bleibt der Fokus stehen; ein Klick auf einen Fahrer
+  schaltet die Regie ab. Das Rückschaufenster hängt am Zeitraffer — bei
+  1× sind es fünf Sekunden, bei 1000× anderthalb Stunden Rennzeit.
+- **Statistik: drei neue Seiten.**
+  * *je Rennen* (`/race/…/statistik`): **Teamwertung** aus der Summe
+    der drei besten Zielzeiten je Mannschaft — ein Team ohne drei
+    Ankünfte bekommt keine Summe, sonst gewönne die Mannschaft mit den
+    meisten Ausfällen. Dazu die **Bergwertung** mit Punkten an jedem
+    kategorisierten Gipfel, gewertet nach *Zeit* am Gipfel und nicht
+    nach Reihenfolge der Ankunft. Dazu die **Energiebilanz**:
+    aufgenommene gegen verbrannte Kohlenhydrate. Hundert Prozent gibt
+    es nie — der Magen lässt weniger durch, als hartes Fahren
+    verbrennt, und genau diese Lücke ist der Grund, warum ein Ultra
+    langsamer wird.
+  * *je Saison* (`/season/…/statistik`): **Teamwertung** (die drei
+    besten je Rennen) und **Nationenwertung** (alle Fahrer eines
+    Landes — Nationen sind verschieden groß besetzt, eine feste Zahl
+    von Wertern würde das kleine Land bevorzugen).
+  * *über alles* (`/rekorde`): die schnellste je gefahrene Zeit auf
+    jeder Strecke, mit Fahrer, Team und Rennen.
+
+  Dafür schreibt die Simulation zwei Zahlen mehr je Fahrer mit —
+  aufgenommene und als Kohlenhydrat verbrannte Kilokalorien. Beides
+  rechnete sie ohnehin je Zeitschritt.
 - **Aufgabedruck als sichtbare Größe.** `give_up` wurde seit M6.2 jede
   Sekunde gerechnet und war nirgends zu sehen — die dramatischste Zahl
   des Modells lief unbeobachtet mit. Jetzt ist sie ein

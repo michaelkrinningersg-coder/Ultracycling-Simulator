@@ -200,6 +200,12 @@ class RaceEntry:
     #: Frische beim Start: 1,0 = ausgeruht, darunter steckt noch ein
     #: früheres Rennen der Saison in den Beinen.
     freshness: float = 1.0
+    #: Aufgenommene Kohlenhydrate in Kilokalorien — was der Magen
+    #: durchgelassen hat, nicht was der Plan vorsah.
+    intake_kcal: float = 0.0
+    #: Als Kohlenhydrat verbrannte Kilokalorien. Die Differenz zur
+    #: Aufnahme ist das, was aus dem Speicher kam.
+    carb_kcal: float = 0.0
     #: Kumulierter Aufgabedruck am Rennende. Wie nah war er dran? Der
     #: Kalibrierlauf in ``balance.py`` liest genau diesen Wert aus.
     give_up_score: float = 0.0
@@ -222,6 +228,8 @@ class RaceEntry:
             "lost_s": round(self.lost_s, 1),
             "lost_incident_s": round(self.lost_incident_s, 1),
             "lost_signal_s": round(self.lost_signal_s, 1),
+            "intake_kcal": round(self.intake_kcal, 1),
+            "carb_kcal": round(self.carb_kcal, 1),
             "work_kj": round(self.work_kj, 1),
             "freshness": round(self.freshness, 4),
             "give_up_score": round(self.give_up_score, 4),
@@ -922,6 +930,13 @@ def run_race(
     lost_s = np.zeros(n)
     #: Davon der Teil, der an **Ampeln** steht.
     lost_signal_s = np.zeros(n)
+    #: Energiebilanz: aufgenommene und als Kohlenhydrat verbrannte
+    #: Kilokalorien. Beides rechnet die Simulation ohnehin je Zeitschritt;
+    #: aufsummiert kostet es zwei Zahlen je Fahrer und beantwortet die
+    #: Frage, die sonst nur der Speicherstand andeutet — hat er zu wenig
+    #: gegessen oder zu hart getreten?
+    intake_kcal = np.zeros(n)
+    carb_kcal = np.zeros(n)
     #: Davon der Teil, der auf **Zwischenfälle** geht — ohne Notschlaf.
     #:
     #: Der Aufgabedruck rechnet mit dieser Zahl und nicht mit ``lost_s``,
@@ -970,6 +985,9 @@ def run_race(
     next_split = np.zeros(n, dtype=np.int64)
     next_sp = np.zeros(n, dtype=np.int64)
     next_light = np.zeros(n, dtype=np.int64)
+    #: Steht dieser Fahrer gerade an einer Ampel? Nur dafür da, die
+    #: Freigabe stumm zu schalten.
+    signal_stop = np.zeros(n, dtype=bool)
 
     bike_mass = np.array([ph.BIKES[name]["mass_kg"] for name in ph.BIKE_NAMES])
     bike_cda_f = np.array([ph.BIKES[name]["cda_factor"] for name in ph.BIKE_NAMES])
@@ -1310,6 +1328,15 @@ def run_race(
                 stop_left[done] = 0.0
                 v[done] = 0.5
                 for i in np.flatnonzero(done):
+                    # Ein Ampelhalt bekommt kein „weiter": Er ist mit
+                    # seinem eigenen Ereignis vollständig beschrieben,
+                    # Wartezeit inklusive. Und die Zusicherung, dass zu
+                    # jedem STOP_END ein STOP_START gehört, soll gelten
+                    # bleiben — sie ist die Klammer, an der man einen
+                    # verlorenen Halt erkennt.
+                    if signal_stop[i]:
+                        signal_stop[i] = False
+                        continue
                     events.append(
                         RaceEvent(int(i), t, STOP_END, {"dist_km": round(dist[i] / 1000.0, 2)})
                     )
@@ -1374,6 +1401,13 @@ def run_race(
                     * nut.CARB_KCAL_PER_G
                 )
                 glyco_kcal = np.clip(glyco_kcal - burned + taken, 0.0, glyco_cap)
+                # Die Bilanz mitschreiben. Gemeint sind die Bruttoflüsse:
+                # ``taken`` ist, was der Magen durchgelassen hat, nicht
+                # was davon im Speicher ankam — bei vollem Speicher ist
+                # der Unterschied genau das, was ein Fahrer zu früh
+                # gegessen hat.
+                intake_kcal += taken
+                carb_kcal += burned
 
                 # --- Suboptimale Ernährung (Abschnitt 6.5) -----------
                 # Nicht der Plan ist schuld, sondern was davon ankommt:
@@ -1956,6 +1990,7 @@ def run_race(
                             continue  # grün, weiterfahren
                         stop_left[i] = wait
                         state[i] = STATE_STOPPED
+                        signal_stop[i] = True
                         v[i] = 0.0
                         lost_s[i] += wait
                         lost_signal_s[i] += wait
@@ -2063,6 +2098,8 @@ def run_race(
             lost_s=float(lost_s[i]),
             lost_signal_s=float(lost_signal_s[i]),
             lost_incident_s=float(lost_incident_s[i]),
+            intake_kcal=float(intake_kcal[i]),
+            carb_kcal=float(carb_kcal[i]),
             give_up_score=float(give_up[i]),
             # Nur die *eigene* Arbeit, ohne den Übertrag – sonst würde
             # sich die Restermüdung über die Saison selbst aufschaukeln.

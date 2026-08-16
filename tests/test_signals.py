@@ -205,3 +205,47 @@ def test_a_route_without_lights_races_exactly_as_before(route):
         if a.finish_time_s is None or b.finish_time_s is None:
             continue
         assert a.finish_time_s >= b.finish_time_s - 0.5
+
+
+def test_the_focus_rider_gets_his_red_lights_in_the_ticker(route_medium, tmp_path):
+    """Im Ticker steht die Ampel — aber nur die des Fokusfahrers.
+
+    Bei dreihundert Startern wäre jede fremde rote Ampel eine Meldung
+    über nichts. Der Ticker führt den Fokusfahrer vollständig und vom
+    Rest nur das Nennenswerte; eine Ampel ist bewusst nicht nennenswert
+    und steht deshalb auch nicht in ``MAJOR_EVENTS``.
+    """
+    from fastapi.testclient import TestClient
+
+    from ultrasim.core.events import MAJOR_EVENTS
+    from ultrasim.data.store import Store
+    from ultrasim.web.main import create_app
+
+    assert TRAFFIC_LIGHT not in MAJOR_EVENTS
+
+    store = Store(tmp_path)
+    route_medium.save(store.routes_dir / "teststrecke.json.gz")
+    teams, riders = generate_pool(6, n_teams=2, seed=4)
+    store.save_pool(teams, riders)
+    result = simulate_race(route_medium, riders, teams, RaceConfig(seed=88))
+    store.save_race("ampelrennen", "teststrecke", result, route=route_medium)
+
+    client = TestClient(create_app(store.root))
+    token = client.post("/api/race/ampelrennen/session").json()["token"]
+
+    # Einen Fahrer wählen, der auch wirklich an einer Ampel stand.
+    stops = [e for e in result.events if e.type == TRAFFIC_LIGHT]
+    assert stops
+    event = stops[0]
+    offset = result.entries[event.entry_id].start_offset_s
+    client.post(
+        f"/api/playback/{token}/control", json={"action": "focus", "value": event.entry_id}
+    )
+    # Zwei Sekunden *hinter* den Halt: Das Fenster eines Einzelbildes
+    # reicht fünf Sekunden zurück, und die untere Grenze zählt nicht mit.
+    client.post(
+        f"/api/playback/{token}/control",
+        json={"action": "seek", "value": offset + event.t_s + 2.0},
+    )
+    frame = client.get(f"/api/playback/{token}/frame").json()
+    assert any("Ampel" in item["text"] for item in frame["ticker"]), frame["ticker"]

@@ -2,6 +2,7 @@
 {% block title %}{{ race_name }} – Ergebnis{% endblock %}
 {% block subtitle %}{{ route.name }} · {{ '%.1f'|format(route.distance_km) }} km · {{ route.ascent_m|round|int }} hm{% endblock %}
 {% block topbar %}<a href="/race/{{ race_id }}">◂ Live-Ansicht</a>
+<a class="faint" href="/race/{{ race_id }}/statistik">Statistik</a>
 {% if season_link %}<a href="/season/{{ season_link.id }}">{{ season_link.name }} {{ season_link.year }} ▸</a>{% endif %}{% endblock %}
 
 {% block body %}

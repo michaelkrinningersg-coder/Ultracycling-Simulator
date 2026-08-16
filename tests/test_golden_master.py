@@ -106,9 +106,17 @@ GOLDEN_ROUTE = {
 #: ``test_the_team_list_does_not_move_the_riders`` hält das fest. Eine
 #: Änderung an der Teamliste bewegt ab jetzt keinen Fahrer mehr, dieser
 #: Neusatz war der letzte seiner Art.
+#:
+#: **Neu gesetzt mit den Ampeln.** Die Strecke hat seitdem Ampeln, und
+#: eine rote hält den Fahrer bis zu 90 s auf. Von zwölf Fahrern sind
+#: **neun bitgleich geblieben** — nur 12, 8 und 3 standen an einer roten
+#: Ampel. Genau das erwartet man von der Mechanik: Sie greift dort ein,
+#: wo jemand vor einer Ampel ankommt, und sonst nirgends. Wer die Ampeln
+#: aus einer Strecke entfernt, bekommt die alten Zahlen zurück; das
+#: sichert ``test_a_route_without_lights_races_exactly_as_before``.
 GOLDEN_RESULT = [
-    (8, 6117.59),
-    (12, 6119.87),
+    (12, 6147.30),
+    (8, 6165.46),
     (4, 6251.66),
     (9, 6306.16),
     (11, 6335.41),
@@ -118,7 +126,7 @@ GOLDEN_RESULT = [
     (2, 6593.59),
     (7, 6646.14),
     (6, 6736.09),
-    (3, 6923.12),
+    (3, 7012.08),
 ]
 
 TOLERANCE_S = 0.5
@@ -228,21 +236,31 @@ GOLDEN_LONG_ROUTE = {"distance_m": 1_045_500.0, "ascent_m": 5217.7, "class": "mi
 #:   Offsets und der Körperbau: ``fettverbrennung`` von 24 auf 15 und
 #:   der Diesel von ``wkg_bias=-0.20`` auf 0 bei +4 cm Körpergröße.
 GOLDEN_LONG_RESULT: list[tuple[int, float]] = [
-    (5, 140014.22),
-    (3, 150917.16),
-    (7, 152956.57),
-    (4, 153710.88),
-    (2, 154126.33),
-    (8, 156779.39),
-    (1, 162828.46),
-    (6, 168153.32),
+    (5, 140703.10),
+    (3, 151607.86),
+    (7, 153295.03),
+    (4, 154153.10),
+    (2, 154464.27),
+    (8, 157480.29),
+    (1, 163278.80),
+    (6, 168693.81),
 ]
 
 #: Wie oft welches Ereignis fällt. Diese Zeile ist der eigentliche
 #: Gewinn des langen Laufs: Wer am Schlafmodell dreht, sieht hier sofort,
 #: dass aus zwei Schlafstopps plötzlich keiner mehr wird – auch wenn die
 #: Zielzeiten in der Toleranz bleiben.
-GOLDEN_LONG_EVENTS: dict[str, int] = {'CONDITION_END': 29, 'CONDITION_START': 40, 'DECISION': 11, 'FINISH': 8, 'INCIDENT': 50, 'PLAN': 66, 'SLEEP': 2, 'SPLIT_PASSED': 336, 'START': 8, 'STOP_END': 138, 'STOP_START': 88}
+#:
+#: Beim Einbau der Ampeln hat diese Zeile genau das getan, wofür sie da
+#: ist. Der erste Lauf zeigte 69 ``TRAFFIC_LIGHT`` **und 69 zusätzliche
+#: ``STOP_END``**: Der Ampelhalt lief über dieselbe Freigabe wie jeder
+#: andere Halt und erzeugte damit ein „weiter" ohne zugehöriges „Stopp".
+#: Das hat ``test_service_stops_cost_time`` sofort gemeldet — die Datei
+#: sichert zu, dass zu jedem STOP_END ein STOP_START gehört.
+#:
+#: Jetzt schaltet der Ampelhalt seine Freigabe stumm, und die Zeile
+#: sagt genau das Richtige: **eine** neue Zahl, alle anderen unverändert.
+GOLDEN_LONG_EVENTS: dict[str, int] = {'CONDITION_END': 29, 'CONDITION_START': 40, 'DECISION': 11, 'FINISH': 8, 'INCIDENT': 50, 'PLAN': 66, 'SLEEP': 2, 'SPLIT_PASSED': 336, 'START': 8, 'STOP_END': 138, 'STOP_START': 88, 'TRAFFIC_LIGHT': 69}
 
 TOLERANCE_LONG_S = 2.0
 

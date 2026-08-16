@@ -636,3 +636,22 @@ details.why[open] > summary::before { content: "▾ "; }
   inset: 0 60% 45% 0;
   background: #0a3161;
 }
+
+/* ------------------------------------------------------------------ */
+/* Statistik                                                           */
+/* ------------------------------------------------------------------ */
+/* Die Anstiege einzeln: kurze Tabellen nebeneinander statt einer
+   langen untereinander — jede ist für sich vollständig. */
+.climbgrid { display: grid; gap: .6rem;
+             grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); }
+.climbcard { background: var(--bg-panel-2); border: 1px solid var(--line);
+             border-radius: var(--radius); padding: .4rem .5rem; }
+.climbhead { display: flex; align-items: center; gap: .5rem; font-size: .75rem;
+             margin-bottom: .25rem; }
+.badge.cat { border-color: #b0453f; color: #ff8f88; font-family: var(--mono); }
+
+/* Deckungsbalken der Energiebilanz. Der Untergrund ist der Bedarf, der
+   gefüllte Teil das, was nachgekommen ist. */
+.coverbar { display: block; width: 100%; height: 4px; border-radius: 2px;
+            background: #6c7a94; overflow: hidden; }
+.coverbar i { display: block; height: 100%; background: var(--good); }
